@@ -141,7 +141,7 @@ Game.prototype.buildWorld = function () {
   scene.add(sun);
   scene.add(new THREE.AmbientLight(0x4d566a, 0.5));
 
-  this.track = new Track();
+  this.track = new Track(trackById(this.settings.trackId));
   buildTrackMeshes(this.track, scene);
   this.gantry = buildStartGantry(this.track, scene);
   this.scenery = buildScenery(this.track, scene);
@@ -909,6 +909,7 @@ Game.prototype.loadSettings = function () {
     /* Retro is the default because it is the point of the thing — modern is
        there for anyone who wants to see the circuit without the dither. */
     quality: 'retro',
+    trackId: 'silverstone-v1',
     userConfigured: false
   };
   try {
@@ -923,6 +924,11 @@ Game.prototype.loadSettings = function () {
       if (typeof p.autoFullscreen === 'boolean') s.autoFullscreen = p.autoFullscreen;
       if (typeof p.userConfigured === 'boolean') s.userConfigured = p.userConfigured;
       if (p.quality === 'retro' || p.quality === 'modern') s.quality = p.quality;
+      /* Validated against the registry: a stale or hand-edited id must fall
+         back to a real circuit rather than crashing the boot. */
+      if (typeof p.trackId === 'string' && trackById(p.trackId).id === p.trackId) {
+        s.trackId = p.trackId;
+      }
       /* tiltSens is the old field name — read it so anyone who already set a
          value keeps it instead of being silently reset to 6 */
       var sv = (typeof p.steerSens === 'number') ? p.steerSens : p.tiltSens;
@@ -1084,7 +1090,11 @@ Game.prototype.closeA2HS = function () {
 /* Identifies which physics + circuit a time was set on. Any change that
    alters lap times must bump this, or old and new runs end up ranked against
    each other as if they were comparable. */
-var TRACK_VERSION = 'silverstone-v1';
+/* Which circuit a time was set on. Read from the live track rather than
+   hard-coded, so scores land on the right board when the circuit changes. */
+Game.prototype.trackVersion = function () {
+  return (this.track && this.track.id) || 'silverstone-v1';
+};
 
 /* Bump when anything changes lap times: physics, the deterministic math, the
    track, or the AI. Traces recorded under an older SIM_VERSION cannot be
@@ -1161,7 +1171,7 @@ Game.prototype.submitRace = function () {
   /* Held until it actually lands, so a race driven while signed out can still
      be posted the moment you sign in — without having to drive it again. */
   this.pendingResult = {
-    trackVersion: TRACK_VERSION,
+    trackVersion: this.trackVersion(),
     simVersion: SIM_VERSION,
     raceMs: p.finishTime,
     bestLapMs: p.bestLap || p.finishTime,
@@ -1237,7 +1247,8 @@ Game.prototype.loadBoard = function () {
   if (status) status.textContent = 'Loading…';
 
   /* Ten are visible; the rest are there to scroll to. */
-  this.cloud.leaderboard(TRACK_VERSION, 50).then(function (list) {
+  var tv = this.trackVersion();
+  this.cloud.leaderboard(tv, 50).then(function (list) {
     rows.textContent = '';
     if (!list.length) {
       if (status) {
@@ -1245,7 +1256,7 @@ Game.prototype.loadBoard = function () {
       }
       return;
     }
-    if (status) status.textContent = TRACK_VERSION + ' · 3 laps · full grid';
+    if (status) status.textContent = (self.track.name || tv) + ' · ' + self.track.laps + ' laps · full grid';
 
     var head = document.createElement('div');
     head.className = 'brow brow-head';

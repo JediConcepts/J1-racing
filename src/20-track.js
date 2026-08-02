@@ -56,8 +56,41 @@ var CORNER_NAMES = [
   ['VALE', 31], ['CLUB', 32]
 ];
 
-var HALF_W = 7.2;        /* 14.4m racing surface */
-var RUNOFF = 7.0;        /* sealed runoff before the wall */
+/* =====================================================================
+   CIRCUIT REGISTRY
+   Everything a circuit needs is data: control points, corner names, road
+   width and how many laps. Curvature, the racing line, the speed profile,
+   the straights and the DRS zones are all derived from the geometry, so a
+   new circuit is a new entry here and nothing else.
+
+   `id` is what the leaderboard partitions on. Change a circuit's shape and
+   you must bump its id, or old times get ranked against a track that no
+   longer exists.
+   ===================================================================== */
+
+var TRACKS = [
+  {
+    id: 'silverstone-v1',
+    name: 'SILVERSTONE',
+    blurb: 'FAST AND OPEN',
+    laps: 3,
+    halfW: 7.2,          /* 14.4m racing surface */
+    runoff: 7.0,         /* sealed runoff before the wall */
+    control: TRACK_CONTROL,
+    corners: CORNER_NAMES
+  }
+];
+
+function trackById(id) {
+  for (var i = 0; i < TRACKS.length; i++) if (TRACKS[i].id === id) return TRACKS[i];
+  return TRACKS[0];
+}
+
+/* Set from the active circuit when a Track is built. Kept as module globals
+   rather than threaded through every call site because exactly one circuit is
+   ever live at a time, and the physics reads these on the hot path. */
+var HALF_W = 7.2;
+var RUNOFF = 7.0;
 var WALL_HALF = HALF_W + RUNOFF;
 var VERGE = 46;          /* grass skirt */
 var SAMPLES = 900;       /* ~6m per sample over a 5.5km lap */
@@ -73,14 +106,27 @@ var COL = {
   cyan: 0x4fe3e0
 };
 
-function Track() {
+function Track(def) {
   var i;
+  def = def || TRACKS[0];
+  this.def = def;
+  this.id = def.id;
+  this.name = def.name;
+  this.laps = def.laps || 3;
+
+  /* The physics reads these globally, so they must be set before anything
+     below samples the circuit. */
+  HALF_W = def.halfW || 7.2;
+  RUNOFF = def.runoff || 7.0;
+
+  var control = def.control;
+
   /* Control rows are [x, z, y] so the array reads like a map; Vector3 wants
      (x, y, z), and y is the height. Swapping these is what sends the circuit
      climbing into the sky. */
   var pts = [];
-  for (i = 0; i < TRACK_CONTROL.length; i++) {
-    pts.push(new THREE.Vector3(TRACK_CONTROL[i][0], TRACK_CONTROL[i][2], TRACK_CONTROL[i][1]));
+  for (i = 0; i < control.length; i++) {
+    pts.push(new THREE.Vector3(control[i][0], control[i][2], control[i][1]));
   }
   /* centripetal parameterisation: the control points are unevenly spaced and
      this is the variant that will not cusp or self-intersect between them */
@@ -255,9 +301,12 @@ Track.prototype.mapCorners = function (controlPts) {
   this.corners = [];
   this.cornerLabel = new Array(n);
 
-  for (c = 0; c < CORNER_NAMES.length; c++) {
-    var name = CORNER_NAMES[c][0];
-    var cp = controlPts[CORNER_NAMES[c][1]];
+  /* From the active circuit, not the module-level Silverstone list. */
+  var names = (this.def && this.def.corners) || CORNER_NAMES;
+  for (c = 0; c < names.length; c++) {
+    var name = names[c][0];
+    var cp = controlPts[names[c][1]];
+    if (!cp) continue;                    /* index past the end of this circuit */
     var best = 0, bestD = Infinity;
     for (i = 0; i < n; i++) {
       var dx = this.p[i].x - cp.x, dz = this.p[i].z - cp.z;
