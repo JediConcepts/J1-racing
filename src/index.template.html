@@ -1,0 +1,1017 @@
+<title>MCL-64 — Papaya Grand Prix</title>
+
+<style>
+  /* ---------------------------------------------------------------
+     MCL-64 cabinet chrome.
+     The screen itself is deliberately single-theme: it is a 1997 CRT and
+     it does not get a light mode. The cabinet around it does.
+     --------------------------------------------------------------- */
+  :root {
+    --bg: #121110;
+    --panel: #1b1917;
+    --line: #2e2a26;
+    --ink: #f2ece6;
+    --muted: #8d857c;
+    --papaya: #ff8000;
+    --papaya-soft: #ffa347;
+    --cyan: #4fe3e0;
+    --screen-void: #08080a;
+    --bezel: #000000;
+  }
+
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #e9e2d9;
+      --panel: #f7f3ee;
+      --line: #d3c9bd;
+      --ink: #1f1b17;
+      --muted: #6d645b;
+      --bezel: #14120f;
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --bg: #121110;
+    --panel: #1b1917;
+    --line: #2e2a26;
+    --ink: #f2ece6;
+    --muted: #8d857c;
+    --bezel: #000000;
+  }
+
+  :root[data-theme="light"] {
+    --bg: #e9e2d9;
+    --panel: #f7f3ee;
+    --line: #d3c9bd;
+    --ink: #1f1b17;
+    --muted: #6d645b;
+    --bezel: #14120f;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  body {
+    font-family: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .cabinet {
+    height: 100dvh;
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg);
+  }
+
+  /* --- screen --- */
+
+  .stage {
+    flex: 1 1 auto;
+    min-height: 0;
+    position: relative;
+    background: var(--bezel);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    outline: none;
+  }
+
+  .stage:focus-visible {
+    box-shadow: inset 0 0 0 2px var(--papaya);
+  }
+
+  /* The 3D layer is deliberately smoothed on the way up — the console's
+     output was filtered and then softened again by the display. The HUD
+     layer sits at native resolution and stays sharp. */
+  .stage canvas {
+    position: absolute;
+    display: block;
+    top: 0;
+    left: 0;
+  }
+
+  #gl { z-index: 1; image-rendering: auto; }
+  #hud { z-index: 2; pointer-events: none; }
+
+  /* Fine scanlines at screen resolution, not framebuffer resolution —
+     a CRT artefact rather than a pixel-art one. */
+  .scanlines {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.13) 0px,
+      rgba(0, 0, 0, 0.13) 1px,
+      rgba(0, 0, 0, 0) 1px,
+      rgba(0, 0, 0, 0) 3px
+    );
+    mix-blend-mode: multiply;
+    opacity: 0.34;
+  }
+
+  .glow {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
+    background: radial-gradient(ellipse at 50% 45%, rgba(255, 160, 60, 0.06), rgba(0, 0, 0, 0) 62%);
+  }
+
+  /* --- overlays --- */
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    text-align: center;
+    padding: 24px;
+    background: #08080a;
+    color: #f2ece6;
+  }
+
+  #fallback { display: none; }
+
+  .overlay-mark {
+    font-size: clamp(22px, 5vw, 38px);
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: var(--papaya);
+  }
+
+  .overlay-note {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    color: #8d857c;
+    max-width: 46ch;
+    line-height: 1.7;
+  }
+
+  .bar {
+    width: min(240px, 60vw);
+    height: 4px;
+    background: #241f1b;
+    overflow: hidden;
+  }
+
+  .bar i {
+    display: block;
+    height: 100%;
+    width: 40%;
+    background: var(--papaya);
+    animation: sweep 1.1s ease-in-out infinite;
+  }
+
+  @keyframes sweep {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(350%); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .bar i { animation: none; width: 100%; }
+  }
+
+  /* --- touch controls ---
+     Revealed by a class the script adds once it has actually seen touch, NOT
+     by (pointer: coarse). That query reports false on plenty of real phones
+     and true on hybrid laptops, and when it guesses wrong the player is left
+     with no controls at all — which is exactly what happened in beta. */
+
+  .pads { display: none; }
+
+  :root.has-touch .pads {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    pointer-events: none;
+    /* absolutely positioned children resolve against this padding box, so
+       this is what keeps the buttons clear of notches and home indicators */
+    padding:
+      env(safe-area-inset-top) env(safe-area-inset-right)
+      env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+
+  .pad {
+    position: absolute;
+    pointer-events: auto;
+    appearance: none;
+    -webkit-appearance: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgba(255, 128, 0, 0.82);
+    background: rgba(12, 12, 16, 0.44);
+    color: #ffb877;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    border-radius: 4px;
+    width: 78px;
+    height: 78px;
+    /* stops the browser claiming the gesture for scroll/zoom mid-press */
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .pad.is-on {
+    background: rgba(255, 128, 0, 0.62);
+    color: #14120f;
+    border-color: #ffd0a0;
+  }
+
+  /* Parked against the right edge at mid height: the timing tower owns the
+     top-right and the speed readout owns the bottom-right, so this is the
+     only band on that side the HUD never uses. */
+  .pad-drs { right: 14px; top: 50%; margin-top: -22px; width: 78px; height: 44px; font-size: 11px; }
+  .pad-cam { right: 14px; top: 50%; margin-top: -78px; width: 78px; height: 44px; font-size: 11px; }
+  .pad-start {
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 18px;
+    width: 108px;
+    height: 42px;
+    font-size: 11px;
+  }
+
+  /* --- floating analog thumbstick ---
+     The base spawns under the thumb rather than sitting in a fixed corner,
+     so the player never has to look away from the road to find it. */
+
+  .stick-zone {
+    position: absolute;
+    inset: 0;
+    pointer-events: auto;
+    touch-action: none;
+  }
+
+  .stick-base,
+  .stick-knob {
+    position: absolute;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.12s linear;
+    will-change: left, top, opacity;
+  }
+
+  .stick-base {
+    width: 132px;
+    height: 132px;
+    border: 2px solid rgba(255, 128, 0, 0.5);
+    background: rgba(10, 10, 14, 0.28);
+  }
+
+  .stick-knob {
+    width: 62px;
+    height: 62px;
+    border: 2px solid rgba(255, 210, 165, 0.9);
+    background: rgba(255, 128, 0, 0.55);
+  }
+
+  /* Under tilt steering the stick only travels up and down, so it takes the
+     shape of the thing it has become: a throttle slider, not a stick. */
+  :root.tilt-on .stick-base {
+    width: 78px;
+    height: 150px;
+    border-radius: 39px;
+  }
+
+  /* --- settings panel ---
+     Sized to survive a landscape phone, where the stage is only ~340px tall:
+     the box caps its height and scrolls rather than overflowing the stage. */
+
+  .settings {
+    position: absolute;
+    inset: 0;
+    z-index: 9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    background: rgba(6, 6, 10, 0.82);
+  }
+
+  .settings[hidden] { display: none; }
+
+  .settings-box {
+    width: 100%;
+    max-width: 390px;
+    max-height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    background: #14141c;
+    border: 3px solid var(--papaya);
+    border-radius: 4px;
+    padding: 12px 14px 14px;
+    box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.6), 0 10px 30px rgba(0, 0, 0, 0.5);
+  }
+
+  .settings-title {
+    margin: 0 0 10px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid rgba(255, 128, 0, 0.35);
+    color: var(--papaya);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.24em;
+    text-align: center;
+  }
+
+  .srow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 0;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+  }
+
+  .srow-actions { border-bottom: 0; padding-top: 12px; gap: 8px; }
+  .srow-actions .sval { flex: 1; }
+
+  .slabel {
+    flex: 1;
+    color: #a9a29b;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    white-space: nowrap;
+  }
+
+  .sval {
+    appearance: none;
+    -webkit-appearance: none;
+    min-width: 104px;
+    padding: 8px 10px;
+    background: rgba(255, 128, 0, 0.12);
+    border: 1px solid rgba(255, 128, 0, 0.75);
+    border-radius: 3px;
+    color: #ffb877;
+    font: inherit;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .sval:hover { background: rgba(255, 128, 0, 0.3); color: #fff2e2; }
+  /* a button that silently does nothing reads as broken — say so instead */
+  .sval:disabled { opacity: 0.35; pointer-events: none; }
+  .sval:focus-visible { outline: 2px solid var(--papaya); outline-offset: 2px; }
+  .sval-close { background: var(--papaya); border-color: var(--papaya); color: #14120f; }
+  .sval-close:hover { background: #ffa040; color: #14120f; }
+
+  .srange {
+    flex: 1.4;
+    min-width: 90px;
+    accent-color: var(--papaya);
+    touch-action: manipulation;
+  }
+
+  .snum {
+    width: 18px;
+    color: var(--papaya);
+    font-size: 11px;
+    font-weight: 700;
+    text-align: right;
+  }
+
+  .shint {
+    margin: 9px 0 0;
+    color: #7d7772;
+    font-size: 9px;
+    line-height: 1.5;
+    letter-spacing: 0.06em;
+  }
+
+  .a2hs-steps {
+    margin: 9px 0 0;
+    padding-left: 20px;
+    color: #a9a29b;
+    font-size: 10px;
+    line-height: 1.9;
+    letter-spacing: 0.06em;
+  }
+
+  .a2hs-steps strong { color: var(--papaya); font-weight: 700; }
+
+  /* --- account block inside the settings panel --- */
+
+  .acct {
+    margin-top: 10px;
+    padding-top: 9px;
+    border-top: 2px solid rgba(255, 128, 0, 0.35);
+  }
+
+  .acct[hidden] { display: none; }
+
+  .acct-title {
+    margin: 0;
+    color: var(--papaya);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.2em;
+  }
+
+  .acct-row { border-bottom: 0; }
+  .acct-row[hidden] { display: none; }
+
+  /* Separated from the form above it so the alternative route reads as a
+     choice, not as another field. */
+  .acct-alt {
+    margin-top: 4px;
+    padding-top: 10px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.12);
+  }
+
+  .sval-wide { min-width: 148px; }
+
+  .sval-oauth {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px;
+    background: #ffffff;
+    border-color: #ffffff;
+    color: #1f1f1f;
+    letter-spacing: 0.1em;
+  }
+
+  .sval-oauth:hover { background: #e8e8e8; border-color: #e8e8e8; color: #1f1f1f; }
+
+  /* Google's four-colour G as a gradient — no external image, because the
+     artifact CSP blocks every remote host and this file must stay standalone. */
+  .goog-g {
+    font-weight: 700;
+    font-size: 13px;
+    background: conic-gradient(from -45deg, #ea4335 0deg 90deg, #fbbc05 90deg 180deg,
+                               #34a853 180deg 270deg, #4285f4 270deg 360deg);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .sor {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 10px 0 6px;
+    color: #6f6a66;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+  }
+
+  .sor::before, .sor::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(255, 255, 255, 0.12);
+  }
+
+  .sinput {
+    flex: 1;
+    min-width: 0;                 /* lets it shrink inside the flex row */
+    padding: 8px 9px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 128, 0, 0.55);
+    border-radius: 3px;
+    color: #ffe6cd;
+    font: inherit;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    /* 16px on iOS or Safari zooms the whole page on focus; this input is
+       11px, so the zoom is suppressed by the viewport meta instead */
+  }
+
+  .sinput::placeholder { color: #6f6a66; }
+
+  /* Unticked by default and worded plainly: under UK GDPR marketing consent
+     has to be a positive opt-in, never a side effect of creating an account. */
+  .scheck {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 9px;
+    color: #7d7772;
+    font-size: 9px;
+    line-height: 1.5;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+  }
+
+  /* Exactly ten rows plus the sticky header (26px per row, 22px header),
+     with a viewport cap so a landscape phone does not get a list taller than
+     its own screen. */
+  #board-rows {
+    max-height: min(282px, 45vh);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;      /* don't scroll the panel behind it */
+  }
+
+  .brow {
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+    padding: 6px 0;
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
+    font-size: 11px;
+  }
+
+  /* Sticky so the columns stay labelled once you scroll past the top ten. */
+  .brow-head {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #14141c;
+    color: #7d7772;
+    font-size: 9px;
+    letter-spacing: 0.14em;
+    border-bottom-style: solid;
+  }
+  .brank { flex: 0 0 26px; color: var(--papaya); font-weight: 700; text-align: right; }
+  .bname { flex: 1; min-width: 0; color: #ffe6cd; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .btime { flex: 0 0 70px; text-align: right; color: #fff; font-variant-numeric: tabular-nums; }
+  .blap  { flex: 0 0 66px; text-align: right; color: #8fd8e8; font-variant-numeric: tabular-nums; }
+  .brow-me { background: rgba(255, 128, 0, 0.14); }
+  .brow-me .bname { color: var(--papaya); font-weight: 700; }
+
+  .slink {
+    appearance: none;
+    -webkit-appearance: none;
+    background: none;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    color: var(--papaya);
+    text-decoration: underline;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .slink:hover { color: #ffc48a; }
+  .slink:focus-visible { outline: 2px solid var(--papaya); outline-offset: 2px; }
+
+  .acct-big { font-size: 12px; color: #ffe6cd; letter-spacing: 0.14em; }
+  .acct-who { flex: 1; color: var(--papaya); font-size: 12px; letter-spacing: 0.08em; }
+  #acct-pending strong { color: #ffb877; }
+
+  .savail {
+    flex: 0 0 auto;
+    width: 74px;
+    text-align: right;
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    color: #7d7772;
+  }
+
+  .savail.is-free  { color: #5fd08a; }
+  .savail.is-taken { color: #e2705f; }
+
+  .scheck input {
+    flex: 0 0 auto;
+    margin: 1px 0 0;
+    accent-color: var(--papaya);
+    width: 13px;
+    height: 13px;
+  }
+  .sinput:focus { outline: none; border-color: var(--papaya); background: rgba(0, 0, 0, 0.5); }
+
+  /* Tilt rows stay visible but read as unavailable when steering by finger —
+     hiding them would make the panel jump around as you toggle. */
+  .srow.is-disabled { opacity: 0.35; }
+  .srow.is-disabled .sval,
+  .srow.is-disabled .srange { pointer-events: none; }
+
+  /* Once racing, the START pad and the rotate nudge are only in the way. */
+  :root.racing .pad-start,
+  :root.racing .rotate-hint { display: none !important; }
+
+  /* In fullscreen the cabinet trim goes, but the control row stays — you
+     still need a way back out and a way to reach tilt. */
+  :root.fs-on .wordmark,
+  :root.fs-on .legend,
+  :root.fs-on .fine { display: none; }
+
+  :root.fs-on .chrome {
+    padding: 4px 8px;
+    background: rgba(10, 10, 14, 0.72);
+    border-top: none;
+  }
+
+  :root.fs-on .actions { margin: 0 auto; }
+
+
+  /* anchored left so it never collides with the stage buttons on the right */
+  .rotate-hint {
+    position: absolute;
+    left: calc(8px + env(safe-area-inset-left));
+    top: calc(8px + env(safe-area-inset-top));
+    z-index: 7;
+    display: none;
+    padding: 6px 12px;
+    border: 1px solid rgba(255, 128, 0, 0.6);
+    background: rgba(12, 12, 16, 0.75);
+    color: #ffb877;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    border-radius: 3px;
+    pointer-events: none;
+    white-space: nowrap;
+  }
+
+  @media (orientation: portrait) {
+    :root.has-touch .rotate-hint { display: block; }
+  }
+
+  /* --- cabinet chrome --- */
+
+  .chrome {
+    flex: 0 0 auto;
+    border-top: 1px solid var(--line);
+    background: var(--panel);
+    display: flex;
+    align-items: center;
+    gap: 8px 18px;
+    flex-wrap: wrap;
+    padding: 8px 14px;
+    position: relative;
+  }
+
+  .chrome::before {
+    content: "";
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--papaya);
+  }
+
+  .wordmark {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    font-size: 13px;
+    color: var(--ink);
+    white-space: nowrap;
+  }
+
+  .wordmark b {
+    background: var(--papaya);
+    color: #14120f;
+    padding: 2px 6px;
+    letter-spacing: 0.18em;
+  }
+
+  .wordmark span {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    color: var(--muted);
+    font-weight: 400;
+  }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    flex: 1 1 320px;
+    min-width: 0;
+  }
+
+  .legend kbd {
+    font: inherit;
+    color: var(--ink);
+    border: 1px solid var(--line);
+    border-bottom-width: 2px;
+    padding: 1px 5px;
+    margin-right: 5px;
+    border-radius: 2px;
+    background: var(--bg);
+  }
+
+  .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+
+  .btn {
+    appearance: none;
+    -webkit-appearance: none;
+    font: inherit;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    color: var(--ink);
+    background: transparent;
+    border: 1px solid var(--line);
+    padding: 6px 10px;
+    cursor: pointer;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+
+  .btn:hover { border-color: var(--papaya); color: var(--papaya); }
+  .btn:focus-visible { outline: 2px solid var(--papaya); outline-offset: 2px; }
+  .btn.is-on { background: var(--papaya); border-color: var(--papaya); color: #14120f; }
+  .btn[hidden] { display: none; }
+
+  .fine {
+    flex: 1 1 100%;
+    font-size: 9px;
+    letter-spacing: 0.07em;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  @media (max-width: 620px) {
+    .legend { display: none; }
+    .chrome { padding: 7px 10px; gap: 6px 10px; }
+  }
+
+  /* A phone in landscape has ~375px of height in total, and the cabinet trim
+     was eating a third of it. The legend and small print are desktop
+     affordances that cost too much here.
+     This block sits LAST on purpose: it competes with .legend/.chrome/.btn at
+     equal specificity, so only source order makes it win. */
+  @media (max-height: 520px) {
+    .legend { display: none; }
+    .fine { display: none; }
+    .chrome { padding: 5px 9px; gap: 5px 8px; }
+    .btn { padding: 5px 8px; font-size: 9px; letter-spacing: 0.1em; }
+    .wordmark { font-size: 11px; }
+    .wordmark span { display: none; }
+
+    /* The panel was landing exactly on its height cap and growing a
+       scrollbar it did not need. Tighten it so it fits outright. */
+    .settings { padding: 8px; }
+    .settings-box { padding: 9px 12px 11px; }
+    .settings-title { font-size: 11px; margin-bottom: 7px; padding-bottom: 6px; }
+    .srow { padding: 5px 0; }
+    .srow-actions { padding-top: 9px; }
+    .sval { padding: 6px 9px; min-width: 92px; }
+    .shint { margin-top: 6px; }
+  }
+</style>
+
+<div class="cabinet">
+  <div class="stage" id="screen" tabindex="0" aria-label="MCL-64 racing game screen">
+    <canvas id="gl" width="320" height="240"></canvas>
+    <canvas id="hud" width="320" height="240"></canvas>
+    <div class="scanlines"></div>
+    <div class="glow"></div>
+
+    <div class="pads">
+      <div class="stick-zone" id="stick-zone">
+        <div class="stick-base" id="stick-base"></div>
+        <div class="stick-knob" id="stick-knob"></div>
+      </div>
+      <button type="button" class="pad pad-drs" data-key="keyDrs" aria-label="DRS boost">DRS</button>
+      <button type="button" class="pad pad-cam" id="pad-cam" aria-label="Change camera">CAM</button>
+      <button type="button" class="pad pad-start" data-key="start" aria-label="Start race">START</button>
+    </div>
+
+    <div class="rotate-hint">ROTATE PHONE</div>
+
+    <div class="settings" id="board" hidden>
+      <div class="settings-box" role="dialog" aria-modal="true" aria-labelledby="board-title">
+        <h2 class="settings-title" id="board-title">GLOBAL LEADERBOARD</h2>
+        <p class="shint" id="board-status">Loading&hellip;</p>
+        <div id="board-rows"></div>
+        <div class="srow srow-actions">
+          <button type="button" class="sval" id="board-refresh">REFRESH</button>
+          <button type="button" class="sval sval-close" id="board-close">CLOSE</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings" id="a2hs" hidden>
+      <div class="settings-box" role="dialog" aria-modal="true" aria-labelledby="a2hs-title">
+        <h2 class="settings-title" id="a2hs-title">FULLSCREEN ON IPHONE</h2>
+        <p class="shint">
+          iPhone browsers cannot put a web page fullscreen &mdash; Apple allows it for video only,
+          and that applies to Chrome and Firefox on iOS too, since they all run on WebKit.
+          There is one way round it:
+        </p>
+        <ol class="a2hs-steps">
+          <li>Tap <strong>Share</strong> in the browser toolbar</li>
+          <li>Choose <strong>Add to Home Screen</strong></li>
+          <li>Launch MCL&#8209;64 from the new icon</li>
+        </ol>
+        <p class="shint">Started that way it runs with no address bar, properly fullscreen.</p>
+        <div class="srow srow-actions">
+          <button type="button" class="sval sval-close" id="a2hs-close">GOT IT</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings" id="settings" hidden>
+      <div class="settings-box" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <h2 class="settings-title" id="settings-title">SETTINGS</h2>
+
+        <div class="srow">
+          <span class="slabel">STEERING</span>
+          <button type="button" class="sval" id="set-steer">JOYSTICK</button>
+        </div>
+
+        <div class="srow" id="row-invert">
+          <span class="slabel">TILT INVERT</span>
+          <button type="button" class="sval" id="set-invert">OFF</button>
+        </div>
+
+        <div class="srow" id="row-sens">
+          <span class="slabel">SENSITIVITY</span>
+          <input type="range" class="srange" id="set-sens" min="1" max="10" step="1" value="6"
+                 aria-label="Steering sensitivity, 1 gentle to 10 twitchy. Applies to tilt, thumbstick and keys." />
+          <span class="snum" id="set-sens-num">6</span>
+        </div>
+
+        <p class="shint" id="set-sens-hint">Shapes the stick around centre and how fast the arrow keys wind on.</p>
+
+        <div class="srow">
+          <span class="slabel">THROTTLE</span>
+          <button type="button" class="sval" id="set-throttle">MANUAL</button>
+        </div>
+
+        <div class="srow" id="row-autofs">
+          <span class="slabel">FULLSCREEN</span>
+          <button type="button" class="sval" id="set-autofs">AUTO</button>
+        </div>
+
+        <p class="shint" id="set-hint">Manual: push forward for gas, pull back to brake.</p>
+
+        <div class="acct" id="acct" hidden>
+          <h3 class="acct-title" id="acct-title">SIGN IN</h3>
+          <p class="shint" id="acct-status">Sign in to post your race times.</p>
+
+          <!-- SIGN IN. A returning player has already given us everything;
+               asking again would be noise. Email only. -->
+          <div id="acct-signin" hidden>
+            <div class="srow acct-row">
+              <button type="button" class="sval sval-oauth" id="acct-google">
+                <span class="goog-g">G</span> CONTINUE WITH GOOGLE
+              </button>
+            </div>
+            <div class="sor"><span>or use your email</span></div>
+
+            <div class="srow acct-row">
+              <input type="email" class="sinput" id="acct-email" placeholder="you@example.com"
+                     autocomplete="email" inputmode="email" spellcheck="false"
+                     aria-label="Email address for a sign-in link" />
+              <button type="button" class="sval" id="acct-send">SIGN IN</button>
+            </div>
+            <!-- The main route for a new player, so it gets a real button
+                 rather than a link buried in 9px body text. -->
+            <div class="srow acct-row acct-alt">
+              <span class="slabel">New here?</span>
+              <button type="button" class="sval sval-wide" id="acct-to-signup">CREATE ACCOUNT</button>
+            </div>
+          </div>
+
+          <!-- SIGN UP. Everything collected once, so there is no second step
+               after the link is clicked. -->
+          <div id="acct-signup" hidden>
+            <div class="srow acct-row">
+              <button type="button" class="sval sval-oauth" id="acct-google2">
+                <span class="goog-g">G</span> CONTINUE WITH GOOGLE
+              </button>
+            </div>
+            <p class="shint">Google sets your name automatically. You can change your driver name afterwards.</p>
+            <div class="sor"><span>or sign up with email</span></div>
+
+            <div class="srow acct-row">
+              <input type="text" class="sinput" id="acct-driver" placeholder="Driver name"
+                     autocomplete="nickname" spellcheck="false" maxlength="24"
+                     aria-label="Driver name shown on the leaderboard" />
+            </div>
+            <div class="srow acct-row">
+              <input type="text" class="sinput" id="acct-first" placeholder="First name"
+                     autocomplete="given-name" spellcheck="false" maxlength="32"
+                     aria-label="First name" />
+              <input type="text" class="sinput" id="acct-last" placeholder="Last name"
+                     autocomplete="family-name" spellcheck="false" maxlength="32"
+                     aria-label="Last name" />
+            </div>
+            <div class="srow acct-row">
+              <input type="email" class="sinput" id="acct-email2" placeholder="you@example.com"
+                     autocomplete="email" inputmode="email" spellcheck="false"
+                     aria-label="Email address" />
+              <button type="button" class="sval" id="acct-create">CREATE</button>
+            </div>
+            <p class="shint" id="acct-preview">You will appear on the board as &mdash;</p>
+            <label class="scheck">
+              <input type="checkbox" id="acct-optin" />
+              <span>Email me about updates to the game. Optional, and you can stop any time.</span>
+            </label>
+            <div class="srow acct-row acct-alt">
+              <span class="slabel">Already registered?</span>
+              <button type="button" class="sval sval-wide" id="acct-to-signin">SIGN IN</button>
+            </div>
+          </div>
+
+          <!-- Transient, not a third state: the form is replaced rather than
+               left sitting there looking like nothing happened. -->
+          <div id="acct-pending" hidden>
+            <p class="shint acct-big">Check your email.</p>
+            <p class="shint">We sent a sign-in link to <strong id="acct-sentto">&mdash;</strong>. Open it on this device.</p>
+            <div class="srow srow-actions">
+              <button type="button" class="sval" id="acct-again">USE A DIFFERENT EMAIL</button>
+            </div>
+          </div>
+
+          <!-- STATE 3: signed in. -->
+          <div id="acct-signed" hidden>
+            <div class="srow acct-row">
+              <span class="slabel">SIGNED IN AS</span>
+              <strong class="acct-who" id="acct-name">&mdash;</strong>
+              <button type="button" class="sval" id="acct-out">SIGN OUT</button>
+            </div>
+            <div class="srow acct-row acct-alt">
+              <input type="text" class="sinput" id="acct-rename" placeholder="Change driver name"
+                     autocomplete="nickname" spellcheck="false" maxlength="24"
+                     aria-label="Change the driver name shown on the leaderboard" />
+              <button type="button" class="sval" id="acct-rename-go">SAVE</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="srow srow-actions">
+          <button type="button" class="sval" id="set-recentre">RECENTRE TILT</button>
+          <button type="button" class="sval sval-close" id="set-close">CLOSE</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="overlay" id="loading">
+      <div class="overlay-mark">MCL-64</div>
+      <div class="bar"><i></i></div>
+      <div class="overlay-note">Warming the tyres&hellip;</div>
+    </div>
+
+    <div class="overlay" id="fallback">
+      <div class="overlay-mark">NO SIGNAL</div>
+      <div class="overlay-note">
+        This game needs WebGL, and it could not start.
+        <br /><span id="fallback-detail"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="chrome">
+    <div class="wordmark"><b>MCL&middot;64</b> <span>PAPAYA GRAND PRIX</span></div>
+
+    <div class="legend">
+      <span><kbd>&larr; &rarr;</kbd>Steer</span>
+      <span><kbd>&uarr; &darr;</kbd>Throttle / brake</span>
+      <span><kbd>Space</kbd>Handbrake</span>
+      <span><kbd>Shift</kbd>DRS</span>
+      <span><kbd>C</kbd>Camera</span>
+      <span><kbd>P</kbd>Pause</span>
+      <span><kbd>R</kbd>Restart</span>
+      <span><kbd>N</kbd>Music</span>
+      <span><kbd>M</kbd>Engine</span>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn" id="btn-board" aria-label="Open the global leaderboard" hidden>LEADERBOARD</button>
+      <button type="button" class="btn" id="btn-settings" aria-label="Open settings">SETTINGS</button>
+      <button type="button" class="btn" id="btn-fs" aria-label="Toggle fullscreen">FULLSCREEN</button>
+      <button type="button" class="btn" id="btn-steer" aria-label="Cycle steering mode: finger joystick, tilt, inverted tilt">JOYSTICK</button>
+      <button type="button" class="btn" id="btn-music">MUSIC ON</button>
+      <button type="button" class="btn" id="btn-sound">ENGINE OFF</button>
+      <button type="button" class="btn" id="btn-restart">RESTART</button>
+    </div>
+
+    <p class="fine">
+      This is an unofficial game made for kicks and giggles by &lsquo;Jamie Easterman&rsquo; of Jedi Concepts and is not endorsed or sponsored by any official racing teams or their sponsors
+    </p>
+  </div>
+</div>
+
+<script>/*INJECT_THREE*/</script>
+<script>/*INJECT_CLOUD*/</script>
+<script>/*INJECT_GAME*/</script>

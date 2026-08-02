@@ -1,0 +1,13 @@
+# Build outputs that are copies of dist/
+deploy/index.html
+dist/mcl64.html
+mcl64-deploy.zip
+mcl64-deploy/
+
+# Local editor / tooling config
+.claude/
+
+# Local scratch
+node_modules/
+.DS_Store
+*.log

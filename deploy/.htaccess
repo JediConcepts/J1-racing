@@ -1,0 +1,36 @@
+# MCL-64 — Apache / cPanel config
+#
+# The whole game is a single self-contained index.html. There are no other
+# assets to serve, so this file only has two jobs: compress it, and make sure
+# a redeploy is actually seen.
+
+# 1. Compression. The file is 706 KB raw and 179 KB gzipped — a 4x saving on
+#    every single visit. cPanel usually enables mod_deflate already, but it is
+#    frequently NOT applied to large HTML, so set it explicitly.
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css application/javascript
+  # Old proxies mangle compressed responses; this is the standard guard.
+  BrowserMatch ^Mozilla/4\.0[678] no-gzip
+  Header append Vary User-Agent env=!dont-vary
+</IfModule>
+
+# 2. Caching. Because the game IS the HTML, a long max-age would leave players
+#    on a stale build after you re-upload. must-revalidate makes the browser
+#    check; the ETag turns that check into a cheap 304 Not Modified, so you
+#    keep almost all of the benefit without serving yesterday's version.
+<IfModule mod_headers.c>
+  <FilesMatch "\.html$">
+    Header set Cache-Control "public, max-age=0, must-revalidate"
+  </FilesMatch>
+</IfModule>
+
+DirectoryIndex index.html
+
+# 3. Force HTTPS. WebGL and WebAudio both run over plain http, so this is not
+#    strictly required — but browsers increasingly warn on http, and cPanel's
+#    AutoSSL gives you a certificate for free. Uncomment once SSL is active.
+# <IfModule mod_rewrite.c>
+#   RewriteEngine On
+#   RewriteCond %{HTTPS} off
+#   RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+# </IfModule>
