@@ -51,10 +51,13 @@
   * { box-sizing: border-box; }
 
   html, body {
-    height: 100%;
     margin: 0;
-    overflow: hidden;
     background: var(--bg);
+    /* The page scrolls so the written content below the game is reachable —
+       a canvas has no text for a search engine to read, and hiding that
+       content from users to feed crawlers would be cloaking. The game itself
+       still owns a full viewport; you scroll past it to reach the prose. */
+    overflow-x: hidden;
   }
 
   body {
@@ -83,6 +86,9 @@
     justify-content: center;
     overflow: hidden;
     outline: none;
+    /* Stops a thumb drag on the car scrolling the page to the prose below. */
+    touch-action: none;
+    overscroll-behavior: contain;
   }
 
   .stage:focus-visible {
@@ -415,6 +421,49 @@
   }
 
   .a2hs-steps strong { color: var(--papaya); font-weight: 700; }
+
+  /* --- written content below the game ---
+     Real prose for real readers. It also happens to be the only thing a
+     crawler can index, since the game itself is a canvas. */
+
+  .about {
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: 44px 20px 72px;
+    color: #b9b2ab;
+    font-size: 14px;
+    line-height: 1.75;
+  }
+
+  .about section { margin-bottom: 30px; }
+
+  .about h1 {
+    margin: 0 0 14px;
+    color: var(--papaya);
+    font-size: 20px;
+    letter-spacing: 0.1em;
+    line-height: 1.35;
+  }
+
+  .about h2 {
+    margin: 0 0 8px;
+    color: #ffe6cd;
+    font-size: 14px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .about p { margin: 0 0 12px; }
+  .about .lede { color: #d8d2cc; font-size: 15px; }
+  .about b { color: #ffe6cd; font-weight: 700; }
+
+  .about footer {
+    margin-top: 36px;
+    padding-top: 18px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    color: #7d7772;
+    font-size: 12px;
+  }
 
   /* --- account block inside the settings panel --- */
 
@@ -1011,6 +1060,74 @@
     </p>
   </div>
 </div>
+
+<!-- Written for people who scroll past the game, and incidentally the only
+     thing a search engine can read: a canvas contains no indexable text. -->
+<main class="about">
+  <section>
+    <h1>MCL&#8209;64 &mdash; Papaya Grand Prix</h1>
+    <p class="lede">
+      A Formula 1 racer built the way a 1997 console would have built it: 240p,
+      a five&#8209;bit dither, and no anti&#8209;aliasing anywhere. Three laps of a
+      stylised Silverstone against a full grid, in a browser, with nothing to install.
+    </p>
+  </section>
+
+  <section>
+    <h2>How to play</h2>
+    <p>
+      On a keyboard, steer with the arrows or <b>A</b> and <b>D</b>, and use the
+      throttle and brake with the up and down arrows or <b>W</b> and <b>S</b>.
+      <b>Space</b> is the handbrake, <b>Shift</b> arms DRS on the two detection
+      zones, and <b>C</b> switches between the chase camera and the cockpit.
+    </p>
+    <p>
+      On a phone, put a thumb anywhere on the screen and an analogue stick appears
+      under it &mdash; left and right to steer, push forward for throttle, pull back
+      to brake and then reverse. Steering by tilting the handset is optional, and
+      the throttle can hold itself open so one thumb is enough.
+    </p>
+  </section>
+
+  <section>
+    <h2>The circuit</h2>
+    <p>
+      Five and a half kilometres of stylised Silverstone: Copse, Maggotts, Becketts,
+      Hangar Straight, Stowe, Vale and Club, with the kerbs and the two DRS zones
+      roughly where you would expect them. The grid is six cars and the race is
+      three laps, so a full run takes a little over five minutes.
+    </p>
+  </section>
+
+  <section>
+    <h2>The leaderboard</h2>
+    <p>
+      Race times post to a global board. Signing in is by Google or by a link
+      emailed to you &mdash; there is no password to choose or forget. Your driver
+      name is the only thing shown publicly; email addresses and surnames are held
+      in a separate schema the public API cannot reach at all.
+    </p>
+  </section>
+
+  <section>
+    <h2>How it is built</h2>
+    <p>
+      One HTML file with no dependencies to install, no build step for the player,
+      and no external requests at runtime. The physics is deterministic to the last
+      bit on every browser, which is what makes a submitted lap time verifiable
+      rather than merely plausible: each race records a replay trace that reproduces
+      it exactly.
+    </p>
+  </section>
+
+  <footer>
+    <p>
+      An unofficial fan project by <b>Jamie Easterman</b> of Jedi Concepts. Not
+      endorsed or sponsored by any racing team or their sponsors. All trademarks
+      belong to their respective owners.
+    </p>
+  </footer>
+</main>
 
 <script>/*INJECT_THREE*/</script>
 <script>/*INJECT_CLOUD*/</script>
