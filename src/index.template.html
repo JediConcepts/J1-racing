@@ -52,7 +52,9 @@
 
   html, body {
     margin: 0;
-    background: var(--bg);
+    /* The page surface, not the game's. .cabinet sets var(--bg) itself, so the
+       console stays near-black while everything below it is navy. */
+    background: #070747;
     /* The page scrolls so the written content below the game is reachable —
        a canvas has no text for a search engine to read, and hiding that
        content from users to feed crawlers would be cloaking. The game itself
@@ -426,14 +428,25 @@
      Real prose for real readers. It also happens to be the only thing a
      crawler can index, since the game itself is a canvas. */
 
+  /* Deep navy, distinct from the game's near-black bezel so the written part
+     of the page reads as a separate surface rather than dead space below it. */
   .about {
-    max-width: 44rem;
-    margin: 0 auto;
-    padding: 44px 20px 72px;
+    background: #070747;
     color: #b9b2ab;
     font-size: 14px;
     line-height: 1.75;
   }
+
+  .about > * {
+    max-width: 44rem;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .about > section:first-child { padding-top: 44px; }
+  .about > footer { padding-bottom: 72px; }
 
   .about section { margin-bottom: 30px; }
 
@@ -910,6 +923,12 @@
           <span class="slabel">FULLSCREEN</span>
           <button type="button" class="sval" id="set-autofs">AUTO</button>
         </div>
+
+        <div class="srow">
+          <span class="slabel">GRAPHICS</span>
+          <button type="button" class="sval" id="set-quality">RETRO 240p</button>
+        </div>
+        <p class="shint" id="set-quality-hint">Retro: 240p with a 5-bit dither, as the hardware did it.</p>
 
         <p class="shint" id="set-hint">Manual: push forward for gas, pull back to brake.</p>
 

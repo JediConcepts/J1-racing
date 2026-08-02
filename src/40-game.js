@@ -19,6 +19,7 @@ var POST_FRAG = [
   'uniform sampler2D tDiffuse;',
   'uniform vec2 uRes;',
   'uniform float uFade;',
+  'uniform float uRetro;',      /* 1 = console, 0 = modern */
   'varying vec2 vUv;',
   /* recursive 4x4 Bayer, built arithmetically — GLSL ES 1.0 will not let us
      dynamically index a const array */
@@ -30,12 +31,22 @@ var POST_FRAG = [
   '}',
   'void main(){',
   '  vec3 c = texture2D(tDiffuse, vUv).rgb;',
-  '  vec2 px = floor(vUv * uRes);',
-  '  float d = bayer4(px) - 0.5;',
-  '  c += d * (1.0/52.0);',
-  '  c = floor(c * 31.0 + 0.5) / 31.0;',   /* 5 bits per channel, as the hardware had */
+  '  if (uRetro > 0.5) {',
+  /* the console path: dither into a 5-bit-per-channel palette */
+  '    vec2 px = floor(vUv * uRes);',
+  '    float d = bayer4(px) - 0.5;',
+  '    c += d * (1.0/52.0);',
+  '    c = floor(c * 31.0 + 0.5) / 31.0;',
+  '  } else {',
+  /* modern: the frame is already tone mapped by the renderer, so this is
+     only a gentle grade — a little saturation and contrast, no quantise
+     and no dither. */
+  '    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));',
+  '    c = mix(vec3(l), c, 1.16);',
+  '    c = clamp((c - 0.5) * 1.07 + 0.5, 0.0, 1.0);',
+  '  }',
   '  vec2 q = (vUv - 0.5) * 2.0;',
-  '  float vig = 1.0 - dot(q,q) * 0.13;',
+  '  float vig = 1.0 - dot(q,q) * mix(0.06, 0.13, uRetro);',
   '  gl_FragColor = vec4(c * vig * uFade, 1.0);',
   '}'
 ].join('\n');
@@ -105,7 +116,8 @@ Game.prototype.buildRenderer = function () {
     uniforms: {
       tDiffuse: { value: this.rt.texture },
       uRes: { value: new THREE.Vector2(320, 240) },
-      uFade: { value: 1 }
+      uFade: { value: 1 },
+      uRetro: { value: 1 }
     },
     vertexShader: POST_VERT,
     fragmentShader: POST_FRAG,
@@ -378,6 +390,16 @@ Game.prototype.bindInput = function () {
   var a2hsOverlay = document.getElementById('a2hs');
   if (a2hsOverlay) a2hsOverlay.addEventListener('click', function (e) {
     if (e.target === a2hsOverlay) self.closeA2HS();
+  });
+
+  var qualitySet = document.getElementById('set-quality');
+  if (qualitySet) qualitySet.addEventListener('click', function (e) {
+    e.preventDefault();
+    self.settings.quality = self.settings.quality === 'modern' ? 'retro' : 'modern';
+    self.applyQuality();
+    self.applySettings();
+    self.saveSettings();
+    self.flash(self.settings.quality === 'modern' ? 'MODERN GRAPHICS' : 'RETRO 240p');
   });
 
   var autoFsSet = document.getElementById('set-autofs');
@@ -671,6 +693,7 @@ Game.prototype.bindInput = function () {
 
   /* Everything above is wired and the stick exists, so push the loaded
      settings through to the tilt sensor, the stick and both UIs at once. */
+  this.applyQuality();
   this.applySettings();
 
   var musicBtn = document.getElementById('btn-music');
@@ -719,13 +742,33 @@ Game.prototype.resize = function () {
   var cw = Math.max(160, this.host.clientWidth | 0);
   var ch = Math.max(120, this.host.clientHeight | 0);
 
-  /* The 3D runs in a small framebuffer and is stretched up with bilinear
-     filtering. That softness is the point: an N64 fed a CRT, so its image
-     blended rather than showing hard pixel edges. Nearest-neighbour here
-     would read as 2D pixel art, which is the wrong console entirely. */
-  var scale3d = clamp(ch / 384, 1, 3.4);
-  var gw = clamp(Math.round(cw / scale3d), 240, 900);
-  var gh = clamp(Math.round(ch / scale3d), 180, 620);
+  var gw, gh;
+  if (this.settings && this.settings.quality === 'modern') {
+    /* Render ABOVE the display size and let the downscale do the smoothing.
+       Supersampling rather than MSAA because it needs no WebGL2 path and no
+       version-specific render-target API, and it anti-aliases the alpha-tested
+       foliage too, which MSAA would leave jagged. Capped on total pixels so a
+       4K monitor does not ask for a 33-megapixel buffer. */
+    var dpr = clamp(window.devicePixelRatio || 1, 1, 2);
+    var ss = 1.35 * dpr;
+    gw = Math.round(cw * ss);
+    gh = Math.round(ch * ss);
+    var maxPx = 5200000;
+    if (gw * gh > maxPx) {
+      var k = Math.sqrt(maxPx / (gw * gh));
+      gw = Math.round(gw * k); gh = Math.round(gh * k);
+    }
+    gw = clamp(gw, 320, 3800);
+    gh = clamp(gh, 240, 2400);
+  } else {
+    /* The 3D runs in a small framebuffer and is stretched up with bilinear
+       filtering. That softness is the point: an N64 fed a CRT, so its image
+       blended rather than showing hard pixel edges. Nearest-neighbour here
+       would read as 2D pixel art, which is the wrong console entirely. */
+    var scale3d = clamp(ch / 384, 1, 3.4);
+    gw = clamp(Math.round(cw / scale3d), 240, 900);
+    gh = clamp(Math.round(ch / scale3d), 180, 620);
+  }
 
   this.gw = gw; this.gh = gh;
   this.renderer.setSize(gw, gh, false);
@@ -863,6 +906,9 @@ Game.prototype.loadSettings = function () {
     steerSens: 6,
     autoThrottle: touchLikely(),
     autoFullscreen: true,
+    /* Retro is the default because it is the point of the thing — modern is
+       there for anyone who wants to see the circuit without the dither. */
+    quality: 'retro',
     userConfigured: false
   };
   try {
@@ -876,6 +922,7 @@ Game.prototype.loadSettings = function () {
       if (typeof p.autoThrottle === 'boolean') s.autoThrottle = p.autoThrottle;
       if (typeof p.autoFullscreen === 'boolean') s.autoFullscreen = p.autoFullscreen;
       if (typeof p.userConfigured === 'boolean') s.userConfigured = p.userConfigured;
+      if (p.quality === 'retro' || p.quality === 'modern') s.quality = p.quality;
       /* tiltSens is the old field name — read it so anyone who already set a
          value keeps it instead of being silently reset to 6 */
       var sv = (typeof p.steerSens === 'number') ? p.steerSens : p.tiltSens;
@@ -920,6 +967,13 @@ Game.prototype.syncSettingsUi = function () {
   put('set-invert', s.tiltInvert ? 'ON' : 'OFF');
   put('set-throttle', s.autoThrottle ? 'AUTO' : 'MANUAL');
   put('set-autofs', s.autoFullscreen ? 'AUTO' : 'MANUAL');
+  put('set-quality', s.quality === 'modern' ? 'MODERN' : 'RETRO 240p');
+  var qh = document.getElementById('set-quality-hint');
+  if (qh) {
+    qh.textContent = s.quality === 'modern'
+      ? 'Modern: supersampled, tone mapped, no dither. Costs more GPU.'
+      : 'Retro: 240p with a 5-bit dither, as the hardware did it.';
+  }
 
   /* No point offering an automatic fullscreen the platform will refuse. */
   var fsRow = document.getElementById('row-autofs');
@@ -1852,6 +1906,27 @@ Game.prototype.carName = function (v) {
     return this.cloud.profile.display_name.toUpperCase();
   }
   return v.livery.name;
+};
+
+/* RETRO is the 240p console look; MODERN supersamples, tone maps and drops
+   the 5-bit quantise entirely. */
+Game.prototype.applyQuality = function () {
+  var modern = this.settings.quality === 'modern';
+
+  this.renderer.toneMapping = modern ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
+  this.renderer.toneMappingExposure = modern ? 1.12 : 1.0;
+
+  /* Tone mapping is compiled INTO every material's shader, so changing it
+     after the scene exists does nothing until each one is rebuilt. Without
+     this the toggle appears to do nothing but change the resolution. */
+  this.scene.traverse(function (o) {
+    if (!o.material) return;
+    var m = o.material.length ? o.material : [o.material];
+    for (var i = 0; i < m.length; i++) if (m[i]) m[i].needsUpdate = true;
+  });
+
+  this.postMat.uniforms.uRetro.value = modern ? 0 : 1;
+  this.resize();
 };
 
 Game.prototype.isTouch = function () {

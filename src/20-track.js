@@ -685,8 +685,12 @@ function pushCrossQuad(rb, x, y, z, w, h, rot) {
     var p2 = vec(x + dx, y + h, z + dz);
     var p3 = vec(x - dx, y + h, z - dz);
     var nrm = vec(-dz, 0, dx).normalize();
-    rb.tri(p0, p1, p2, nrm, [0, 1], [1, 1], [1, 0], WHITE_C);
-    rb.tri(p0, p2, p3, nrm, [0, 1], [1, 0], [0, 0], WHITE_C);
+    /* V RUNS UP. p0/p1 are the base of the quad and p2/p3 the top, so the base
+       takes v=0 and the top v=1. These were the other way round, which with
+       Three's default flipY planted every tree canopy-first in the ground and
+       left the trunk waving in the air. */
+    rb.tri(p0, p1, p2, nrm, [0, 0], [1, 0], [1, 1], WHITE_C);
+    rb.tri(p0, p2, p3, nrm, [0, 0], [1, 1], [0, 1], WHITE_C);
   }
 }
 
