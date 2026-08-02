@@ -896,6 +896,12 @@
         <h2 class="settings-title" id="settings-title">SETTINGS</h2>
 
         <div class="srow">
+          <span class="slabel">CIRCUIT</span>
+          <button type="button" class="sval sval-wide" id="set-track">SILVERSTONE</button>
+        </div>
+        <p class="shint" id="set-track-hint">3 laps &middot; full grid</p>
+
+        <div class="srow">
           <span class="slabel">STEERING</span>
           <button type="button" class="sval" id="set-steer">JOYSTICK</button>
         </div>
@@ -1976,6 +1982,51 @@ var CORNER_NAMES = [
    longer exists.
    ===================================================================== */
 
+
+/* Indianapolis Motor Speedway. 2.5 miles of rectangle with rounded corners:
+   two 5/8-mile straights, two short chutes, four identical quarter-circle
+   turns banked at 9 degrees 12 minutes. Flat throughout — no elevation. */
+var INDY_CONTROL = [
+    [    0, -357,  0],
+    [  126, -357,  0],
+    [  252, -357,  0],
+    [  377, -357,  0],
+    [  503, -357,  0],
+    [  601, -337,  0],
+    [  684, -282,  0],
+    [  740, -199,  0],
+    [  759, -101,  0],
+    [  759,    0,  0],
+    [  759,  101,  0],
+    [  740,  199,  0],
+    [  684,  282,  0],
+    [  601,  337,  0],
+    [  503,  357,  0],
+    [  377,  357,  0],
+    [  252,  357,  0],
+    [  126,  357,  0],
+    [    0,  357,  0],
+    [ -126,  357,  0],
+    [ -252,  357,  0],
+    [ -377,  357,  0],
+    [ -503,  357,  0],
+    [ -601,  337,  0],
+    [ -684,  282,  0],
+    [ -740,  199,  0],
+    [ -759,  101,  0],
+    [ -759,    0,  0],
+    [ -759, -101,  0],
+    [ -740, -199,  0],
+    [ -684, -282,  0],
+    [ -601, -337,  0],
+    [ -503, -357,  0],
+    [ -377, -357,  0],
+    [ -252, -357,  0],
+    [ -126, -357,  0]
+];
+
+var INDY_CORNERS = [['FRONT STRETCH', 0], ['TURN 1', 6], ['TURN 2', 12], ['BACK STRETCH', 18], ['TURN 3', 24], ['TURN 4', 30]];
+
 var TRACKS = [
   {
     id: 'silverstone-v1',
@@ -1986,6 +2037,20 @@ var TRACKS = [
     runoff: 7.0,         /* sealed runoff before the wall */
     control: TRACK_CONTROL,
     corners: CORNER_NAMES
+  },
+  {
+    id: 'indianapolis-v1',
+    name: 'INDIANAPOLIS',
+    blurb: 'BANKED OVAL',
+    laps: 5,
+    halfW: 9,
+    runoff: 9.0,
+    /* 9.2 degrees = 0.1606 rad. The gain is high so the constant-radius turns
+       saturate at the cap and hold full banking all the way through. */
+    bankGain: 90,
+    bankMax: 0.1606,
+    control: INDY_CONTROL,
+    corners: INDY_CORNERS
   }
 ];
 
@@ -2026,6 +2091,10 @@ function Track(def) {
      below samples the circuit. */
   HALF_W = def.halfW || 7.2;
   RUNOFF = def.runoff || 7.0;
+  /* Derived, so it has to be recomputed here too — left at its module-level
+     value it would keep Silverstone's barrier line on a wider circuit, and the
+     walls would sit inside the runoff. */
+  WALL_HALF = HALF_W + RUNOFF;
 
   var control = def.control;
 
@@ -2075,8 +2144,15 @@ function Track(def) {
   /* Banking, capped at ~5.5 degrees. Sign convention used throughout:
      curv > 0 means the circuit turns toward +lat, so the inside of the
      corner is at positive lateral offset and the outside must ride higher. */
+  /* Banking follows curvature, capped. A road circuit gets a token 2.6 degrees
+     of camber; a speedway needs its real figure, and because an oval's turns
+     hold constant radius a high gain saturates at the cap through the whole
+     turn and smoothLoop blends it out onto the straights — which is exactly
+     the real banking profile. */
+  var bankGain = def.bankGain || 14;
+  var bankMax = def.bankMax || 0.046;
   var bankRaw = new Float32Array(this.n);
-  for (i = 0; i < this.n; i++) bankRaw[i] = clamp(-this.curv[i] * 14, -0.046, 0.046);
+  for (i = 0; i < this.n; i++) bankRaw[i] = clamp(-this.curv[i] * bankGain, -bankMax, bankMax);
   this.bank = smoothLoop(bankRaw, 11, 2);
 
   this.buildRacingLine();
@@ -3955,6 +4031,9 @@ Cloud.prototype.leaderboard = function (trackVersion, limit) {
    MCL-64  —  renderer, HUD, race director, input, main loop
    ========================================================================= */
 
+/* Fallback only. The live figure is this.track.laps — a circuit sets its own
+   distance, so a 4 km oval is not forced to the same lap count as a 5.5 km
+   road course. Read it via this.laps(). */
 var TOTAL_LAPS = 3;
 var GRID_SIZE = 6;
 var STEP = 1 / 60;
@@ -4343,6 +4422,12 @@ Game.prototype.bindInput = function () {
   var a2hsOverlay = document.getElementById('a2hs');
   if (a2hsOverlay) a2hsOverlay.addEventListener('click', function (e) {
     if (e.target === a2hsOverlay) self.closeA2HS();
+  });
+
+  var trackSet = document.getElementById('set-track');
+  if (trackSet) trackSet.addEventListener('click', function (e) {
+    e.preventDefault();
+    self.cycleTrack();
   });
 
   var qualitySet = document.getElementById('set-quality');
@@ -4926,6 +5011,11 @@ Game.prototype.syncSettingsUi = function () {
   put('set-invert', s.tiltInvert ? 'ON' : 'OFF');
   put('set-throttle', s.autoThrottle ? 'AUTO' : 'MANUAL');
   put('set-autofs', s.autoFullscreen ? 'AUTO' : 'MANUAL');
+  var tdef = trackById(s.trackId);
+  put('set-track', tdef.name);
+  var th = document.getElementById('set-track-hint');
+  if (th) th.textContent = tdef.laps + ' laps · ' + (tdef.blurb || 'full grid');
+
   put('set-quality', s.quality === 'modern' ? 'MODERN' : 'RETRO 240p');
   var qh = document.getElementById('set-quality-hint');
   if (qh) {
@@ -5045,6 +5135,10 @@ Game.prototype.closeA2HS = function () {
    each other as if they were comparable. */
 /* Which circuit a time was set on. Read from the live track rather than
    hard-coded, so scores land on the right board when the circuit changes. */
+Game.prototype.laps = function () {
+  return (this.track && this.track.laps) || TOTAL_LAPS;
+};
+
 Game.prototype.trackVersion = function () {
   return (this.track && this.track.id) || 'silverstone-v1';
 };
@@ -5418,12 +5512,12 @@ Game.prototype.checkLap = function (v) {
       v.lapStart = this.raceTime;
       v.lapsDone++;
       v.sectorIdx = 0;
-      if (v.lapsDone >= TOTAL_LAPS) {
+      if (v.lapsDone >= this.laps()) {
         v.finished = true;
         v.finishTime = this.raceTime;
         if (v.isPlayer) { this.flash('FINISH'); this.audio.blip(880, 0.5, 'square', 0.28); }
       } else if (v.isPlayer) {
-        if (v.lapsDone === TOTAL_LAPS - 1) this.flash('FINAL LAP');
+        if (v.lapsDone === this.laps() - 1) this.flash('FINAL LAP');
         else this.flash('LAP ' + (v.lapsDone + 1));
         this.audio.blip(560, 0.2, 'square', 0.2);
       }
@@ -5563,13 +5657,13 @@ Game.prototype.drawHUD = function () {
      four pixels apart — narrower than a single stroke of the font at this
      scale — so they read as the one number "1/36/6". The gap between two
      panels is what tells them apart; a wider margin alone would not. */
-  var lap = Math.min(p.lapsDone + 1, TOTAL_LAPS);
+  var lap = Math.min(p.lapsDone + 1, this.laps());
   var boxW = textWidth('0/0', 2) + 6;      /* value width plus 3px each side */
   var boxGap = 5;
 
   this.panel(3, 3, boxW, 25);
   drawText(g, 'LAP', 6, 6, 1, C_PAPAYA, C_SHADOW);
-  drawText(g, lap + '/' + TOTAL_LAPS, 6, 15, 2, C_WHITE, C_SHADOW);
+  drawText(g, lap + '/' + this.laps(), 6, 15, 2, C_WHITE, C_SHADOW);
 
   var posX = 3 + boxW + boxGap;
   this.panel(posX, 3, boxW, 25, C_CYAN);
@@ -5773,7 +5867,9 @@ Game.prototype.drawTitle = function () {
   g.fillRect(Math.round(W / 2 - tw / 2) - 6, ty + GLYPH_H * titleScale + 5, tw + 12, 2);
   drawTextCenter(g, 'MCL-64', W / 2, ty, titleScale, '#15161a', null);
 
-  drawTextCenter(g, 'PAPAYA GRAND PRIX   SILVERSTONE', W / 2, ty + GLYPH_H * titleScale + 14, 1, C_CYAN, C_SHADOW);
+  /* Names the circuit you are about to race, not a hard-coded one. */
+  drawTextCenter(g, 'PAPAYA GRAND PRIX   ' + this.track.name + '   ' + this.track.laps + ' LAPS',
+    W / 2, ty + GLYPH_H * titleScale + 14, 1, C_CYAN, C_SHADOW);
 
   /* attract-mode tag, top right */
   drawTextRight(g, 'DEMO', W - 6, 6, 1, pulse > 0.5 ? C_PAPAYA : '#6c5a48', C_SHADOW);
@@ -5807,7 +5903,7 @@ Game.prototype.drawTitle = function () {
   for (var i = 0; i < lines.length; i++) {
     drawTextCenter(g, lines[i], W / 2, ly + i * 9, 1, i === 0 ? C_PAPAYA : '#a9a29b', C_SHADOW);
   }
-  if (!touch) drawText(g, TOTAL_LAPS + ' LAPS   ' + GRID_SIZE + ' CARS', 6, H - 11, 1, '#7d7772', C_SHADOW);
+  if (!touch) drawText(g, this.laps() + ' LAPS   ' + GRID_SIZE + ' CARS', 6, H - 11, 1, '#7d7772', C_SHADOW);
 };
 
 /* Single place that reflects auth state into the panel, driven by Cloud's
@@ -5875,6 +5971,26 @@ Game.prototype.carName = function (v) {
 
 /* RETRO is the 240p console look; MODERN supersamples, tone maps and drops
    the 5-bit quantise entirely. */
+/* Switching circuit rebuilds the whole scene — road ribbon, barriers,
+   scenery, grandstands — so it reloads rather than trying to dispose and
+   rebuild in place. The session lives in localStorage, so nothing is lost,
+   and the page is one file that loads in about a second.
+   Unlock rules would go here: filter TRACKS by what the player has earned
+   before picking the next one. */
+Game.prototype.cycleTrack = function () {
+  var list = TRACKS;
+  var i = 0;
+  for (var k = 0; k < list.length; k++) if (list[k].id === this.settings.trackId) i = k;
+  var next = list[(i + 1) % list.length];
+  if (next.id === this.settings.trackId) return;      /* only one circuit */
+
+  this.settings.trackId = next.id;
+  this.saveSettings();
+  this.flash('LOADING ' + next.name);
+  /* let the flash paint before the navigation stalls the frame */
+  setTimeout(function () { location.reload(); }, 220);
+};
+
 Game.prototype.applyQuality = function () {
   var modern = this.settings.quality === 'modern';
 
@@ -6097,6 +6213,9 @@ Game.prototype.updateAudio = function () {
   });
 
   window.MCL64 = game;
+  /* The circuit registry, for the selector UI and for poking at in a console. */
+  game.tracks = TRACKS;
+  game.trackById = trackById;
 })();
 
 })();

@@ -68,6 +68,51 @@ var CORNER_NAMES = [
    longer exists.
    ===================================================================== */
 
+
+/* Indianapolis Motor Speedway. 2.5 miles of rectangle with rounded corners:
+   two 5/8-mile straights, two short chutes, four identical quarter-circle
+   turns banked at 9 degrees 12 minutes. Flat throughout — no elevation. */
+var INDY_CONTROL = [
+    [    0, -357,  0],
+    [  126, -357,  0],
+    [  252, -357,  0],
+    [  377, -357,  0],
+    [  503, -357,  0],
+    [  601, -337,  0],
+    [  684, -282,  0],
+    [  740, -199,  0],
+    [  759, -101,  0],
+    [  759,    0,  0],
+    [  759,  101,  0],
+    [  740,  199,  0],
+    [  684,  282,  0],
+    [  601,  337,  0],
+    [  503,  357,  0],
+    [  377,  357,  0],
+    [  252,  357,  0],
+    [  126,  357,  0],
+    [    0,  357,  0],
+    [ -126,  357,  0],
+    [ -252,  357,  0],
+    [ -377,  357,  0],
+    [ -503,  357,  0],
+    [ -601,  337,  0],
+    [ -684,  282,  0],
+    [ -740,  199,  0],
+    [ -759,  101,  0],
+    [ -759,    0,  0],
+    [ -759, -101,  0],
+    [ -740, -199,  0],
+    [ -684, -282,  0],
+    [ -601, -337,  0],
+    [ -503, -357,  0],
+    [ -377, -357,  0],
+    [ -252, -357,  0],
+    [ -126, -357,  0]
+];
+
+var INDY_CORNERS = [['FRONT STRETCH', 0], ['TURN 1', 6], ['TURN 2', 12], ['BACK STRETCH', 18], ['TURN 3', 24], ['TURN 4', 30]];
+
 var TRACKS = [
   {
     id: 'silverstone-v1',
@@ -78,6 +123,20 @@ var TRACKS = [
     runoff: 7.0,         /* sealed runoff before the wall */
     control: TRACK_CONTROL,
     corners: CORNER_NAMES
+  },
+  {
+    id: 'indianapolis-v1',
+    name: 'INDIANAPOLIS',
+    blurb: 'BANKED OVAL',
+    laps: 5,
+    halfW: 9,
+    runoff: 9.0,
+    /* 9.2 degrees = 0.1606 rad. The gain is high so the constant-radius turns
+       saturate at the cap and hold full banking all the way through. */
+    bankGain: 90,
+    bankMax: 0.1606,
+    control: INDY_CONTROL,
+    corners: INDY_CORNERS
   }
 ];
 
@@ -118,6 +177,10 @@ function Track(def) {
      below samples the circuit. */
   HALF_W = def.halfW || 7.2;
   RUNOFF = def.runoff || 7.0;
+  /* Derived, so it has to be recomputed here too — left at its module-level
+     value it would keep Silverstone's barrier line on a wider circuit, and the
+     walls would sit inside the runoff. */
+  WALL_HALF = HALF_W + RUNOFF;
 
   var control = def.control;
 
@@ -167,8 +230,15 @@ function Track(def) {
   /* Banking, capped at ~5.5 degrees. Sign convention used throughout:
      curv > 0 means the circuit turns toward +lat, so the inside of the
      corner is at positive lateral offset and the outside must ride higher. */
+  /* Banking follows curvature, capped. A road circuit gets a token 2.6 degrees
+     of camber; a speedway needs its real figure, and because an oval's turns
+     hold constant radius a high gain saturates at the cap through the whole
+     turn and smoothLoop blends it out onto the straights — which is exactly
+     the real banking profile. */
+  var bankGain = def.bankGain || 14;
+  var bankMax = def.bankMax || 0.046;
   var bankRaw = new Float32Array(this.n);
-  for (i = 0; i < this.n; i++) bankRaw[i] = clamp(-this.curv[i] * 14, -0.046, 0.046);
+  for (i = 0; i < this.n; i++) bankRaw[i] = clamp(-this.curv[i] * bankGain, -bankMax, bankMax);
   this.bank = smoothLoop(bankRaw, 11, 2);
 
   this.buildRacingLine();

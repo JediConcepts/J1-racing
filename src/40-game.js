@@ -2,6 +2,9 @@
    MCL-64  —  renderer, HUD, race director, input, main loop
    ========================================================================= */
 
+/* Fallback only. The live figure is this.track.laps — a circuit sets its own
+   distance, so a 4 km oval is not forced to the same lap count as a 5.5 km
+   road course. Read it via this.laps(). */
 var TOTAL_LAPS = 3;
 var GRID_SIZE = 6;
 var STEP = 1 / 60;
@@ -390,6 +393,12 @@ Game.prototype.bindInput = function () {
   var a2hsOverlay = document.getElementById('a2hs');
   if (a2hsOverlay) a2hsOverlay.addEventListener('click', function (e) {
     if (e.target === a2hsOverlay) self.closeA2HS();
+  });
+
+  var trackSet = document.getElementById('set-track');
+  if (trackSet) trackSet.addEventListener('click', function (e) {
+    e.preventDefault();
+    self.cycleTrack();
   });
 
   var qualitySet = document.getElementById('set-quality');
@@ -973,6 +982,11 @@ Game.prototype.syncSettingsUi = function () {
   put('set-invert', s.tiltInvert ? 'ON' : 'OFF');
   put('set-throttle', s.autoThrottle ? 'AUTO' : 'MANUAL');
   put('set-autofs', s.autoFullscreen ? 'AUTO' : 'MANUAL');
+  var tdef = trackById(s.trackId);
+  put('set-track', tdef.name);
+  var th = document.getElementById('set-track-hint');
+  if (th) th.textContent = tdef.laps + ' laps · ' + (tdef.blurb || 'full grid');
+
   put('set-quality', s.quality === 'modern' ? 'MODERN' : 'RETRO 240p');
   var qh = document.getElementById('set-quality-hint');
   if (qh) {
@@ -1092,6 +1106,10 @@ Game.prototype.closeA2HS = function () {
    each other as if they were comparable. */
 /* Which circuit a time was set on. Read from the live track rather than
    hard-coded, so scores land on the right board when the circuit changes. */
+Game.prototype.laps = function () {
+  return (this.track && this.track.laps) || TOTAL_LAPS;
+};
+
 Game.prototype.trackVersion = function () {
   return (this.track && this.track.id) || 'silverstone-v1';
 };
@@ -1465,12 +1483,12 @@ Game.prototype.checkLap = function (v) {
       v.lapStart = this.raceTime;
       v.lapsDone++;
       v.sectorIdx = 0;
-      if (v.lapsDone >= TOTAL_LAPS) {
+      if (v.lapsDone >= this.laps()) {
         v.finished = true;
         v.finishTime = this.raceTime;
         if (v.isPlayer) { this.flash('FINISH'); this.audio.blip(880, 0.5, 'square', 0.28); }
       } else if (v.isPlayer) {
-        if (v.lapsDone === TOTAL_LAPS - 1) this.flash('FINAL LAP');
+        if (v.lapsDone === this.laps() - 1) this.flash('FINAL LAP');
         else this.flash('LAP ' + (v.lapsDone + 1));
         this.audio.blip(560, 0.2, 'square', 0.2);
       }
@@ -1610,13 +1628,13 @@ Game.prototype.drawHUD = function () {
      four pixels apart — narrower than a single stroke of the font at this
      scale — so they read as the one number "1/36/6". The gap between two
      panels is what tells them apart; a wider margin alone would not. */
-  var lap = Math.min(p.lapsDone + 1, TOTAL_LAPS);
+  var lap = Math.min(p.lapsDone + 1, this.laps());
   var boxW = textWidth('0/0', 2) + 6;      /* value width plus 3px each side */
   var boxGap = 5;
 
   this.panel(3, 3, boxW, 25);
   drawText(g, 'LAP', 6, 6, 1, C_PAPAYA, C_SHADOW);
-  drawText(g, lap + '/' + TOTAL_LAPS, 6, 15, 2, C_WHITE, C_SHADOW);
+  drawText(g, lap + '/' + this.laps(), 6, 15, 2, C_WHITE, C_SHADOW);
 
   var posX = 3 + boxW + boxGap;
   this.panel(posX, 3, boxW, 25, C_CYAN);
@@ -1820,7 +1838,9 @@ Game.prototype.drawTitle = function () {
   g.fillRect(Math.round(W / 2 - tw / 2) - 6, ty + GLYPH_H * titleScale + 5, tw + 12, 2);
   drawTextCenter(g, 'MCL-64', W / 2, ty, titleScale, '#15161a', null);
 
-  drawTextCenter(g, 'PAPAYA GRAND PRIX   SILVERSTONE', W / 2, ty + GLYPH_H * titleScale + 14, 1, C_CYAN, C_SHADOW);
+  /* Names the circuit you are about to race, not a hard-coded one. */
+  drawTextCenter(g, 'PAPAYA GRAND PRIX   ' + this.track.name + '   ' + this.track.laps + ' LAPS',
+    W / 2, ty + GLYPH_H * titleScale + 14, 1, C_CYAN, C_SHADOW);
 
   /* attract-mode tag, top right */
   drawTextRight(g, 'DEMO', W - 6, 6, 1, pulse > 0.5 ? C_PAPAYA : '#6c5a48', C_SHADOW);
@@ -1854,7 +1874,7 @@ Game.prototype.drawTitle = function () {
   for (var i = 0; i < lines.length; i++) {
     drawTextCenter(g, lines[i], W / 2, ly + i * 9, 1, i === 0 ? C_PAPAYA : '#a9a29b', C_SHADOW);
   }
-  if (!touch) drawText(g, TOTAL_LAPS + ' LAPS   ' + GRID_SIZE + ' CARS', 6, H - 11, 1, '#7d7772', C_SHADOW);
+  if (!touch) drawText(g, this.laps() + ' LAPS   ' + GRID_SIZE + ' CARS', 6, H - 11, 1, '#7d7772', C_SHADOW);
 };
 
 /* Single place that reflects auth state into the panel, driven by Cloud's
@@ -1922,6 +1942,26 @@ Game.prototype.carName = function (v) {
 
 /* RETRO is the 240p console look; MODERN supersamples, tone maps and drops
    the 5-bit quantise entirely. */
+/* Switching circuit rebuilds the whole scene — road ribbon, barriers,
+   scenery, grandstands — so it reloads rather than trying to dispose and
+   rebuild in place. The session lives in localStorage, so nothing is lost,
+   and the page is one file that loads in about a second.
+   Unlock rules would go here: filter TRACKS by what the player has earned
+   before picking the next one. */
+Game.prototype.cycleTrack = function () {
+  var list = TRACKS;
+  var i = 0;
+  for (var k = 0; k < list.length; k++) if (list[k].id === this.settings.trackId) i = k;
+  var next = list[(i + 1) % list.length];
+  if (next.id === this.settings.trackId) return;      /* only one circuit */
+
+  this.settings.trackId = next.id;
+  this.saveSettings();
+  this.flash('LOADING ' + next.name);
+  /* let the flash paint before the navigation stalls the frame */
+  setTimeout(function () { location.reload(); }, 220);
+};
+
 Game.prototype.applyQuality = function () {
   var modern = this.settings.quality === 'modern';
 
@@ -2144,4 +2184,7 @@ Game.prototype.updateAudio = function () {
   });
 
   window.MCL64 = game;
+  /* The circuit registry, for the selector UI and for poking at in a console. */
+  game.tracks = TRACKS;
+  game.trackById = trackById;
 })();
