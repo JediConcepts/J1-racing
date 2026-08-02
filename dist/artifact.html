@@ -2876,6 +2876,21 @@ Vehicle.prototype.placeAt = function (index, lateral) {
   this.sync(0);
 };
 
+/* Visual basis: same as forward/right but built from the interpolated yaw, so
+   anything that follows the car (the camera) tracks what is drawn rather than
+   the 60Hz physics state it was drawn from. */
+Vehicle.prototype.visForward = function (out) {
+  var y = (this.vyaw === undefined) ? this.yaw : this.vyaw;
+  return out.set(dsin(y), 0, dcos(y));
+};
+Vehicle.prototype.visRight = function (out) {
+  var y = (this.vyaw === undefined) ? this.yaw : this.vyaw;
+  return out.set(dcos(y), 0, -dsin(y));
+};
+Vehicle.prototype.visX = function () { return this.vx === undefined ? this.pos.x : this.vx; };
+Vehicle.prototype.visY = function () { return this.vy === undefined ? this.pos.y : this.vy; };
+Vehicle.prototype.visZ = function () { return this.vz === undefined ? this.pos.z : this.vz; };
+
 Vehicle.prototype.forward = function (out) { return out.set(dsin(this.yaw), 0, dcos(this.yaw)); };
 Vehicle.prototype.right = function (out) { return out.set(dcos(this.yaw), 0, -dsin(this.yaw)); };
 
@@ -2883,6 +2898,17 @@ var _f3 = new THREE.Vector3(), _r3 = new THREE.Vector3(), _tv = new THREE.Vector
 
 Vehicle.prototype.step = function (dt, input, raceLive) {
   var t = this.track;
+
+  /* Snapshot for render interpolation. Physics advances in fixed 60Hz steps
+     but frames are drawn whenever the display asks, so without a previous
+     state to blend from the car only moves on the frames a step happened to
+     land on — while the camera, damped on real frame time, keeps gliding.
+     Against the world that reads as mild stutter; on the chase car, which sits
+     still in frame, it reads as the car twitching. */
+  this.prevX = this.pos.x;
+  this.prevZ = this.pos.z;
+  this.prevYaw = this.yaw;
+
   var f = t.frame(this.pos.x, this.pos.z, this.frameIdx, this.f);
   this.frameIdx = f.i;
 
@@ -2988,19 +3014,33 @@ Vehicle.prototype.updateProgress = function (s) {
   this.progress = this.lapsDone * len + s;
 };
 
-Vehicle.prototype.sync = function (dt) {
+/* alpha is how far the current frame sits between the last physics step and
+   the next, so the visible car moves smoothly at whatever rate the display
+   runs. The PHYSICS position is never touched — only what is drawn. */
+Vehicle.prototype.sync = function (dt, alpha) {
   var t = this.track;
   var g = this.group;
 
-  var fx = dsin(this.yaw), fz = dcos(this.yaw);
-  var rx = dcos(this.yaw), rz = -dsin(this.yaw);
+  var a = (alpha === undefined) ? 1 : clamp(alpha, 0, 1);
+  if (this.prevX === undefined) { this.prevX = this.pos.x; this.prevZ = this.pos.z; this.prevYaw = this.yaw; }
 
-  var hC = t.heightAt(this.pos.x, this.pos.z, this.frameIdx);
-  var hF = t.heightAt(this.pos.x + fx * 2.2, this.pos.z + fz * 2.2, this.frameIdx);
-  var hB = t.heightAt(this.pos.x - fx * 2.2, this.pos.z - fz * 2.2, this.frameIdx);
-  var hR = t.heightAt(this.pos.x + rx * 1.5, this.pos.z + rz * 1.5, this.frameIdx);
-  var hL = t.heightAt(this.pos.x - rx * 1.5, this.pos.z - rz * 1.5, this.frameIdx);
+  var vx = lerp(this.prevX, this.pos.x, a);
+  var vz = lerp(this.prevZ, this.pos.z, a);
+  /* through the shortest arc, or the car spins the wrong way past +/-PI */
+  var vyaw = this.prevYaw + angleDelta(this.prevYaw, this.yaw) * a;
 
+  this.vx = vx; this.vz = vz; this.vyaw = vyaw;
+
+  var fx = dsin(vyaw), fz = dcos(vyaw);
+  var rx = dcos(vyaw), rz = -dsin(vyaw);
+
+  var hC = t.heightAt(vx, vz, this.frameIdx);
+  var hF = t.heightAt(vx + fx * 2.2, vz + fz * 2.2, this.frameIdx);
+  var hB = t.heightAt(vx - fx * 2.2, vz - fz * 2.2, this.frameIdx);
+  var hR = t.heightAt(vx + rx * 1.5, vz + rz * 1.5, this.frameIdx);
+  var hL = t.heightAt(vx - rx * 1.5, vz - rz * 1.5, this.frameIdx);
+
+  this.vy = hC;
   this.pos.y = hC;
   var pitch = datan2(hF - hB, 4.4);
   var roll = datan2(hR - hL, 3.0);
@@ -3012,10 +3052,10 @@ Vehicle.prototype.sync = function (dt) {
   this.pitch = lerp(this.pitch, -pitch, k);
   this.roll = lerp(this.roll, -roll + lean, k);
 
-  g.position.set(this.pos.x, this.pos.y + 0.02, this.pos.z);
+  g.position.set(vx, this.vy + 0.02, vz);
   g.rotation.set(0, 0, 0);
   g.rotation.order = 'YXZ';
-  g.rotation.y = this.yaw;
+  g.rotation.y = vyaw;
   g.rotation.x = this.pitch;
   g.rotation.z = this.roll;
 
@@ -3027,8 +3067,8 @@ Vehicle.prototype.sync = function (dt) {
     else w.rotation.x = this.wheelSpin;
   }
 
-  this.shadow.position.set(this.pos.x, this.pos.y + 0.05, this.pos.z);
-  this.shadow.rotation.set(-Math.PI / 2, 0, -this.yaw);
+  this.shadow.position.set(vx, this.vy + 0.05, vz);
+  this.shadow.rotation.set(-Math.PI / 2, 0, -vyaw);
 };
 
 Vehicle.prototype.speedKph = function () { return Math.max(0, this.vFwd) * 3.6; };
@@ -5373,19 +5413,20 @@ var _cf = new THREE.Vector3(), _cr = new THREE.Vector3(), _ideal = new THREE.Vec
 
 Game.prototype.updateCamera = function (dt, snap) {
   var p = (this.state === STATE.TITLE) ? this.demoCar : this.player;
-  p.forward(_cf); p.right(_cr);
+  p.visForward(_cf); p.visRight(_cr);
 
+  var px = p.visX(), py = p.visY(), pz = p.visZ();
   var speed01 = clamp(p.vFwd / V_MAX, 0, 1);
 
   if (this.state === STATE.TITLE && this.demoShot !== 0) {
     /* locked-off TV camera: hold the position, track the car */
     this.camPos.copy(this.demoAnchor);
-    _look.set(p.pos.x, p.pos.y + 0.9, p.pos.z);
+    _look.set(px, py + 0.9, pz);
     this.camLook.lerp(_look, snap ? 1 : 1 - Math.exp(-9 * dt));
     this.camera.fov = this.demoShot === 1 ? 34 : 52;
   } else if (this.camMode === 1 && this.state !== STATE.TITLE) {
-    _ideal.set(p.pos.x + _cf.x * 0.30, p.pos.y + 1.16, p.pos.z + _cf.z * 0.30);
-    _look.set(p.pos.x + _cf.x * 26, p.pos.y + 1.5, p.pos.z + _cf.z * 26);
+    _ideal.set(px + _cf.x * 0.30, py + 1.16, pz + _cf.z * 0.30);
+    _look.set(px + _cf.x * 26, py + 1.5, pz + _cf.z * 26);
     this.camPos.copy(_ideal);
     this.camLook.copy(_look);
     this.camera.fov = 70 + speed01 * 12;
@@ -5395,11 +5436,11 @@ Game.prototype.updateCamera = function (dt, snap) {
     /* trail the slide a little so drifts read from behind */
     var slide = clamp(-p.vLat * 0.10, -2.2, 2.2);
     _ideal.set(
-      p.pos.x - _cf.x * back + _cr.x * slide,
-      p.pos.y + lift,
-      p.pos.z - _cf.z * back + _cr.z * slide
+      px - _cf.x * back + _cr.x * slide,
+      py + lift,
+      pz - _cf.z * back + _cr.z * slide
     );
-    _look.set(p.pos.x + _cf.x * 11, p.pos.y + 1.35, p.pos.z + _cf.z * 11);
+    _look.set(px + _cf.x * 11, py + 1.35, pz + _cf.z * 11);
     if (snap) { this.camPos.copy(_ideal); this.camLook.copy(_look); }
     else {
       var k = 1 - Math.exp(-9 * dt);
@@ -5963,7 +6004,12 @@ Game.prototype.updateAudio = function () {
     var guard = 0;
     while (acc >= STEP && guard < 6) { game.tick(STEP); acc -= STEP; guard++; }
     if (acc > STEP * 6) acc = 0;
-    for (var i = 0; i < game.cars.length; i++) game.cars[i].sync(dt);
+    /* Whatever is left in the accumulator is how far this frame sits past the
+       last physics step. Feeding it to sync() is what lets the cars move on
+       frames where no step ran — without it they only advance at 60Hz while
+       the camera glides on every frame, and the chase car twitches. */
+    var alpha = acc / STEP;
+    for (var i = 0; i < game.cars.length; i++) game.cars[i].sync(dt, alpha);
     game.render(dt);
     game.updateAudio();
   }

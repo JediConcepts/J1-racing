@@ -1509,19 +1509,20 @@ var _cf = new THREE.Vector3(), _cr = new THREE.Vector3(), _ideal = new THREE.Vec
 
 Game.prototype.updateCamera = function (dt, snap) {
   var p = (this.state === STATE.TITLE) ? this.demoCar : this.player;
-  p.forward(_cf); p.right(_cr);
+  p.visForward(_cf); p.visRight(_cr);
 
+  var px = p.visX(), py = p.visY(), pz = p.visZ();
   var speed01 = clamp(p.vFwd / V_MAX, 0, 1);
 
   if (this.state === STATE.TITLE && this.demoShot !== 0) {
     /* locked-off TV camera: hold the position, track the car */
     this.camPos.copy(this.demoAnchor);
-    _look.set(p.pos.x, p.pos.y + 0.9, p.pos.z);
+    _look.set(px, py + 0.9, pz);
     this.camLook.lerp(_look, snap ? 1 : 1 - Math.exp(-9 * dt));
     this.camera.fov = this.demoShot === 1 ? 34 : 52;
   } else if (this.camMode === 1 && this.state !== STATE.TITLE) {
-    _ideal.set(p.pos.x + _cf.x * 0.30, p.pos.y + 1.16, p.pos.z + _cf.z * 0.30);
-    _look.set(p.pos.x + _cf.x * 26, p.pos.y + 1.5, p.pos.z + _cf.z * 26);
+    _ideal.set(px + _cf.x * 0.30, py + 1.16, pz + _cf.z * 0.30);
+    _look.set(px + _cf.x * 26, py + 1.5, pz + _cf.z * 26);
     this.camPos.copy(_ideal);
     this.camLook.copy(_look);
     this.camera.fov = 70 + speed01 * 12;
@@ -1531,11 +1532,11 @@ Game.prototype.updateCamera = function (dt, snap) {
     /* trail the slide a little so drifts read from behind */
     var slide = clamp(-p.vLat * 0.10, -2.2, 2.2);
     _ideal.set(
-      p.pos.x - _cf.x * back + _cr.x * slide,
-      p.pos.y + lift,
-      p.pos.z - _cf.z * back + _cr.z * slide
+      px - _cf.x * back + _cr.x * slide,
+      py + lift,
+      pz - _cf.z * back + _cr.z * slide
     );
-    _look.set(p.pos.x + _cf.x * 11, p.pos.y + 1.35, p.pos.z + _cf.z * 11);
+    _look.set(px + _cf.x * 11, py + 1.35, pz + _cf.z * 11);
     if (snap) { this.camPos.copy(_ideal); this.camLook.copy(_look); }
     else {
       var k = 1 - Math.exp(-9 * dt);
@@ -2099,7 +2100,12 @@ Game.prototype.updateAudio = function () {
     var guard = 0;
     while (acc >= STEP && guard < 6) { game.tick(STEP); acc -= STEP; guard++; }
     if (acc > STEP * 6) acc = 0;
-    for (var i = 0; i < game.cars.length; i++) game.cars[i].sync(dt);
+    /* Whatever is left in the accumulator is how far this frame sits past the
+       last physics step. Feeding it to sync() is what lets the cars move on
+       frames where no step ran — without it they only advance at 60Hz while
+       the camera glides on every frame, and the chase car twitches. */
+    var alpha = acc / STEP;
+    for (var i = 0; i < game.cars.length; i++) game.cars[i].sync(dt, alpha);
     game.render(dt);
     game.updateAudio();
   }

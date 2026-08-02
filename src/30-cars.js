@@ -243,6 +243,21 @@ Vehicle.prototype.placeAt = function (index, lateral) {
   this.sync(0);
 };
 
+/* Visual basis: same as forward/right but built from the interpolated yaw, so
+   anything that follows the car (the camera) tracks what is drawn rather than
+   the 60Hz physics state it was drawn from. */
+Vehicle.prototype.visForward = function (out) {
+  var y = (this.vyaw === undefined) ? this.yaw : this.vyaw;
+  return out.set(dsin(y), 0, dcos(y));
+};
+Vehicle.prototype.visRight = function (out) {
+  var y = (this.vyaw === undefined) ? this.yaw : this.vyaw;
+  return out.set(dcos(y), 0, -dsin(y));
+};
+Vehicle.prototype.visX = function () { return this.vx === undefined ? this.pos.x : this.vx; };
+Vehicle.prototype.visY = function () { return this.vy === undefined ? this.pos.y : this.vy; };
+Vehicle.prototype.visZ = function () { return this.vz === undefined ? this.pos.z : this.vz; };
+
 Vehicle.prototype.forward = function (out) { return out.set(dsin(this.yaw), 0, dcos(this.yaw)); };
 Vehicle.prototype.right = function (out) { return out.set(dcos(this.yaw), 0, -dsin(this.yaw)); };
 
@@ -250,6 +265,17 @@ var _f3 = new THREE.Vector3(), _r3 = new THREE.Vector3(), _tv = new THREE.Vector
 
 Vehicle.prototype.step = function (dt, input, raceLive) {
   var t = this.track;
+
+  /* Snapshot for render interpolation. Physics advances in fixed 60Hz steps
+     but frames are drawn whenever the display asks, so without a previous
+     state to blend from the car only moves on the frames a step happened to
+     land on — while the camera, damped on real frame time, keeps gliding.
+     Against the world that reads as mild stutter; on the chase car, which sits
+     still in frame, it reads as the car twitching. */
+  this.prevX = this.pos.x;
+  this.prevZ = this.pos.z;
+  this.prevYaw = this.yaw;
+
   var f = t.frame(this.pos.x, this.pos.z, this.frameIdx, this.f);
   this.frameIdx = f.i;
 
@@ -355,19 +381,33 @@ Vehicle.prototype.updateProgress = function (s) {
   this.progress = this.lapsDone * len + s;
 };
 
-Vehicle.prototype.sync = function (dt) {
+/* alpha is how far the current frame sits between the last physics step and
+   the next, so the visible car moves smoothly at whatever rate the display
+   runs. The PHYSICS position is never touched — only what is drawn. */
+Vehicle.prototype.sync = function (dt, alpha) {
   var t = this.track;
   var g = this.group;
 
-  var fx = dsin(this.yaw), fz = dcos(this.yaw);
-  var rx = dcos(this.yaw), rz = -dsin(this.yaw);
+  var a = (alpha === undefined) ? 1 : clamp(alpha, 0, 1);
+  if (this.prevX === undefined) { this.prevX = this.pos.x; this.prevZ = this.pos.z; this.prevYaw = this.yaw; }
 
-  var hC = t.heightAt(this.pos.x, this.pos.z, this.frameIdx);
-  var hF = t.heightAt(this.pos.x + fx * 2.2, this.pos.z + fz * 2.2, this.frameIdx);
-  var hB = t.heightAt(this.pos.x - fx * 2.2, this.pos.z - fz * 2.2, this.frameIdx);
-  var hR = t.heightAt(this.pos.x + rx * 1.5, this.pos.z + rz * 1.5, this.frameIdx);
-  var hL = t.heightAt(this.pos.x - rx * 1.5, this.pos.z - rz * 1.5, this.frameIdx);
+  var vx = lerp(this.prevX, this.pos.x, a);
+  var vz = lerp(this.prevZ, this.pos.z, a);
+  /* through the shortest arc, or the car spins the wrong way past +/-PI */
+  var vyaw = this.prevYaw + angleDelta(this.prevYaw, this.yaw) * a;
 
+  this.vx = vx; this.vz = vz; this.vyaw = vyaw;
+
+  var fx = dsin(vyaw), fz = dcos(vyaw);
+  var rx = dcos(vyaw), rz = -dsin(vyaw);
+
+  var hC = t.heightAt(vx, vz, this.frameIdx);
+  var hF = t.heightAt(vx + fx * 2.2, vz + fz * 2.2, this.frameIdx);
+  var hB = t.heightAt(vx - fx * 2.2, vz - fz * 2.2, this.frameIdx);
+  var hR = t.heightAt(vx + rx * 1.5, vz + rz * 1.5, this.frameIdx);
+  var hL = t.heightAt(vx - rx * 1.5, vz - rz * 1.5, this.frameIdx);
+
+  this.vy = hC;
   this.pos.y = hC;
   var pitch = datan2(hF - hB, 4.4);
   var roll = datan2(hR - hL, 3.0);
@@ -379,10 +419,10 @@ Vehicle.prototype.sync = function (dt) {
   this.pitch = lerp(this.pitch, -pitch, k);
   this.roll = lerp(this.roll, -roll + lean, k);
 
-  g.position.set(this.pos.x, this.pos.y + 0.02, this.pos.z);
+  g.position.set(vx, this.vy + 0.02, vz);
   g.rotation.set(0, 0, 0);
   g.rotation.order = 'YXZ';
-  g.rotation.y = this.yaw;
+  g.rotation.y = vyaw;
   g.rotation.x = this.pitch;
   g.rotation.z = this.roll;
 
@@ -394,8 +434,8 @@ Vehicle.prototype.sync = function (dt) {
     else w.rotation.x = this.wheelSpin;
   }
 
-  this.shadow.position.set(this.pos.x, this.pos.y + 0.05, this.pos.z);
-  this.shadow.rotation.set(-Math.PI / 2, 0, -this.yaw);
+  this.shadow.position.set(vx, this.vy + 0.05, vz);
+  this.shadow.rotation.set(-Math.PI / 2, 0, -vyaw);
 };
 
 Vehicle.prototype.speedKph = function () { return Math.max(0, this.vFwd) * 3.6; };
