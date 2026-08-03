@@ -109,11 +109,21 @@ Game.prototype.buildRenderer = function () {
   });
   this.renderer.setPixelRatio(1);
   this.renderer.setClearColor(SKY_HAZE, 1);
+  this.renderer.shadowMap.enabled = true;
+  this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   this.rt = new THREE.WebGLRenderTarget(320, 240, {
     minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
     format: THREE.RGBAFormat, depthBuffer: true, stencilBuffer: false
   });
+  /* COLOUR MANAGEMENT. The scene renders INTO this target, and r128 applies
+     the target's own texture encoding rather than renderer.outputEncoding when
+     the destination is a render target. Without this the frame stays linear
+     all the way to the screen — survivable with Lambert, which the palette was
+     hand-tuned around, but pitch black once physically-based shading and ACES
+     tone mapping are in front of it. The post pass then samples already
+     encoded values and writes them through untouched, which is correct. */
+  this.rt.texture.encoding = THREE.sRGBEncoding;
 
   this.postScene = new THREE.Scene();
   this.postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -131,6 +141,59 @@ Game.prototype.buildRenderer = function () {
   this.postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.postMat));
 };
 
+/* ENVIRONMENT MAP.
+
+   A Standard material with nothing to reflect is just a Lambert with extra
+   maths — car paint comes out looking like matte plastic. This is the single
+   biggest contributor to the modern look after the material swap itself.
+
+   Generated procedurally from a sky dome with a bright sun disc and a ground
+   half, then prefiltered by PMREMGenerator into the roughness mip chain. Done
+   this way because the artifact CSP blocks every external host, so an HDR file
+   could never be fetched — and a 2 KB shader beats a 4 MB download regardless. */
+Game.prototype.buildEnvironment = function (scene) {
+  try {
+    /* Painted as an EQUIRECTANGULAR canvas rather than rendered from a shader
+       dome. The dome version prefiltered to solid black — and because a
+       Standard material takes its whole indirect term from the environment,
+       a black one does not soften the scene, it extinguishes it. A canvas goes
+       through PMREMGenerator's well-worn equirect path instead, and its
+       contents can be inspected, which a shader baked inside PMREM cannot. */
+    var cv = makeCanvas(256, 128), ctx = cv.getContext('2d');
+    var g = ctx.createLinearGradient(0, 0, 0, 128);
+    g.addColorStop(0.00, '#6f9ede');    /* zenith */
+    g.addColorStop(0.42, '#c4d3e8');
+    g.addColorStop(0.50, '#d8d2c4');    /* haze band at the horizon */
+    g.addColorStop(0.58, '#8d8578');
+    g.addColorStop(1.00, '#3f3c37');    /* ground bounce */
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 256, 128);
+
+    /* A sun disc, which is what actually puts a moving highlight along the
+       bodywork. Placed to match the directional light's bearing. */
+    var sg = ctx.createRadialGradient(74, 34, 1, 74, 34, 26);
+    sg.addColorStop(0, 'rgba(255,252,242,1)');
+    sg.addColorStop(0.25, 'rgba(255,238,206,0.85)');
+    sg.addColorStop(1, 'rgba(255,238,206,0)');
+    ctx.fillStyle = sg;
+    ctx.fillRect(48, 8, 52, 52);
+
+    var tex = new THREE.CanvasTexture(cv);
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    tex.encoding = THREE.sRGBEncoding;
+
+    var pmrem = new THREE.PMREMGenerator(this.renderer);
+    pmrem.compileEquirectangularShader();
+    var rt = pmrem.fromEquirectangular(tex);
+    scene.environment = rt.texture;
+    pmrem.dispose();
+    tex.dispose();
+  } catch (e) {
+    /* No environment is a flatter look, never a broken one. */
+    scene.environment = null;
+  }
+};
+
 Game.prototype.buildWorld = function () {
   var scene = this.scene = new THREE.Scene();
   scene.fog = new THREE.Fog(SKY_HAZE, 150, 980);
@@ -141,10 +204,32 @@ Game.prototype.buildWorld = function () {
 
   var hemi = new THREE.HemisphereLight(0xe6efff, 0x6a6244, 1.05);
   scene.add(hemi);
-  var sun = new THREE.DirectionalLight(0xfff2e2, 0.95);
+  var sun = this.sun = new THREE.DirectionalLight(0xfff2e2, 1.35);
   sun.position.set(-320, 420, 210);
   scene.add(sun);
-  scene.add(new THREE.AmbientLight(0x4d566a, 0.5));
+  scene.add(sun.target);
+  scene.add(new THREE.AmbientLight(0x4d566a, 0.4));
+
+  /* SHADOWS. A tight ortho box that FOLLOWS THE CAR rather than one big enough
+     to cover the circuit: Silverstone is 1.8 km across, and a shadow map
+     stretched over that has metre-wide texels and casts nothing you would
+     recognise. 70 m around the player at 2048 gives roughly 3 cm per texel. */
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  var sc = sun.shadow.camera;
+  sc.left = -70; sc.right = 70; sc.top = 70; sc.bottom = -70;
+  sc.near = 1; sc.far = 900;
+  /* Normal bias rather than a big constant bias: constant bias on a surface
+     this shallow detaches the shadow from the tyre and it floats. */
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 0.035;
+  /* REQUIRED. Editing left/right/top/bottom does not rebuild the projection,
+     so without this the shadow camera keeps its default +/-5 box, the entire
+     circuit falls outside the frustum, and every surface samples as occluded —
+     the whole world renders black. */
+  sc.updateProjectionMatrix();
+
+  this.buildEnvironment(scene);
 
   this.track = new Track(trackById(this.settings.trackId));
   /* Each circuit brings its own score; absent or unknown falls back to the
@@ -999,7 +1084,7 @@ Game.prototype.loadSettings = function () {
     autoFullscreen: true,
     /* Retro is the default because it is the point of the thing — modern is
        there for anyone who wants to see the circuit without the dither. */
-    quality: 'retro',
+    quality: 'modern',
     trackId: 'silverstone-v1',
     userConfigured: false
   };
@@ -1827,6 +1912,16 @@ Game.prototype.updateCamera = function (dt, snap) {
   this.camera.updateProjectionMatrix();
 
   this.sky.position.set(this.camera.position.x, 0, this.camera.position.z);
+
+  /* Walk the shadow box along with the car. The light keeps its DIRECTION —
+     position and target move together — so the sun angle never changes as you
+     drive; only the volume being sampled does. */
+  if (this.sun && this.sun.castShadow) {
+    var sx2 = p.visX(), sz2 = p.visZ();
+    this.sun.target.position.set(sx2, 0, sz2);
+    this.sun.position.set(sx2 - 320, 420, sz2 + 210);
+    this.sun.target.updateMatrixWorld();
+  }
 };
 
 /* --- HUD ---------------------------------------------------------------- */
@@ -2302,6 +2397,14 @@ Game.prototype.applyQuality = function () {
     var m = o.material.length ? o.material : [o.material];
     for (var i = 0; i < m.length; i++) if (m[i]) m[i].needsUpdate = true;
   });
+
+  /* Shadows are a modern-only cost, and the fake blob is a retro-only cheat.
+     Running both at once double-darkens under every car. */
+  this.renderer.shadowMap.enabled = modern;
+  if (this.sun) this.sun.castShadow = modern;
+  for (var ci = 0; ci < (this.cars || []).length; ci++) {
+    if (this.cars[ci].shadow) this.cars[ci].shadow.visible = !modern;
+  }
 
   this.postMat.uniforms.uRetro.value = modern ? 0 : 1;
   this.resize();

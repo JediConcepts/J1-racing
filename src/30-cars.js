@@ -214,10 +214,14 @@ function buildCarMesh(livery) {
   }
 
   var bodyGeo = mergeParts(parts);
-  var bodyMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  /* Car paint: glossy and slightly metallic, so the environment map reads
+     across the bodywork the way clearcoat does. This is the material that
+     carries the whole "modern" look — flat shading on a car reads as plastic. */
+  var bodyMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.30, metalness: 0.45, envMapIntensity: 1.15 });
 
   var group = new THREE.Group();
   var chassis = new THREE.Mesh(bodyGeo, bodyMat);
+  chassis.castShadow = true;
   group.add(chassis);
 
   /* Wheels: 14-sided so they read as round, with a covered rim face */
@@ -226,11 +230,12 @@ function buildCarMesh(livery) {
     part(new THREE.CylinderGeometry(0.235, 0.235, 0.42, 12), trim, [0, 0, 0], [0, 0, Math.PI / 2]),
     part(new THREE.CylinderGeometry(0.20, 0.20, 0.44, 12), livery.body, [0, 0, 0], [0, 0, Math.PI / 2])
   ]);
-  var wheelMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  var wheelMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0.0 });
   var wheels = [];
   var spots = [[0.86, 0.36, 1.78], [-0.86, 0.36, 1.78], [0.90, 0.36, -1.72], [-0.90, 0.36, -1.72]];
   for (var i = 0; i < 4; i++) {
     var w = new THREE.Mesh(wheelGeo, wheelMat);
+    w.castShadow = true;
     w.position.set(spots[i][0], spots[i][1], spots[i][2]);
     group.add(w);
     wheels.push(w);

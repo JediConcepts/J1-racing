@@ -1572,6 +1572,11 @@ function texFromCanvas(cv, repX, repY, nearest) {
   else { t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; }
   t.generateMipmaps = true;
   t.anisotropy = 1;
+  /* These canvases are painted in sRGB — that is what a 2D context gives you.
+     Flagging it lets the renderer decode to linear before lighting, which is
+     the half of colour management that happens on the way IN. Skip it and
+     every texture reads too bright and too contrasty under PBR. */
+  t.encoding = THREE.sRGBEncoding;
   return t;
 }
 
@@ -2770,21 +2775,26 @@ function buildTrackMeshes(track, scene) {
 
   var group = new THREE.Group();
 
-  group.add(new THREE.Mesh(road.geometry(), new THREE.MeshLambertMaterial({
-    map: texFromCanvas(makeAsphaltTex(), 1, 1), vertexColors: true  })));
-  group.add(new THREE.Mesh(runoff.geometry(), new THREE.MeshLambertMaterial({
-    map: texFromCanvas(makeRunoffTex(), 1, 1), vertexColors: true  })));
-  group.add(new THREE.Mesh(grass.geometry(), new THREE.MeshLambertMaterial({
-    map: texFromCanvas(makeGrassTex(), 6, 1), vertexColors: true  })));
-  group.add(new THREE.Mesh(kerb.geometry(), new THREE.MeshLambertMaterial({
-    map: texFromCanvas(makeKerbTex(), 1, 1, true), vertexColors: true  })));
-  group.add(new THREE.Mesh(wall.geometry(), new THREE.MeshLambertMaterial({
-    map: texFromCanvas(makeWallTex(), 1, 1), vertexColors: true  })));
-  var lineMesh = new THREE.Mesh(line.geometry(), new THREE.MeshLambertMaterial({
-    vertexColors: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+  group.add(new THREE.Mesh(road.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeAsphaltTex(), 1, 1), vertexColors: true, roughness: 0.92, metalness: 0.0 })));
+  group.add(new THREE.Mesh(runoff.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeRunoffTex(), 1, 1), vertexColors: true, roughness: 0.95, metalness: 0.0 })));
+  group.add(new THREE.Mesh(grass.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeGrassTex(), 6, 1), vertexColors: true, roughness: 1.0, metalness: 0.0 })));
+  group.add(new THREE.Mesh(kerb.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeKerbTex(), 1, 1, true), vertexColors: true, roughness: 0.72, metalness: 0.0 })));
+  group.add(new THREE.Mesh(wall.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeWallTex(), 1, 1), vertexColors: true, roughness: 0.55, metalness: 0.35 })));
+  var lineMesh = new THREE.Mesh(line.geometry(), new THREE.MeshStandardMaterial({
+    vertexColors: true, roughness: 0.85, metalness: 0.0,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
   }));
   group.add(lineMesh);
 
+  /* receiveShadow is PER MESH — setting it on the Group does nothing, three.js
+     never walks the tree for it. The road, kerbs, runoff and grass all take
+     shadows; none of them casts one. */
+  group.traverse(function (o) { if (o.isMesh) o.receiveShadow = true; });
   scene.add(group);
   return group;
 }
@@ -2885,7 +2895,7 @@ function buildStandRing(scene, track, crowdMat) {
   /* 44 m per tile, matching PlaneGeometry(44, ...) on the single stands, so
      the crowd is the same density everywhere on the circuit. */
   var TILE = 44;
-  var roofMat = new THREE.MeshLambertMaterial({ color: COL.papaya, side: THREE.DoubleSide });
+  var roofMat = new THREE.MeshStandardMaterial({ color: COL.papaya, side: THREE.DoubleSide, roughness: 0.48, metalness: 0.15 });
 
   for (var side = 1; side >= -1; side -= 2) {
     var near = OFFSETS[String(side)], far = near + 19;
@@ -2939,8 +2949,8 @@ function buildStartGantry(track, scene) {
   var mid = track.p[idx], lat = track.lat[idx], fwd = track.fwd[idx];
   var yaw = datan2(fwd.x, fwd.z);
 
-  var darkMat = new THREE.MeshLambertMaterial({ color: 0x24252c });
-  var papMat = new THREE.MeshLambertMaterial({ color: COL.papaya });
+  var darkMat = new THREE.MeshStandardMaterial({ color: 0x24252c, roughness: 0.52, metalness: 0.45 });
+  var papMat = new THREE.MeshStandardMaterial({ color: COL.papaya, roughness: 0.45, metalness: 0.2 });
 
   var pillarGeo = new THREE.BoxGeometry(1.1, 8.4, 1.1);
   for (var s = -1; s <= 1; s += 2) {
@@ -2977,7 +2987,7 @@ function buildStartGantry(track, scene) {
   /* start line */
   var lineTex = texFromCanvas(makeStartLineTex(), 8, 1, true);
   var startLine = new THREE.Mesh(new THREE.PlaneGeometry(HALF_W * 2, 2.2),
-    new THREE.MeshLambertMaterial({ map: lineTex, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+    new THREE.MeshStandardMaterial({ map: lineTex, roughness: 0.8, metalness: 0.0, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
   startLine.rotation.x = -Math.PI / 2;
   /* +yaw, not -yaw. Laid flat by rotation.x = -PI/2 under the default XYZ
      order, a NEGATIVE z mirrors the heading instead of rotating it, so the
@@ -3000,10 +3010,10 @@ function buildScenery(track, scene) {
 
   /* grandstands and pit buildings clustered around the start line */
   var crowdTex = texFromCanvas(makeCrowdTex(), 3, 1);
-  var standMat = new THREE.MeshLambertMaterial({ color: 0x33353f });
-  var crowdMat = new THREE.MeshLambertMaterial({ map: crowdTex, side: THREE.DoubleSide });
-  var roofMat = new THREE.MeshLambertMaterial({ color: COL.papaya });
-  var pitMat = new THREE.MeshLambertMaterial({ map: texFromCanvas(makePitwallTex(), 4, 1, true) });
+  var standMat = new THREE.MeshStandardMaterial({ color: 0x33353f, roughness: 0.82, metalness: 0.1 });
+  var crowdMat = new THREE.MeshStandardMaterial({ map: crowdTex, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0 });
+  var roofMat = new THREE.MeshStandardMaterial({ color: COL.papaya, roughness: 0.45, metalness: 0.2 });
+  var pitMat = new THREE.MeshStandardMaterial({ map: texFromCanvas(makePitwallTex(), 4, 1, true), roughness: 0.7, metalness: 0.0 });
 
   /* Stands stand back far enough to frame the straight instead of walling it
      in, and the terracing is dark so the crowd is what actually reads.
@@ -3077,9 +3087,9 @@ function buildScenery(track, scene) {
     var si = (corner.index - 24 + n) % n;
     var sp = track.p[si], sl = track.lat[si], sf = track.fwd[si];
     var sideS = track.curv[corner.index] > 0 ? -1 : 1;   /* outside of the bend */
-    var signMat = new THREE.MeshLambertMaterial({
+    var signMat = new THREE.MeshStandardMaterial({
       map: texFromCanvas(makeSignTex(corner.name, '#1b1c22', '#ff8000', '#ff8000'), 1, 1, true),
-      side: THREE.DoubleSide
+      side: THREE.DoubleSide, roughness: 0.7, metalness: 0.0
     });
     var sign = new THREE.Mesh(new THREE.PlaneGeometry(11, 2.75), signMat);
     sign.position.set(sp.x + sl.x * sideS * (WALL_HALF + 3.6), groundY(track, si, sideS * (WALL_HALF + 3.6)) + 2.9, sp.z + sl.z * sideS * (WALL_HALF + 3.6));
@@ -3101,8 +3111,8 @@ function buildScenery(track, scene) {
 
   /* crossed-quad treeline */
   var treeTex = texFromCanvas(makeTreeTex(), 1, 1, true);
-  var treeMat = new THREE.MeshLambertMaterial({
-    map: treeTex, transparent: false, alphaTest: 0.5, side: THREE.DoubleSide
+  var treeMat = new THREE.MeshStandardMaterial({
+    map: treeTex, transparent: false, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0
   });
   var treeBuf = new RibbonBuilder();
   var treeProbe = { i: 0, lateral: 0, s: 0, y: 0, fwd: null, lat: null };
@@ -3440,10 +3450,14 @@ function buildCarMesh(livery) {
   }
 
   var bodyGeo = mergeParts(parts);
-  var bodyMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  /* Car paint: glossy and slightly metallic, so the environment map reads
+     across the bodywork the way clearcoat does. This is the material that
+     carries the whole "modern" look — flat shading on a car reads as plastic. */
+  var bodyMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.30, metalness: 0.45, envMapIntensity: 1.15 });
 
   var group = new THREE.Group();
   var chassis = new THREE.Mesh(bodyGeo, bodyMat);
+  chassis.castShadow = true;
   group.add(chassis);
 
   /* Wheels: 14-sided so they read as round, with a covered rim face */
@@ -3452,11 +3466,12 @@ function buildCarMesh(livery) {
     part(new THREE.CylinderGeometry(0.235, 0.235, 0.42, 12), trim, [0, 0, 0], [0, 0, Math.PI / 2]),
     part(new THREE.CylinderGeometry(0.20, 0.20, 0.44, 12), livery.body, [0, 0, 0], [0, 0, Math.PI / 2])
   ]);
-  var wheelMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  var wheelMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0.0 });
   var wheels = [];
   var spots = [[0.86, 0.36, 1.78], [-0.86, 0.36, 1.78], [0.90, 0.36, -1.72], [-0.90, 0.36, -1.72]];
   for (var i = 0; i < 4; i++) {
     var w = new THREE.Mesh(wheelGeo, wheelMat);
+    w.castShadow = true;
     w.position.set(spots[i][0], spots[i][1], spots[i][2]);
     group.add(w);
     wheels.push(w);
@@ -4746,11 +4761,21 @@ Game.prototype.buildRenderer = function () {
   });
   this.renderer.setPixelRatio(1);
   this.renderer.setClearColor(SKY_HAZE, 1);
+  this.renderer.shadowMap.enabled = true;
+  this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   this.rt = new THREE.WebGLRenderTarget(320, 240, {
     minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
     format: THREE.RGBAFormat, depthBuffer: true, stencilBuffer: false
   });
+  /* COLOUR MANAGEMENT. The scene renders INTO this target, and r128 applies
+     the target's own texture encoding rather than renderer.outputEncoding when
+     the destination is a render target. Without this the frame stays linear
+     all the way to the screen — survivable with Lambert, which the palette was
+     hand-tuned around, but pitch black once physically-based shading and ACES
+     tone mapping are in front of it. The post pass then samples already
+     encoded values and writes them through untouched, which is correct. */
+  this.rt.texture.encoding = THREE.sRGBEncoding;
 
   this.postScene = new THREE.Scene();
   this.postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -4768,6 +4793,59 @@ Game.prototype.buildRenderer = function () {
   this.postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.postMat));
 };
 
+/* ENVIRONMENT MAP.
+
+   A Standard material with nothing to reflect is just a Lambert with extra
+   maths — car paint comes out looking like matte plastic. This is the single
+   biggest contributor to the modern look after the material swap itself.
+
+   Generated procedurally from a sky dome with a bright sun disc and a ground
+   half, then prefiltered by PMREMGenerator into the roughness mip chain. Done
+   this way because the artifact CSP blocks every external host, so an HDR file
+   could never be fetched — and a 2 KB shader beats a 4 MB download regardless. */
+Game.prototype.buildEnvironment = function (scene) {
+  try {
+    /* Painted as an EQUIRECTANGULAR canvas rather than rendered from a shader
+       dome. The dome version prefiltered to solid black — and because a
+       Standard material takes its whole indirect term from the environment,
+       a black one does not soften the scene, it extinguishes it. A canvas goes
+       through PMREMGenerator's well-worn equirect path instead, and its
+       contents can be inspected, which a shader baked inside PMREM cannot. */
+    var cv = makeCanvas(256, 128), ctx = cv.getContext('2d');
+    var g = ctx.createLinearGradient(0, 0, 0, 128);
+    g.addColorStop(0.00, '#6f9ede');    /* zenith */
+    g.addColorStop(0.42, '#c4d3e8');
+    g.addColorStop(0.50, '#d8d2c4');    /* haze band at the horizon */
+    g.addColorStop(0.58, '#8d8578');
+    g.addColorStop(1.00, '#3f3c37');    /* ground bounce */
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 256, 128);
+
+    /* A sun disc, which is what actually puts a moving highlight along the
+       bodywork. Placed to match the directional light's bearing. */
+    var sg = ctx.createRadialGradient(74, 34, 1, 74, 34, 26);
+    sg.addColorStop(0, 'rgba(255,252,242,1)');
+    sg.addColorStop(0.25, 'rgba(255,238,206,0.85)');
+    sg.addColorStop(1, 'rgba(255,238,206,0)');
+    ctx.fillStyle = sg;
+    ctx.fillRect(48, 8, 52, 52);
+
+    var tex = new THREE.CanvasTexture(cv);
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    tex.encoding = THREE.sRGBEncoding;
+
+    var pmrem = new THREE.PMREMGenerator(this.renderer);
+    pmrem.compileEquirectangularShader();
+    var rt = pmrem.fromEquirectangular(tex);
+    scene.environment = rt.texture;
+    pmrem.dispose();
+    tex.dispose();
+  } catch (e) {
+    /* No environment is a flatter look, never a broken one. */
+    scene.environment = null;
+  }
+};
+
 Game.prototype.buildWorld = function () {
   var scene = this.scene = new THREE.Scene();
   scene.fog = new THREE.Fog(SKY_HAZE, 150, 980);
@@ -4778,10 +4856,32 @@ Game.prototype.buildWorld = function () {
 
   var hemi = new THREE.HemisphereLight(0xe6efff, 0x6a6244, 1.05);
   scene.add(hemi);
-  var sun = new THREE.DirectionalLight(0xfff2e2, 0.95);
+  var sun = this.sun = new THREE.DirectionalLight(0xfff2e2, 1.35);
   sun.position.set(-320, 420, 210);
   scene.add(sun);
-  scene.add(new THREE.AmbientLight(0x4d566a, 0.5));
+  scene.add(sun.target);
+  scene.add(new THREE.AmbientLight(0x4d566a, 0.4));
+
+  /* SHADOWS. A tight ortho box that FOLLOWS THE CAR rather than one big enough
+     to cover the circuit: Silverstone is 1.8 km across, and a shadow map
+     stretched over that has metre-wide texels and casts nothing you would
+     recognise. 70 m around the player at 2048 gives roughly 3 cm per texel. */
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  var sc = sun.shadow.camera;
+  sc.left = -70; sc.right = 70; sc.top = 70; sc.bottom = -70;
+  sc.near = 1; sc.far = 900;
+  /* Normal bias rather than a big constant bias: constant bias on a surface
+     this shallow detaches the shadow from the tyre and it floats. */
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 0.035;
+  /* REQUIRED. Editing left/right/top/bottom does not rebuild the projection,
+     so without this the shadow camera keeps its default +/-5 box, the entire
+     circuit falls outside the frustum, and every surface samples as occluded —
+     the whole world renders black. */
+  sc.updateProjectionMatrix();
+
+  this.buildEnvironment(scene);
 
   this.track = new Track(trackById(this.settings.trackId));
   /* Each circuit brings its own score; absent or unknown falls back to the
@@ -5636,7 +5736,7 @@ Game.prototype.loadSettings = function () {
     autoFullscreen: true,
     /* Retro is the default because it is the point of the thing — modern is
        there for anyone who wants to see the circuit without the dither. */
-    quality: 'retro',
+    quality: 'modern',
     trackId: 'silverstone-v1',
     userConfigured: false
   };
@@ -6464,6 +6564,16 @@ Game.prototype.updateCamera = function (dt, snap) {
   this.camera.updateProjectionMatrix();
 
   this.sky.position.set(this.camera.position.x, 0, this.camera.position.z);
+
+  /* Walk the shadow box along with the car. The light keeps its DIRECTION —
+     position and target move together — so the sun angle never changes as you
+     drive; only the volume being sampled does. */
+  if (this.sun && this.sun.castShadow) {
+    var sx2 = p.visX(), sz2 = p.visZ();
+    this.sun.target.position.set(sx2, 0, sz2);
+    this.sun.position.set(sx2 - 320, 420, sz2 + 210);
+    this.sun.target.updateMatrixWorld();
+  }
 };
 
 /* --- HUD ---------------------------------------------------------------- */
@@ -6939,6 +7049,14 @@ Game.prototype.applyQuality = function () {
     var m = o.material.length ? o.material : [o.material];
     for (var i = 0; i < m.length; i++) if (m[i]) m[i].needsUpdate = true;
   });
+
+  /* Shadows are a modern-only cost, and the fake blob is a retro-only cheat.
+     Running both at once double-darkens under every car. */
+  this.renderer.shadowMap.enabled = modern;
+  if (this.sun) this.sun.castShadow = modern;
+  for (var ci = 0; ci < (this.cars || []).length; ci++) {
+    if (this.cars[ci].shadow) this.cars[ci].shadow.visible = !modern;
+  }
 
   this.postMat.uniforms.uRetro.value = modern ? 0 : 1;
   this.resize();

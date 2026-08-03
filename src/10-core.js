@@ -171,6 +171,11 @@ function texFromCanvas(cv, repX, repY, nearest) {
   else { t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; }
   t.generateMipmaps = true;
   t.anisotropy = 1;
+  /* These canvases are painted in sRGB — that is what a 2D context gives you.
+     Flagging it lets the renderer decode to linear before lighting, which is
+     the half of colour management that happens on the way IN. Skip it and
+     every texture reads too bright and too contrasty under PBR. */
+  t.encoding = THREE.sRGBEncoding;
   return t;
 }
 

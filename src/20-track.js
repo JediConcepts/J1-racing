@@ -700,21 +700,26 @@ function buildTrackMeshes(track, scene) {
 
   var group = new THREE.Group();
 
-  group.add(new THREE.Mesh(road.geometry(), new THREE.MeshLambertMaterial({
-    map: texFromCanvas(makeAsphaltTex(), 1, 1), vertexColors: true  })));
-  group.add(new THREE.Mesh(runoff.geometry(), new THREE.MeshLambertMaterial({
-    map: texFromCanvas(makeRunoffTex(), 1, 1), vertexColors: true  })));
-  group.add(new THREE.Mesh(grass.geometry(), new THREE.MeshLambertMaterial({
-    map: texFromCanvas(makeGrassTex(), 6, 1), vertexColors: true  })));
-  group.add(new THREE.Mesh(kerb.geometry(), new THREE.MeshLambertMaterial({
-    map: texFromCanvas(makeKerbTex(), 1, 1, true), vertexColors: true  })));
-  group.add(new THREE.Mesh(wall.geometry(), new THREE.MeshLambertMaterial({
-    map: texFromCanvas(makeWallTex(), 1, 1), vertexColors: true  })));
-  var lineMesh = new THREE.Mesh(line.geometry(), new THREE.MeshLambertMaterial({
-    vertexColors: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+  group.add(new THREE.Mesh(road.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeAsphaltTex(), 1, 1), vertexColors: true, roughness: 0.92, metalness: 0.0 })));
+  group.add(new THREE.Mesh(runoff.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeRunoffTex(), 1, 1), vertexColors: true, roughness: 0.95, metalness: 0.0 })));
+  group.add(new THREE.Mesh(grass.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeGrassTex(), 6, 1), vertexColors: true, roughness: 1.0, metalness: 0.0 })));
+  group.add(new THREE.Mesh(kerb.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeKerbTex(), 1, 1, true), vertexColors: true, roughness: 0.72, metalness: 0.0 })));
+  group.add(new THREE.Mesh(wall.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeWallTex(), 1, 1), vertexColors: true, roughness: 0.55, metalness: 0.35 })));
+  var lineMesh = new THREE.Mesh(line.geometry(), new THREE.MeshStandardMaterial({
+    vertexColors: true, roughness: 0.85, metalness: 0.0,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
   }));
   group.add(lineMesh);
 
+  /* receiveShadow is PER MESH — setting it on the Group does nothing, three.js
+     never walks the tree for it. The road, kerbs, runoff and grass all take
+     shadows; none of them casts one. */
+  group.traverse(function (o) { if (o.isMesh) o.receiveShadow = true; });
   scene.add(group);
   return group;
 }
@@ -815,7 +820,7 @@ function buildStandRing(scene, track, crowdMat) {
   /* 44 m per tile, matching PlaneGeometry(44, ...) on the single stands, so
      the crowd is the same density everywhere on the circuit. */
   var TILE = 44;
-  var roofMat = new THREE.MeshLambertMaterial({ color: COL.papaya, side: THREE.DoubleSide });
+  var roofMat = new THREE.MeshStandardMaterial({ color: COL.papaya, side: THREE.DoubleSide, roughness: 0.48, metalness: 0.15 });
 
   for (var side = 1; side >= -1; side -= 2) {
     var near = OFFSETS[String(side)], far = near + 19;
@@ -869,8 +874,8 @@ function buildStartGantry(track, scene) {
   var mid = track.p[idx], lat = track.lat[idx], fwd = track.fwd[idx];
   var yaw = datan2(fwd.x, fwd.z);
 
-  var darkMat = new THREE.MeshLambertMaterial({ color: 0x24252c });
-  var papMat = new THREE.MeshLambertMaterial({ color: COL.papaya });
+  var darkMat = new THREE.MeshStandardMaterial({ color: 0x24252c, roughness: 0.52, metalness: 0.45 });
+  var papMat = new THREE.MeshStandardMaterial({ color: COL.papaya, roughness: 0.45, metalness: 0.2 });
 
   var pillarGeo = new THREE.BoxGeometry(1.1, 8.4, 1.1);
   for (var s = -1; s <= 1; s += 2) {
@@ -907,7 +912,7 @@ function buildStartGantry(track, scene) {
   /* start line */
   var lineTex = texFromCanvas(makeStartLineTex(), 8, 1, true);
   var startLine = new THREE.Mesh(new THREE.PlaneGeometry(HALF_W * 2, 2.2),
-    new THREE.MeshLambertMaterial({ map: lineTex, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+    new THREE.MeshStandardMaterial({ map: lineTex, roughness: 0.8, metalness: 0.0, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
   startLine.rotation.x = -Math.PI / 2;
   /* +yaw, not -yaw. Laid flat by rotation.x = -PI/2 under the default XYZ
      order, a NEGATIVE z mirrors the heading instead of rotating it, so the
@@ -930,10 +935,10 @@ function buildScenery(track, scene) {
 
   /* grandstands and pit buildings clustered around the start line */
   var crowdTex = texFromCanvas(makeCrowdTex(), 3, 1);
-  var standMat = new THREE.MeshLambertMaterial({ color: 0x33353f });
-  var crowdMat = new THREE.MeshLambertMaterial({ map: crowdTex, side: THREE.DoubleSide });
-  var roofMat = new THREE.MeshLambertMaterial({ color: COL.papaya });
-  var pitMat = new THREE.MeshLambertMaterial({ map: texFromCanvas(makePitwallTex(), 4, 1, true) });
+  var standMat = new THREE.MeshStandardMaterial({ color: 0x33353f, roughness: 0.82, metalness: 0.1 });
+  var crowdMat = new THREE.MeshStandardMaterial({ map: crowdTex, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0 });
+  var roofMat = new THREE.MeshStandardMaterial({ color: COL.papaya, roughness: 0.45, metalness: 0.2 });
+  var pitMat = new THREE.MeshStandardMaterial({ map: texFromCanvas(makePitwallTex(), 4, 1, true), roughness: 0.7, metalness: 0.0 });
 
   /* Stands stand back far enough to frame the straight instead of walling it
      in, and the terracing is dark so the crowd is what actually reads.
@@ -1007,9 +1012,9 @@ function buildScenery(track, scene) {
     var si = (corner.index - 24 + n) % n;
     var sp = track.p[si], sl = track.lat[si], sf = track.fwd[si];
     var sideS = track.curv[corner.index] > 0 ? -1 : 1;   /* outside of the bend */
-    var signMat = new THREE.MeshLambertMaterial({
+    var signMat = new THREE.MeshStandardMaterial({
       map: texFromCanvas(makeSignTex(corner.name, '#1b1c22', '#ff8000', '#ff8000'), 1, 1, true),
-      side: THREE.DoubleSide
+      side: THREE.DoubleSide, roughness: 0.7, metalness: 0.0
     });
     var sign = new THREE.Mesh(new THREE.PlaneGeometry(11, 2.75), signMat);
     sign.position.set(sp.x + sl.x * sideS * (WALL_HALF + 3.6), groundY(track, si, sideS * (WALL_HALF + 3.6)) + 2.9, sp.z + sl.z * sideS * (WALL_HALF + 3.6));
@@ -1031,8 +1036,8 @@ function buildScenery(track, scene) {
 
   /* crossed-quad treeline */
   var treeTex = texFromCanvas(makeTreeTex(), 1, 1, true);
-  var treeMat = new THREE.MeshLambertMaterial({
-    map: treeTex, transparent: false, alphaTest: 0.5, side: THREE.DoubleSide
+  var treeMat = new THREE.MeshStandardMaterial({
+    map: treeTex, transparent: false, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0
   });
   var treeBuf = new RibbonBuilder();
   var treeProbe = { i: 0, lateral: 0, s: 0, y: 0, fwd: null, lat: null };
