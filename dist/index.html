@@ -2132,8 +2132,16 @@ var TRACKS = [
     laps: 5,
     halfW: 9,
     runoff: 9.0,
-    /* 9.2 degrees = 0.1606 rad. The gain is high so the constant-radius turns
-       saturate at the cap and hold full banking all the way through. */
+    /* The real 9 deg 12 min = 0.1606 rad, kept because it is purely visual.
+       BANKING DOES NOT AFFECT GRIP in this model — `bank` never appears in
+       30-cars.js; it only tilts the road surface geometry, and latCapacity()
+       depends on speed alone. Measured: every value from 0 to 9.2 degrees
+       produces an identical lap, to the hundredth of a second. So there is no
+       point trading away the look for handling that will not change.
+
+       This corner is flat regardless: a 256 m radius at 216 km/h demands
+       14.1 m/s2 and the car has 46, a 3.3x margin. Forcing a lift would need
+       a 78 m radius, which is a short oval rather than Indianapolis. */
     bankGain: 90,
     bankMax: 0.1606,
     control: INDY_CONTROL,
