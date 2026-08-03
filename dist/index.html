@@ -5381,6 +5381,24 @@ Game.prototype.bindInput = function () {
   if (restartBtn) restartBtn.addEventListener('click', function () { self.audio.wake(); self.beginRace(); });
 
   this.glCanvas.addEventListener('pointerdown', function () { self.audio.wake(); self.host.focus(); });
+
+  /* ONE-SHOT GLOBAL UNLOCK. A browser will not start audio until it has seen
+     a real user gesture, and picking a circuit RELOADS the page — so whatever
+     gesture opened the picker is spent by the time the new document boots.
+
+     Only the specific controls above were wired to wake(), so after a circuit
+     change the score stayed silent until you happened to press one of them.
+     That is exactly why turning MUSIC off and on again appeared to fix it:
+     that button calls wake() before it touches the mute, so the toggle was
+     never the point — the wake was.
+
+     Capture phase so nothing can swallow it first, and `once` so it costs a
+     single dispatch. wake() is idempotent, so the three firing independently
+     is harmless. */
+  var unlock = function () { self.audio.wake(); };
+  ['pointerdown', 'touchstart', 'keydown'].forEach(function (ev) {
+    document.addEventListener(ev, unlock, { capture: true, once: true });
+  });
 };
 
 Game.prototype.toggleMute = function () {
