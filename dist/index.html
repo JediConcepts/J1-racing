@@ -3524,15 +3524,23 @@ function buildCarMesh(livery) {
     part(new THREE.TorusGeometry(0.175, 0.026, 4, 12), 0x14151a, [0, 0, 0], [0, 0, 0], [1, 0.82, 1]),
     /* face, with a lit strip standing in for the display */
     part(new THREE.BoxGeometry(0.24, 0.135, 0.022), trim, [0, 0, -0.012]),
-    part(new THREE.BoxGeometry(0.165, 0.038, 0.008), accent, [0, 0.036, 0.004]),
+    part(new THREE.BoxGeometry(0.165, 0.038, 0.008), accent, [0, 0.036, -0.028]),
     /* grips */
-    part(new THREE.BoxGeometry(0.05, 0.12, 0.055), 0x14151a, [-0.185, -0.015, 0.01]),
-    part(new THREE.BoxGeometry(0.05, 0.12, 0.055), 0x14151a, [0.185, -0.015, 0.01])
+    part(new THREE.BoxGeometry(0.05, 0.12, 0.055), 0x14151a, [-0.185, -0.015, -0.018]),
+    part(new THREE.BoxGeometry(0.05, 0.12, 0.055), 0x14151a, [0.185, -0.015, -0.018])
   ]), bodyMat);
   /* High and close, as a real F1 wheel sits — chest height, not lap height.
      Any lower and the monocoque swallows it from the driver's eye. */
   steerWheel.position.set(0, 0.620, 0.66);
-  steerWheel.rotation.x = -0.42;      /* raked back toward the driver */
+  /* POSITIVE. The face the driver sees is the mesh's -Z side, and a negative
+     rake swings that face down and away — measured 44.2 degrees off the eye
+     line, so you looked at the rim edge-on from above. At +0.42 it is 3.9
+     degrees off, i.e. aimed at the driver, which is what the comment always
+     claimed and what a real raked wheel does.
+
+     The spin axis stays mostly +Z through this, so the rim still reads
+     clockwise-for-right from behind and the steering direction is unaffected. */
+  steerWheel.rotation.x = 0.42;
   group.add(steerWheel);
 
   /* fake contact shadow */
