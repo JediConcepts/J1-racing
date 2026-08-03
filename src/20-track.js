@@ -220,6 +220,12 @@ var TRACKS = [
     bankMax: 0.1606,
     /* crowd the whole way round, outside wall and infield both */
     standRing: true,
+    /* The 500 runs 33 cars in 11 rows of three — the field size and the
+       three-abreast rows are the event's signature, and a six-car grid on a
+       2.5 mile oval looks like an empty car park. */
+    grid: 33,
+    gridCols: 3,
+    playerStart: 'mid',
     control: INDY_CONTROL,
     corners: INDY_CORNERS
   },
@@ -725,8 +731,15 @@ function pushWall(rb, track, i, i2, off, h, vAcc) {
   var base0 = edgeY(track, i, off, -0.05), base1 = edgeY(track, i2, off, -0.05);
   var top0 = edgeY(track, i, off, h), top1 = edgeY(track, i2, off, h);
   var u0 = vAcc / 12, u1 = (vAcc + track.ds) / 12;
-  if (inward > 0) rb.quad(base0, base1, top1, top0, [[u0, 1], [u1, 1], [u1, 0], [u0, 0]], WHITE_C);
-  else rb.quad(base1, base0, top0, top1, [[u1, 1], [u0, 1], [u0, 0], [u1, 0]], WHITE_C);
+  /* WINDING. quad(a,b,c,d) winds a->b->c, so its normal is (b-a) x (c-a).
+     Both faces here span fwd*ds and up*h, which makes the normal +/-lat and
+     nothing else — the side of the track the wall sits on does not enter into
+     it, only the vertex order does. These two branches were swapped, so BOTH
+     barriers faced away from the circuit and were culled by the FrontSide
+     material: solid to drive into, invisible to look at. Only the 0.35 m cap
+     strip below, which winds to +up, was ever drawn. */
+  if (inward > 0) rb.quad(base1, base0, top0, top1, [[u1, 1], [u0, 1], [u0, 0], [u1, 0]], WHITE_C);
+  else rb.quad(base0, base1, top1, top0, [[u0, 1], [u1, 1], [u1, 0], [u0, 0]], WHITE_C);
   /* capping strip so the wall reads as solid from a chase camera */
   var capIn0 = edgeY(track, i, off + inward * 0.35, h), capIn1 = edgeY(track, i2, off + inward * 0.35, h);
   if (inward > 0) rb.quad(top0, top1, capIn1, capIn0, [[u0, 0], [u1, 0], [u1, 0.2], [u0, 0.2]], WHITE_C);
@@ -863,7 +876,13 @@ function buildStartGantry(track, scene) {
   var startLine = new THREE.Mesh(new THREE.PlaneGeometry(HALF_W * 2, 2.2),
     new THREE.MeshLambertMaterial({ map: lineTex, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
   startLine.rotation.x = -Math.PI / 2;
-  startLine.rotation.z = -yaw;
+  /* +yaw, not -yaw. Laid flat by rotation.x = -PI/2 under the default XYZ
+     order, a NEGATIVE z mirrors the heading instead of rotating it, so the
+     span only lands across the road at cardinal headings. Every circuit here
+     happens to start near one, which hid it — Silverstone was out by 1.4
+     degrees on a straight 0.7 degrees off axis, exactly the 2x that a
+     reflection gives. */
+  startLine.rotation.z = yaw;
   startLine.position.set(mid.x, mid.y + 0.02, mid.z);
   g.add(startLine);
 
@@ -900,7 +919,11 @@ function buildScenery(track, scene) {
 
     var base = new THREE.Mesh(new THREE.BoxGeometry(46, 8, 15), standMat);
     base.position.set(p.x + l.x * side * dist, groundY(track, idx, side * dist) + 3.2, p.z + l.z * side * dist);
-    base.rotation.y = yaw;
+    /* -PI/2 turns the 46 m span ALONG the track. BoxGeometry puts that span
+       on local X, and rotation.y = yaw alone sends local X to lat — across
+       the road — so the shell sat crosswise under a crowd panel that runs
+       lengthwise, protruding 22 m from each end of a 15 m deep box. */
+    base.rotation.y = yaw - Math.PI / 2;
     scene.add(base);
 
     var cd = dist - 8.2;
@@ -919,7 +942,7 @@ function buildScenery(track, scene) {
 
     var roof = new THREE.Mesh(new THREE.BoxGeometry(48, 0.7, 17), roofMat);
     roof.position.set(p.x + l.x * side * (dist + 1.5), groundY(track, idx, side * (dist + 1.5)) + 11.2, p.z + l.z * side * (dist + 1.5));
-    roof.rotation.y = yaw;
+    roof.rotation.y = yaw - Math.PI / 2;   /* same 90 degrees as the base */
     scene.add(roof);
 
     for (var pil = -1; pil <= 1; pil += 2) {
@@ -979,6 +1002,7 @@ function buildScenery(track, scene) {
     map: treeTex, transparent: false, alphaTest: 0.5, side: THREE.DoubleSide
   });
   var treeBuf = new RibbonBuilder();
+  var treeProbe = { i: 0, lateral: 0, s: 0, y: 0, fwd: null, lat: null };
   var placed = 0;
   for (i = 0; i < n; i += 2) {
     for (var side2 = -1; side2 <= 1; side2 += 2) {
@@ -1001,7 +1025,27 @@ function buildScenery(track, scene) {
       var tp = track.p[i], tl = track.lat[i];
       var x = tp.x + tl.x * side2 * d + (rnd() - 0.5) * 14;
       var z = tp.z + tl.z * side2 * d + (rnd() - 0.5) * 14;
-      var y = tp.y - 0.6;
+
+      /* Re-frame against the WHOLE circuit, not the sample we scattered from.
+         hint = null forces nearestIndex to do its global sweep instead of
+         searching +/-8 samples around i. A lap that folds back on itself puts
+         one stretch of road within scattering range of another — Brands brings
+         Druids back alongside the climb to Graham Hill — so a tree measured
+         30 m clear of sample i can be sitting on the racing line somewhere
+         else entirely. Drop anything that lands inside the barriers. */
+      track.frame(x, z, null, treeProbe);
+      if (Math.abs(treeProbe.lateral) < WALL_HALF + 6) continue;
+
+      /* Height from where the tree ACTUALLY is, not from the sample it was
+         scattered off. On a flat circuit those agree; on Brands, with 34 m
+         between Paddock Hill and Druids, the old centreline height left whole
+         stands of trees hanging in the air.
+
+         The bank term is clamped at the grass edge because beyond WALL_HALF +
+         VERGE there is no ground mesh to follow, and extrapolating the camber
+         out to 120 m would lift them off the ground all over again. */
+      var vergeEdge = WALL_HALF + VERGE;
+      var y = groundY(track, treeProbe.i, clamp(treeProbe.lateral, -vergeEdge, vergeEdge)) - 0.6;
       var hgt = 9 + rnd() * 9;
       var wdt = hgt * 0.62;
       pushCrossQuad(treeBuf, x, y, z, wdt, hgt, rnd() * TAU);

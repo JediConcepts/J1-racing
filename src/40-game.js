@@ -160,10 +160,36 @@ Game.prototype.buildWorld = function () {
   this.mapBounds = { minX: minX, maxX: maxX, minZ: minZ, maxZ: maxZ };
 };
 
+/* Field size is per circuit — GRID_SIZE is only the fallback. */
+Game.prototype.gridSize = function () {
+  return (this.track && this.track.def && this.track.def.grid) || GRID_SIZE;
+};
+
+/* Which car sits in each grid slot, front to back.
+   order[slot] = car index, and car 0 is the player.
+
+   The six-car circuits keep their original hand-listed order AND their
+   player-starts-last rule. Times are already posted against silverstone-v1
+   "under race conditions", so moving the player up the order — or even just
+   reshuffling which AI lines up where, since their pace varies by index —
+   would quietly make old and new times incomparable.
+
+   A circuit that declares its own `grid` gets a generated order instead, and
+   may ask for `playerStart: 'mid'`. On a 33-car Indy field, starting last is
+   not a bit of fun to drive out of; it is a different race entirely. */
+Game.prototype.gridOrder = function (n) {
+  var def = (this.track && this.track.def) || {};
+  if (!def.grid && n === 6) return [1, 4, 2, 5, 3, 0];
+  var slot = def.playerStart === 'mid' ? Math.floor(n / 2) : n - 1;
+  var order = [];
+  for (var s = 0, car = 1; s < n; s++) order.push(s === slot ? 0 : car++);
+  return order;
+};
+
 Game.prototype.buildGrid = function () {
   this.cars = [];
   this.ais = [];
-  for (var i = 0; i < GRID_SIZE; i++) {
+  for (var i = 0; i < this.gridSize(); i++) {
     var livery = LIVERIES[i % LIVERIES.length];
     var v = new Vehicle(this.track, livery, i === 0);
     this.scene.add(v.group);
@@ -183,11 +209,14 @@ Game.prototype.buildGrid = function () {
 
 Game.prototype.resetRace = function (toTitle) {
   var t = this.track, n = t.n;
-  /* staggered 3x2 grid, tucked in behind the line */
-  var order = [1, 4, 2, 5, 3, 0];   /* player starts last — something to do */
+  /* Grid tucked in behind the line: two abreast on a road circuit, three on
+     the oval. Generated rather than hand-listed so it scales to any field. */
+  var cols = (t.def && t.def.gridCols) || 2;
+  var colPitch = cols >= 3 ? 3.4 : 6.2;      /* keeps 2-wide at the old +/-3.1 */
+  var order = this.gridOrder(this.cars.length);
   for (var i = 0; i < this.cars.length; i++) {
     var v = this.cars[i];
-    var idx, side;
+    var idx;
     if (toTitle) {
       /* attract demo: strung out around the circuit and already at speed */
       idx = (t.startIndex + 40 + i * 47) % n;
@@ -195,10 +224,10 @@ Game.prototype.resetRace = function (toTitle) {
       v.vFwd = 46;
     } else {
       var slot = order.indexOf(i);
-      var row = Math.floor(slot / 2);
-      side = (slot % 2 === 0) ? -1 : 1;
+      var row = Math.floor(slot / cols);
+      var col = slot % cols;
       idx = (t.startIndex - 5 - row * 3 + n) % n;
-      v.placeAt(idx, side * 3.1);
+      v.placeAt(idx, (col - (cols - 1) / 2) * colPitch);
     }
 
     v.lapsDone = 0; v.started = false; v.finished = false;
@@ -1639,7 +1668,7 @@ Game.prototype.drawHUD = function () {
   var posX = 3 + boxW + boxGap;
   this.panel(posX, 3, boxW, 25, C_CYAN);
   drawText(g, 'POS', posX + 3, 6, 1, C_CYAN, C_SHADOW);
-  drawText(g, p.position + '/' + GRID_SIZE, posX + 3, 15, 2, C_WHITE, C_SHADOW);
+  drawText(g, p.position + '/' + this.cars.length, posX + 3, 15, 2, C_WHITE, C_SHADOW);
 
   /* timing tower */
   var tw = 78;
@@ -1874,7 +1903,7 @@ Game.prototype.drawTitle = function () {
   for (var i = 0; i < lines.length; i++) {
     drawTextCenter(g, lines[i], W / 2, ly + i * 9, 1, i === 0 ? C_PAPAYA : '#a9a29b', C_SHADOW);
   }
-  if (!touch) drawText(g, this.laps() + ' LAPS   ' + GRID_SIZE + ' CARS', 6, H - 11, 1, '#7d7772', C_SHADOW);
+  if (!touch) drawText(g, this.laps() + ' LAPS   ' + this.cars.length + ' CARS', 6, H - 11, 1, '#7d7772', C_SHADOW);
 };
 
 /* Single place that reflects auth state into the panel, driven by Cloud's

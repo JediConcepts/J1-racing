@@ -454,7 +454,11 @@ Vehicle.prototype.sync = function (dt, alpha) {
   }
 
   this.shadow.position.set(vx, this.vy + 0.05, vz);
-  this.shadow.rotation.set(-Math.PI / 2, 0, -vyaw);
+  /* +vyaw. Same reflection trap as the start line: with rotation.x = -PI/2
+     and the default XYZ order, negating z mirrors rather than rotates, and
+     the 6.1 m long axis swings up to 90 degrees out — measured 80.2 degrees
+     off at a 0.7 rad heading, laying the shadow across the car. */
+  this.shadow.rotation.set(-Math.PI / 2, 0, vyaw);
 };
 
 Vehicle.prototype.speedKph = function () { return Math.max(0, this.vFwd) * 3.6; };
