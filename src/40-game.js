@@ -64,6 +64,7 @@ function Game(host) {
   this.countdown = 0;
   this.lights = 0;
   this.camMode = 0;
+  this.headYaw = 0;        /* damped look-into-the-corner offset, onboard only */
   this.paused = false;
   this.shake = 0;
   this.finishHold = 0;
@@ -86,6 +87,7 @@ function Game(host) {
   this.stick = null;                 /* on-screen analog thumbstick */
   this.tilt = new TiltSensor();      /* accelerometer steering */
   this.settings = this.loadSettings();
+  this.camMode = this.settings.camMode;
   this.settingsResume = false;
 
   this.buildRenderer();
@@ -312,8 +314,7 @@ Game.prototype.bindInput = function () {
       self.audio.wake();
       if (self.state !== STATE.TITLE) self.beginRace();
     } else if (code === 'KeyC') {
-      self.camMode = (self.camMode + 1) % 2;
-      self.flash(self.camMode === 0 ? 'CHASE CAM' : 'COCKPIT CAM');
+      self.cycleCam();
     } else if (code === 'KeyM') {
       self.toggleMute();
     } else if (code === 'KeyN') {
@@ -392,8 +393,7 @@ Game.prototype.bindInput = function () {
   if (camPad) {
     camPad.addEventListener('click', function (e) {
       e.preventDefault();
-      self.camMode = (self.camMode + 1) % 2;
-      self.flash(self.camMode === 0 ? 'CHASE CAM' : 'COCKPIT CAM');
+      self.cycleCam();
     });
   }
 
@@ -777,6 +777,16 @@ Game.prototype.bindInput = function () {
   });
 };
 
+/* Four modes now, and the choice STICKS. Picking a circuit reloads the page,
+   so without persisting this you were dropped back to the chase camera every
+   time you changed track. */
+Game.prototype.cycleCam = function () {
+  this.camMode = (this.camMode + 1) % CAM_LABELS.length;
+  this.settings.camMode = this.camMode;
+  this.saveSettings();
+  this.flash(CAM_LABELS[this.camMode]);
+};
+
 Game.prototype.toggleMute = function () {
   this.audio.init();
   this.settings.engineOn = !this.settings.engineOn;
@@ -984,6 +994,7 @@ Game.prototype.loadSettings = function () {
        drone is punishing over three laps, the score is not. */
     musicOn: true,
     engineOn: false,
+    camMode: 0,
     autoThrottle: touchLikely(),
     autoFullscreen: true,
     /* Retro is the default because it is the point of the thing — modern is
@@ -1015,6 +1026,7 @@ Game.prototype.loadSettings = function () {
       if (typeof sv === 'number' && isFinite(sv)) s.steerSens = clamp(Math.round(sv), 1, 10);
       /* 0 is a legitimate value here — silent — so these check isFinite
          rather than truthiness, or muting a bus would never persist. */
+      if (typeof p.camMode === 'number' && CAM_LABELS[p.camMode]) s.camMode = p.camMode | 0;
       if (typeof p.musicOn === 'boolean') s.musicOn = p.musicOn;
       if (typeof p.engineOn === 'boolean') s.engineOn = p.engineOn;
       if (typeof p.engineVol === 'number' && isFinite(p.engineVol)) s.engineVol = clamp(Math.round(p.engineVol), 0, 10);
@@ -1642,6 +1654,55 @@ Game.prototype.updatePositions = function () {
 /* --- camera ------------------------------------------------------------- */
 
 var _cf = new THREE.Vector3(), _cr = new THREE.Vector3(), _ideal = new THREE.Vector3(), _look = new THREE.Vector3();
+var _camQ = new THREE.Quaternion(), _spinQ = new THREE.Quaternion();
+var _localOff = new THREE.Vector3(), _camEuler = new THREE.Euler(), _camEuler2 = new THREE.Euler();
+
+var CAM_LABELS = ['CHASE CAM', 'T-CAM', 'HELMET CAM', 'GYRO CAM'];
+
+/* THE ONBOARD CAMERAS.
+
+   Both are bolted to the car and inherit its FULL orientation, roll included.
+   That is the whole difference. The chase camera is aimed with lookAt against
+   world up, and lookAt cannot express roll at all — which is why the old
+   cockpit view stayed rigidly level while the car leaned underneath it, and
+   why it read as a floating window rather than a place you are sitting.
+
+   Offsets are in the car's own frame, where +Z is the nose (see buildCarMesh).
+   For reference, the model puts the driver's helmet at [0, 0.775, 0.28] with a
+   0.185 radius, the halo hoop at z 0.72 and the mirrors at z 0.74.
+
+     T-CAM    above the airbox and just behind the head, the television
+              onboard shot: you see the halo, the nose and both front wheels
+              working. Wider, calmer, no head movement — it is a fixed mount.
+
+     HELMET   the driver's eye, set just forward of the helmet shell so we are
+              outside it rather than inside the geometry. Narrower view, and
+              the head LEADS THE CAR INTO THE CORNER, which is the thing that
+              makes an onboard feel driven rather than filmed.
+
+     GYRO     same eye point, but GYRO-STABILISED: the horizon is held level
+              and the car rolls underneath it. Roll is cancelled outright,
+              pitch only mostly, so kerbs and crests still register instead of
+              the whole image going dead.
+
+   T-CAM and GYRO share a framing taken from the real broadcast shot: set back
+   and up BEHIND the helmet and tilted down, so the car fills the lower part of
+   the frame — halo, both mirrors, both front wheels working, the nose running
+   away ahead — with the road in the upper third. Sitting it just above the
+   airbox, as a first pass did, crops all of that away and looks like nothing.
+
+   stabRoll/stabPitch are 0 for a hard mount and 1 for fully stabilised.
+   `tilt` is a fixed downward angle in radians on top of the car's own pitch. */
+var ONBOARD_CAMS = {
+  1: { off: [0, 1.34, -0.95], fov: 78, fovGain: 8, lead: 0.00, stabRoll: 0, stabPitch: 0, tilt: 0.16 },
+  /* Sat back at the eye rather than out at the visor, so the halo hoop arcs
+     across the TOP of the frame and you look out under it, the strut runs up
+     the middle, and both mirrors sit just inside the edges. fov is VERTICAL in
+     three.js — 82 gives about 114 horizontal at 16:9, which is the wide,
+     slightly fisheye look of the real driver's-eye shot. */
+  2: { off: [0, 0.84, 0.06], fov: 82, fovGain: 6, lead: 0.55, stabRoll: 0, stabPitch: 0, tilt: 0.14, hideHead: true },
+  3: { off: [0, 1.34, -0.95], fov: 78, fovGain: 8, lead: 0.28, stabRoll: 1, stabPitch: 0.8, tilt: 0.16 }
+};
 
 Game.prototype.updateCamera = function (dt, snap) {
   var p = (this.state === STATE.TITLE) ? this.demoCar : this.player;
@@ -1649,6 +1710,13 @@ Game.prototype.updateCamera = function (dt, snap) {
 
   var px = p.visX(), py = p.visY(), pz = p.visZ();
   var speed01 = clamp(p.vFwd / V_MAX, 0, 1);
+  /* The eye sits INSIDE the helmet, so drawing it would fill the screen with
+     the inside of a sphere. Hidden for this car only, and only in that view —
+     the behind-the-head shots want the head very much in frame. */
+  if (p.head) p.head.visible = !(ONBOARD_CAMS[this.camMode] || {}).hideHead || this.state === STATE.TITLE;
+  /* The attract demo always runs the chase camera — an onboard shot of a car
+     nobody is driving is just a moving wall. */
+  var onboard = (this.state !== STATE.TITLE && ONBOARD_CAMS[this.camMode]) ? this.camMode : 0;
 
   if (this.state === STATE.TITLE && this.demoShot !== 0) {
     /* locked-off TV camera: hold the position, track the car */
@@ -1656,13 +1724,49 @@ Game.prototype.updateCamera = function (dt, snap) {
     _look.set(px, py + 0.9, pz);
     this.camLook.lerp(_look, snap ? 1 : 1 - Math.exp(-9 * dt));
     this.camera.fov = this.demoShot === 1 ? 34 : 52;
-  } else if (this.camMode === 1 && this.state !== STATE.TITLE) {
-    _ideal.set(px + _cf.x * 0.30, py + 1.16, pz + _cf.z * 0.30);
-    _look.set(px + _cf.x * 26, py + 1.5, pz + _cf.z * 26);
-    this.camPos.copy(_ideal);
-    this.camLook.copy(_look);
-    this.camera.fov = 70 + speed01 * 12;
+  } else if (onboard) {
+    var cfg = ONBOARD_CAMS[onboard];
+
+    /* Mount point in the CAR's frame, so it swings with the car exactly as a
+       bolted camera would — including being carried sideways as the car rolls
+       on Indy's banking. */
+    _localOff.set(cfg.off[0], cfg.off[1], cfg.off[2]);
+    _localOff.applyQuaternion(p.group.quaternion);
+    this.camPos.copy(p.group.position).add(_localOff);
+
+    /* The head leads the car into the corner. yawRate is positive in a LEFT
+       turn and a positive camera yaw looks left, so this needs no negation. */
+    var lead = clamp(p.yawRate * cfg.lead, -0.5, 0.5);
+    this.headYaw = snap ? lead : damp(this.headYaw, lead, 7, dt);
+
+    /* COMPOSED IN THE CAR'S OWN ORDER, not folded into one Euler.
+
+       The obvious version — bake the 180 degree turn into the yaw term and
+       negate pitch and roll to compensate — is wrong, and measurably so: it
+       left the hard-mounted views 8.9 degrees off the car's own up vector and
+       the stabilised one 10.5 degrees off level. Rotations do not commute, and
+       there is no set of Euler angles in one triple that expresses "the car's
+       attitude, then turned around".
+
+       So build it in stages instead. First an attitude in exactly the car's
+       convention, with roll and pitch scaled by however much this mount
+       stabilises. Then turn about that body's OWN up to face forward and lead
+       into the corner. Then tilt down about the camera's OWN right. Each step
+       is applied in the frame the previous one produced, which is what the
+       words actually mean. */
+    _camEuler.set(p.pitch * (1 - cfg.stabPitch), p.vyaw, p.roll * (1 - cfg.stabRoll), 'YXZ');
+    _camQ.setFromEuler(_camEuler);
+
+    _camEuler2.set(0, Math.PI + this.headYaw, 0, 'YXZ');
+    _spinQ.setFromEuler(_camEuler2);
+    _camQ.multiply(_spinQ);
+
+    _camEuler2.set(-cfg.tilt, 0, 0, 'YXZ');
+    _spinQ.setFromEuler(_camEuler2);
+    _camQ.multiply(_spinQ);
+    this.camera.fov = cfg.fov + speed01 * cfg.fovGain;
   } else {
+    this.headYaw = 0;
     var back = 8.0 + speed01 * 1.4;
     var lift = 3.05 + speed01 * 0.5;
     /* trail the slide a little so drifts read from behind */
@@ -1682,9 +1786,13 @@ Game.prototype.updateCamera = function (dt, snap) {
     this.camera.fov = 62 + speed01 * 13 + p.boost * 4;
   }
 
-  /* keep the camera out of the dirt */
-  var ground = this.track.heightAt(this.camPos.x, this.camPos.z, p.frameIdx) + 1.1;
-  if (this.camPos.y < ground) this.camPos.y = ground;
+  /* Keep the camera out of the dirt — CHASE ONLY. An onboard mount sits about
+     0.8 m above the car's floor, well under this 1.1 m floor, so applying it
+     would jack the driver's eye up out of the cockpit on every frame. */
+  if (!onboard) {
+    var ground = this.track.heightAt(this.camPos.x, this.camPos.z, p.frameIdx) + 1.1;
+    if (this.camPos.y < ground) this.camPos.y = ground;
+  }
 
   var sx = 0, sy = 0;
   if (!this.reducedMotion) {
@@ -1695,7 +1803,16 @@ Game.prototype.updateCamera = function (dt, snap) {
   }
 
   this.camera.position.set(this.camPos.x + sx, this.camPos.y + sy, this.camPos.z);
-  this.camera.lookAt(this.camLook);
+  /* lookAt would overwrite the roll — it always rebuilds the orientation from
+     world up. Onboard modes therefore set the quaternion themselves. */
+  /* The chase camera's 0.6 m near plane sits BEYOND the cockpit furniture —
+     the steering wheel is 0.36 m from the driver's eye, so at 0.6 it was
+     clipped away entirely and the view looked like sitting on the car rather
+     than in it. Onboard pulls it in; chase keeps the far plane's depth
+     precision. */
+  this.camera.near = onboard ? 0.12 : 0.6;
+  if (onboard) this.camera.quaternion.copy(_camQ);
+  else this.camera.lookAt(this.camLook);
   this.camera.updateProjectionMatrix();
 
   this.sky.position.set(this.camera.position.x, 0, this.camera.position.z);

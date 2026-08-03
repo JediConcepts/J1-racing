@@ -135,9 +135,9 @@ function buildCarMesh(livery) {
     [0, 0.80, 0.72], [0.30, 0, 0]));
   parts.push(part(new THREE.CylinderGeometry(0.035, 0.045, 0.34, 6), trim, [0, 0.86, 1.06], [0.22, 0, 0]));
 
-  /* Driver */
-  parts.push(part(new THREE.SphereGeometry(0.185, 8, 6), livery.helmet, [0, 0.775, 0.28]));
-  parts.push(part(new THREE.BoxGeometry(0.27, 0.085, 0.05), trim, [0, 0.79, 0.45]));
+  /* Driver's head is built SEPARATELY, below — the helmet camera sits inside
+     it, and a head merged into the chassis could not be hidden for that one
+     car without hiding the whole bodywork with it. */
 
   /* Front wing: three stacked elements, thin vertical endplates */
   parts.push(part(new THREE.BoxGeometry(1.98, 0.035, 0.50), trim, [0, 0.105, 3.34]));
@@ -189,6 +189,33 @@ function buildCarMesh(livery) {
     wheels.push(w);
   }
 
+  /* Driver's head — its own mesh so the helmet camera can switch it off for
+     the car you are sitting in, and only that car. */
+  var head = new THREE.Mesh(mergeParts([
+    part(new THREE.SphereGeometry(0.185, 8, 6), livery.helmet, [0, 0.775, 0.28]),
+    part(new THREE.BoxGeometry(0.27, 0.085, 0.05), trim, [0, 0.79, 0.45])
+  ]), bodyMat);
+  group.add(head);
+
+  /* Steering wheel — the thing that sells a driver's-eye view, and the only
+     part of the car that answers your hands. Separate because it turns.
+     Sits below and forward of the eye line, as the real one does. */
+  var steerWheel = new THREE.Mesh(mergeParts([
+    /* squared-off rim, flattened top and bottom like a modern F1 wheel */
+    part(new THREE.TorusGeometry(0.175, 0.026, 4, 12), 0x14151a, [0, 0, 0], [0, 0, 0], [1, 0.82, 1]),
+    /* face, with a lit strip standing in for the display */
+    part(new THREE.BoxGeometry(0.24, 0.135, 0.022), trim, [0, 0, -0.012]),
+    part(new THREE.BoxGeometry(0.165, 0.038, 0.008), accent, [0, 0.036, 0.004]),
+    /* grips */
+    part(new THREE.BoxGeometry(0.05, 0.12, 0.055), 0x14151a, [-0.185, -0.015, 0.01]),
+    part(new THREE.BoxGeometry(0.05, 0.12, 0.055), 0x14151a, [0.185, -0.015, 0.01])
+  ]), bodyMat);
+  /* High and close, as a real F1 wheel sits — chest height, not lap height.
+     Any lower and the monocoque swallows it from the driver's eye. */
+  steerWheel.position.set(0, 0.620, 0.66);
+  steerWheel.rotation.x = -0.42;      /* raked back toward the driver */
+  group.add(steerWheel);
+
   /* fake contact shadow */
   var shadow = new THREE.Mesh(
     new THREE.PlaneGeometry(3.1, 6.1),
@@ -196,7 +223,7 @@ function buildCarMesh(livery) {
   );
   shadow.rotation.x = -Math.PI / 2;
 
-  return { group: group, wheels: wheels, shadow: shadow, chassis: chassis };
+  return { group: group, wheels: wheels, shadow: shadow, chassis: chassis, head: head, steerWheel: steerWheel };
 }
 
 /* --- physics ------------------------------------------------------------ */
@@ -217,6 +244,8 @@ function Vehicle(track, livery, isPlayer) {
   var built = buildCarMesh(livery);
   this.group = built.group;
   this.wheels = built.wheels;
+  this.head = built.head;
+  this.steerWheel = built.steerWheel;
   this.shadow = built.shadow;
 
   this.pos = new THREE.Vector3();
@@ -465,6 +494,9 @@ Vehicle.prototype.sync = function (dt, alpha) {
   g.rotation.x = this.pitch;
   g.rotation.z = this.roll;
 
+  /* About 1.5 turns lock to lock, against the front wheels' 0.42 rad — the
+     rim moves far more than the tyres, which is what makes it readable. */
+  if (this.steerWheel) this.steerWheel.rotation.z = -this.steerVis * 2.4;
   this.wheels[0].rotation.set(0, -this.steerVis * 0.42, 0);
   this.wheels[1].rotation.set(0, -this.steerVis * 0.42, 0);
   for (var i = 0; i < 4; i++) {
