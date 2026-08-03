@@ -144,8 +144,21 @@ function buildCarMesh(livery) {
      and reads as badly wrong from inside. Full ring, laid into the XZ plane
      by RX and stretched fore-and-aft, tilted a little nose-down so the front
      sits where the strut can meet it. */
-  parts.push(part(new THREE.TorusGeometry(0.40, 0.042, 4, 16), trim,
-    [0, 0.985, 0.44], [RX + 0.16, 0, 0], [1.02, 1.42, 1.0]));   /* clears the helmet crown at 0.96 */
+  /* TEARDROP, not an oval. The real halo is a rear arc around the driver's
+     shoulders with two blades sweeping FORWARD and inward to a single point
+     ahead of the cockpit, where the strut drops to the chassis. An even ring
+     reads as a hoop dropped over the car; the pinch at the front is the whole
+     silhouette. Raised to clear the helmet crown at 0.96.
+
+     [RX, 0, PI] lays the half-torus flat AND spins it 180 in its own plane, so
+     the arc is the REAR half — without the PI it wraps the front, where the
+     blades need to be. */
+  parts.push(part(new THREE.TorusGeometry(0.40, 0.042, 4, 12, Math.PI), trim,
+    [0, 0.985, 0.44], [RX, 0, Math.PI]));
+  for (var hb = -1; hb <= 1; hb += 2) {
+    parts.push(part(new THREE.BoxGeometry(0.055, 0.048, 0.72), trim,
+      [hb * 0.20, 0.992, 0.735], [0, -hb * 0.604, 0]));
+  }
   /* The strut is a blade, not a rod — from the driver's seat it is the single
      heaviest thing in frame, splitting the road ahead in two. */
   parts.push(part(new THREE.BoxGeometry(0.075, 0.58, 0.05), trim, [0, 0.71, 1.07], [-0.13, 0, 0]));
