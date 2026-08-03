@@ -3446,18 +3446,27 @@ Vehicle.prototype.sync = function (dt, alpha) {
   this.vy = hC;
   this.pos.y = hC;
   var pitch = datan2(hF - hB, 4.4);
-  var roll = datan2(hR - hL, 3.0);
+  var roll = datan2(hL - hR, 3.0);
 
-  /* SIGNS. The two axes are not symmetrical, which is why only one takes a
-     minus: rotation.x positive drops the NOSE, so climbing needs -pitch;
-     rotation.z positive lifts the car's RIGHT, so a road that is higher on
-     the right needs +roll — correct now that hR really is the right sample.
+  /* SIGNS. Both roll terms hinge on one fact that is easy to get backwards:
+     rotation.z lifts the car's local +X, and with rotation.y = yaw that axis
+     maps to (cos yaw, 0, -sin yaw) — which is `lat`, the car's LEFT. So
 
-     Body lean is a separate term. Weight goes to the OUTSIDE of the corner,
-     so a left turn — which is positive yaw rate, since increasing yaw swings
-     forward from +Z toward +X — presses the RIGHT side down, and dropping the
-     right means a negative rotation.z. Hence -yawRate. */
-  var lean = clamp(-this.yawRate * 0.062, -0.11, 0.11);
+         POSITIVE rotation.z LIFTS THE CAR'S LEFT SIDE.
+
+     Terrain: the road's left edge sits at hL, so matching the camber means
+     rolling by exactly atan2(hL - hR, track). Get this backwards and the car
+     rolls the wrong way by twice the bank angle, which on Indy's 9.2 degrees
+     buries one whole side of the chassis under the road surface.
+
+     Body lean is separate, and opposes nothing here: weight goes to the
+     OUTSIDE of a corner, so a left turn (positive yaw rate, since increasing
+     yaw swings forward from +Z toward +X) presses the RIGHT side down and
+     therefore lifts the left. Same sign as yawRate.
+
+     Pitch is the odd one out: rotation.x positive drops the NOSE, so climbing
+     needs -pitch. */
+  var lean = clamp(this.yawRate * 0.062, -0.11, 0.11);
   var k = dt > 0 ? 1 - Math.exp(-10 * dt) : 1;
   this.pitch = lerp(this.pitch, -pitch, k);
   this.roll = lerp(this.roll, roll + lean, k);
