@@ -1700,7 +1700,7 @@ var ONBOARD_CAMS = {
      the middle, and both mirrors sit just inside the edges. fov is VERTICAL in
      three.js — 82 gives about 114 horizontal at 16:9, which is the wide,
      slightly fisheye look of the real driver's-eye shot. */
-  2: { off: [0, 0.84, 0.06], fov: 82, fovGain: 6, lead: 0.55, stabRoll: 0, stabPitch: 0, tilt: 0.14, hideHead: true },
+  2: { off: [0, 0.82, -0.08], fov: 82, fovGain: 6, lead: 0.55, stabRoll: 0, stabPitch: 0, tilt: 0.13, hideHead: true },
   /* bankIn tilts INTO the corner, against the car's own outward body lean.
      Killing the car's roll outright (stabRoll 1) and leaving it there is what
      a real gyro mount does, but it reads badly from the seat: the horizon is

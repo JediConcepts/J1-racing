@@ -137,9 +137,26 @@ function buildCarMesh(livery) {
   parts.push(part(new THREE.BoxGeometry(0.04, 0.26, 1.40), trim, [0, 0.74, -1.70]));
 
   /* Halo — a real hoop, not three sticks */
-  parts.push(part(new THREE.TorusGeometry(0.40, 0.035, 4, 14, Math.PI), trim,
-    [0, 0.80, 0.72], [0.30, 0, 0]));
-  parts.push(part(new THREE.CylinderGeometry(0.035, 0.045, 0.34, 6), trim, [0, 0.86, 1.06], [0.22, 0, 0]));
+  /* A halo is a ring lying nearly FLAT around the cockpit, wider than it is
+     tall, with a single strut dropping from its front point to the chassis.
+     Built as a half-torus in the XY plane it came out a vertical semicircle —
+     a rainbow archway standing over the car, which is not the shape at all
+     and reads as badly wrong from inside. Full ring, laid into the XZ plane
+     by RX and stretched fore-and-aft, tilted a little nose-down so the front
+     sits where the strut can meet it. */
+  parts.push(part(new THREE.TorusGeometry(0.40, 0.042, 4, 16), trim,
+    [0, 0.985, 0.44], [RX + 0.16, 0, 0], [1.02, 1.42, 1.0]));   /* clears the helmet crown at 0.96 */
+  /* The strut is a blade, not a rod — from the driver's seat it is the single
+     heaviest thing in frame, splitting the road ahead in two. */
+  parts.push(part(new THREE.BoxGeometry(0.075, 0.58, 0.05), trim, [0, 0.71, 1.07], [-0.13, 0, 0]));
+
+  /* COCKPIT COAMING — the raised rim around the opening, in body colour.
+     From outside it is a detail; from the driver's eye it is the frame the
+     entire view sits in, the bright band running across the lower third and
+     up both sides. Without it the helmet camera looks like sitting on a plank
+     rather than down inside a tub. Oval: 0.40 across, 0.60 fore-and-aft. */
+  parts.push(part(new THREE.TorusGeometry(0.40, 0.040, 4, 14), body,
+    [0, 0.565, 0.46], [RX, 0, 0], [1.0, 1.45, 1.0]));
 
   /* Driver's head is built SEPARATELY, below — the helmet camera sits inside
      it, and a head merged into the chassis could not be hidden for that one
