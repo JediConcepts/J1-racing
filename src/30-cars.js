@@ -134,7 +134,9 @@ function buildCarMesh(livery) {
   parts.push(part(new THREE.CylinderGeometry(0.09, 0.30, 2.45, 8), body2,
     [0, 0.50, -1.55], [RX, 0, 0], [0.94, 1, 0.66]));
   /* shark-fin spine */
-  parts.push(part(new THREE.BoxGeometry(0.04, 0.26, 1.40), trim, [0, 0.74, -1.70]));
+  /* teal down the spine: the reference carries it as a line, and painting
+     the whole airbox with it turned the car's shoulder into a slab. */
+  parts.push(part(new THREE.BoxGeometry(0.045, 0.26, 1.40), accent, [0, 0.74, -1.70]));
 
   /* Halo — a real hoop, not three sticks */
   /* A halo is a ring lying nearly FLAT around the cockpit, wider than it is
@@ -177,7 +179,7 @@ function buildCarMesh(livery) {
 
   /* Front wing: three stacked elements, thin vertical endplates */
   parts.push(part(new THREE.BoxGeometry(1.98, 0.035, 0.50), trim, [0, 0.105, 3.34]));
-  parts.push(part(new THREE.BoxGeometry(1.84, 0.035, 0.32), body, [0, 0.165, 3.22]));
+  parts.push(part(new THREE.BoxGeometry(1.84, 0.035, 0.32), body2, [0, 0.165, 3.22]));
   parts.push(part(new THREE.BoxGeometry(1.66, 0.035, 0.24), trim, [0, 0.215, 3.13]));
   for (var e = -1; e <= 1; e += 2) {
     parts.push(part(new THREE.BoxGeometry(0.05, 0.30, 0.62), body, [e * 0.98, 0.21, 3.30]));
@@ -185,8 +187,8 @@ function buildCarMesh(livery) {
   }
 
   /* Rear wing on swan-neck supports */
-  parts.push(part(new THREE.BoxGeometry(1.02, 0.04, 0.42), trim, [0, 1.02, -2.52]));
-  parts.push(part(new THREE.BoxGeometry(1.02, 0.035, 0.24), body, [0, 0.90, -2.40]));
+  parts.push(part(new THREE.BoxGeometry(1.02, 0.04, 0.42), body, [0, 1.02, -2.52]));
+  parts.push(part(new THREE.BoxGeometry(1.02, 0.035, 0.24), body2, [0, 0.90, -2.40]));
   for (var q = -1; q <= 1; q += 2) {
     parts.push(part(new THREE.BoxGeometry(0.045, 0.44, 0.66), body, [q * 0.51, 0.86, -2.48]));
     parts.push(part(new THREE.BoxGeometry(0.05, 0.30, 0.06), trim, [q * 0.22, 0.88, -2.36], [0.35, 0, 0]));
