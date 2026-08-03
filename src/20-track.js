@@ -71,44 +71,50 @@ var CORNER_NAMES = [
 
 /* Indianapolis Motor Speedway. 2.5 miles of rectangle with rounded corners:
    two 5/8-mile straights, two short chutes, four identical quarter-circle
-   turns banked at 9 degrees 12 minutes. Flat throughout — no elevation. */
+   turns banked at 9 degrees 12 minutes. Flat throughout — no elevation.
+
+   The point order is REVERSED relative to how it was authored, so the lap runs
+   anti-clockwise on left-hand turns as the real 500 does. Checked by summing
+   signed curvature over the lap: Silverstone (clockwise in reality) comes to
+   -2pi, so anti-clockwise must come to +2pi. Authored, it matched Silverstone
+   and therefore ran the wrong way. */
 var INDY_CONTROL = [
-    [    0, -357,  0],
-    [  126, -357,  0],
-    [  252, -357,  0],
-    [  377, -357,  0],
-    [  503, -357,  0],
-    [  601, -337,  0],
-    [  684, -282,  0],
-    [  740, -199,  0],
-    [  759, -101,  0],
-    [  759,    0,  0],
-    [  759,  101,  0],
-    [  740,  199,  0],
-    [  684,  282,  0],
-    [  601,  337,  0],
-    [  503,  357,  0],
-    [  377,  357,  0],
-    [  252,  357,  0],
-    [  126,  357,  0],
-    [    0,  357,  0],
-    [ -126,  357,  0],
-    [ -252,  357,  0],
-    [ -377,  357,  0],
-    [ -503,  357,  0],
-    [ -601,  337,  0],
-    [ -684,  282,  0],
-    [ -740,  199,  0],
-    [ -759,  101,  0],
-    [ -759,    0,  0],
-    [ -759, -101,  0],
-    [ -740, -199,  0],
-    [ -684, -282,  0],
-    [ -601, -337,  0],
-    [ -503, -357,  0],
-    [ -377, -357,  0],
-    [ -252, -357,  0],
-    [ -126, -357,  0]
+  [    0, -357,  0],
+  [ -126, -357,  0],
+  [ -252, -357,  0],
+  [ -377, -357,  0],
+  [ -503, -357,  0],
+  [ -601, -337,  0],
+  [ -684, -282,  0],
+  [ -740, -199,  0],
+  [ -759, -101,  0],
+  [ -759,    0,  0],
+  [ -759,  101,  0],
+  [ -740,  199,  0],
+  [ -684,  282,  0],
+  [ -601,  337,  0],
+  [ -503,  357,  0],
+  [ -377,  357,  0],
+  [ -252,  357,  0],
+  [ -126,  357,  0],
+  [    0,  357,  0],
+  [  126,  357,  0],
+  [  252,  357,  0],
+  [  377,  357,  0],
+  [  503,  357,  0],
+  [  601,  337,  0],
+  [  684,  282,  0],
+  [  740,  199,  0],
+  [  759,  101,  0],
+  [  759,    0,  0],
+  [  759, -101,  0],
+  [  740, -199,  0],
+  [  684, -282,  0],
+  [  601, -337,  0],
+  [  503, -357,  0],
+  [  377, -357,  0],
+  [  252, -357,  0],
+  [  126, -357,  0]
 ];
 
 var INDY_CORNERS = [['FRONT STRETCH', 0], ['TURN 1', 6], ['TURN 2', 12], ['BACK STRETCH', 18], ['TURN 3', 24], ['TURN 4', 30]];
@@ -246,7 +252,12 @@ function Track(def) {
   var bankGain = def.bankGain || 14;
   var bankMax = def.bankMax || 0.046;
   var bankRaw = new Float32Array(this.n);
-  for (i = 0; i < this.n; i++) bankRaw[i] = clamp(-this.curv[i] * bankGain, -bankMax, bankMax);
+  /* SIGN: lateral is positive to the car's right, and height is
+     `lateral * tan(bank)`, so raising the OUTSIDE of a corner needs bank to
+     take the same sign as curvature. It was negated, which banked every
+     corner the wrong way — the car leaned out of the turn instead of into it.
+     Invisible at Silverstone's 2.6 degrees; unmistakable at Indy's 9.2. */
+  for (i = 0; i < this.n; i++) bankRaw[i] = clamp(this.curv[i] * bankGain, -bankMax, bankMax);
   this.bank = smoothLoop(bankRaw, 11, 2);
 
   this.buildRacingLine();

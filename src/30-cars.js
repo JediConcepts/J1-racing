@@ -412,12 +412,19 @@ Vehicle.prototype.sync = function (dt, alpha) {
   var pitch = datan2(hF - hB, 4.4);
   var roll = datan2(hR - hL, 3.0);
 
-  /* Body roll leans away from the turn centre. Local +X is the car's +lat
-     side, so a positive yaw rate lifts it. */
-  var lean = clamp(this.yawRate * 0.062, -0.11, 0.11);
+  /* SIGNS. The two axes are not symmetrical, which is why only one takes a
+     minus: rotation.x positive drops the NOSE, so climbing needs -pitch;
+     rotation.z positive lifts the car's RIGHT, so sitting on a road that is
+     higher on the right needs +roll.
+     Body lean is the other way again — weight goes to the OUTSIDE of the
+     corner, so a left turn (positive yaw rate) presses the right side down.
+     Both roll terms were inverted, which leaned the car out of every corner
+     and off the camber. Invisible at Silverstone's 2.6 degrees of camber and
+     glaring on Indy's 9.2 degree banking. */
+  var lean = clamp(-this.yawRate * 0.062, -0.11, 0.11);
   var k = dt > 0 ? 1 - Math.exp(-10 * dt) : 1;
   this.pitch = lerp(this.pitch, -pitch, k);
-  this.roll = lerp(this.roll, -roll + lean, k);
+  this.roll = lerp(this.roll, roll + lean, k);
 
   g.position.set(vx, this.vy + 0.02, vz);
   g.rotation.set(0, 0, 0);
