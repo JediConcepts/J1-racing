@@ -2752,8 +2752,15 @@ function buildStandRing(scene, track, crowdMat) {
      but infield terracing at the same offset sits square in the driver's eye
      line all the way round — it has to go back across the apron, which is
      also where it really is. lat is the car's LEFT and this oval runs
-     anti-clockwise, so side +1 is the infield. */
-  var OFFSETS = { '1': WALL_HALF + 52, '-1': WALL_HALF + 6 };
+     anti-clockwise, so side +1 is the infield.
+
+     The perimeter figure also has to clear the corner boards, which stand at
+     WALL_HALF + 3.6. At WALL_HALF + 6 the terracing rose barely two metres
+     behind them, so a dark board landed against the stand's dark base and
+     stopped reading. WALL_HALF + 14 leaves ten metres of grass behind every
+     board, which is also roughly where the apron, wall and fence put the
+     first row on a real speedway. */
+  var OFFSETS = { '1': WALL_HALF + 52, '-1': WALL_HALF + 14 };
   /* 44 m per tile, matching PlaneGeometry(44, ...) on the single stands, so
      the crowd is the same density everywhere on the circuit. */
   var TILE = 44;
