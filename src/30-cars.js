@@ -404,8 +404,11 @@ Vehicle.prototype.sync = function (dt, alpha) {
   var hC = t.heightAt(vx, vz, this.frameIdx);
   var hF = t.heightAt(vx + fx * 2.2, vz + fz * 2.2, this.frameIdx);
   var hB = t.heightAt(vx - fx * 2.2, vz - fz * 2.2, this.frameIdx);
-  var hR = t.heightAt(vx + rx * 1.5, vz + rz * 1.5, this.frameIdx);
-  var hL = t.heightAt(vx - rx * 1.5, vz - rz * 1.5, this.frameIdx);
+  /* (rx, rz) is (cos yaw, -sin yaw), which is up X fwd — the car's LEFT, not
+     its right (see the sign derivation in 20-track.js). These two were named
+     the wrong way round, which silently negated the whole terrain-roll term. */
+  var hL = t.heightAt(vx + rx * 1.5, vz + rz * 1.5, this.frameIdx);
+  var hR = t.heightAt(vx - rx * 1.5, vz - rz * 1.5, this.frameIdx);
 
   this.vy = hC;
   this.pos.y = hC;
@@ -414,13 +417,13 @@ Vehicle.prototype.sync = function (dt, alpha) {
 
   /* SIGNS. The two axes are not symmetrical, which is why only one takes a
      minus: rotation.x positive drops the NOSE, so climbing needs -pitch;
-     rotation.z positive lifts the car's RIGHT, so sitting on a road that is
-     higher on the right needs +roll.
-     Body lean is the other way again — weight goes to the OUTSIDE of the
-     corner, so a left turn (positive yaw rate) presses the right side down.
-     Both roll terms were inverted, which leaned the car out of every corner
-     and off the camber. Invisible at Silverstone's 2.6 degrees of camber and
-     glaring on Indy's 9.2 degree banking. */
+     rotation.z positive lifts the car's RIGHT, so a road that is higher on
+     the right needs +roll — correct now that hR really is the right sample.
+
+     Body lean is a separate term. Weight goes to the OUTSIDE of the corner,
+     so a left turn — which is positive yaw rate, since increasing yaw swings
+     forward from +Z toward +X — presses the RIGHT side down, and dropping the
+     right means a negative rotation.z. Hence -yawRate. */
   var lean = clamp(-this.yawRate * 0.062, -0.11, 0.11);
   var k = dt > 0 ? 1 - Math.exp(-10 * dt) : 1;
   this.pitch = lerp(this.pitch, -pitch, k);
