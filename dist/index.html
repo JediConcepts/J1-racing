@@ -6376,7 +6376,13 @@ var ONBOARD_CAMS = {
      three.js — 82 gives about 114 horizontal at 16:9, which is the wide,
      slightly fisheye look of the real driver's-eye shot. */
   2: { off: [0, 0.84, 0.06], fov: 82, fovGain: 6, lead: 0.55, stabRoll: 0, stabPitch: 0, tilt: 0.14, hideHead: true },
-  3: { off: [0, 1.34, -0.95], fov: 78, fovGain: 8, lead: 0.28, stabRoll: 1, stabPitch: 0.8, tilt: 0.16 }
+  /* bankIn tilts INTO the corner, against the car's own outward body lean.
+     Killing the car's roll outright (stabRoll 1) and leaving it there is what
+     a real gyro mount does, but it reads badly from the seat: the horizon is
+     nailed down while the cockpit rocks OUTWARD under you, so a left-hander
+     looks like the car falling to the right. Banking in instead is the thing
+     every rider and pilot already expects. */
+  3: { off: [0, 1.34, -0.95], fov: 78, fovGain: 8, lead: 0.28, stabRoll: 1, stabPitch: 0.8, tilt: 0.16, bankIn: 0.34 }
 };
 
 Game.prototype.updateCamera = function (dt, snap) {
@@ -6429,7 +6435,12 @@ Game.prototype.updateCamera = function (dt, snap) {
        into the corner. Then tilt down about the camera's OWN right. Each step
        is applied in the frame the previous one produced, which is what the
        words actually mean. */
-    _camEuler.set(p.pitch * (1 - cfg.stabPitch), p.vyaw, p.roll * (1 - cfg.stabRoll), 'YXZ');
+    /* Roll = whatever of the car's own roll this mount lets through, plus an
+       optional lean INTO the turn. Positive roll lifts the car's LEFT, and a
+       left turn is a positive yaw rate, so leaning into it is NEGATIVE. */
+    var roll = p.roll * (1 - cfg.stabRoll);
+    if (cfg.bankIn) roll -= clamp(p.yawRate * cfg.bankIn, -0.25, 0.25);
+    _camEuler.set(p.pitch * (1 - cfg.stabPitch), p.vyaw, roll, 'YXZ');
     _camQ.setFromEuler(_camEuler);
 
     _camEuler2.set(0, Math.PI + this.headYaw, 0, 'YXZ');
