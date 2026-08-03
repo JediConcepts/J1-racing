@@ -910,6 +910,10 @@
     <div class="settings" id="board" hidden>
       <div class="settings-box" role="dialog" aria-modal="true" aria-labelledby="board-title">
         <h2 class="settings-title" id="board-title">GLOBAL LEADERBOARD</h2>
+        <!-- Every circuit keeps its own board, so you need to be able to read
+             one without loading that circuit just to look. Same rail as the
+             settings picker; filled from TRACKS at runtime. -->
+        <div class="tracklist" id="board-track-list" role="radiogroup" aria-label="Leaderboard circuit"></div>
         <p class="shint" id="board-status">Loading&hellip;</p>
         <div id="board-rows"></div>
         <div class="srow srow-actions">
@@ -970,6 +974,24 @@
         </div>
 
         <p class="shint" id="set-sens-hint">Shapes the stick around centre and how fast the arrow keys wind on.</p>
+
+        <!-- Separate trims, because the engine and the score want very
+             different levels depending on whether you are wearing headphones.
+             These sit under the ENGINE/MUSIC on-off toggles, not instead of
+             them: turning a bus down and switching it off stay distinct. -->
+        <div class="srow">
+          <span class="slabel">ENGINE VOL</span>
+          <input type="range" class="srange" id="set-envol" min="0" max="10" step="1" value="10"
+                 aria-label="Engine volume, 0 silent to 10 full." />
+          <span class="snum" id="set-envol-num">10</span>
+        </div>
+
+        <div class="srow">
+          <span class="slabel">MUSIC VOL</span>
+          <input type="range" class="srange" id="set-musvol" min="0" max="10" step="1" value="10"
+                 aria-label="Music volume, 0 silent to 10 full." />
+          <span class="snum" id="set-musvol-num">10</span>
+        </div>
 
         <div class="srow">
           <span class="slabel">THROTTLE</span>
@@ -1703,7 +1725,29 @@ function EngineAudio() {
   this.engineMuted = true;
   this.musicMuted = false;
   this.failed = false;
+  /* 0..1 trims sitting under the mutes, so turning a bus down and turning it
+     off stay separate controls. */
+  this.engineVol = 1;
+  this.musicVol = 1;
+  this.theme = MUSIC_THEMES.papaya;
 }
+
+/* A circuit's theme. Resets the step counter so a switch starts the loop at
+   bar one rather than dropping into the middle of the new pattern. */
+EngineAudio.prototype.setMusicTheme = function (id) {
+  var th = MUSIC_THEMES[id] || MUSIC_THEMES.papaya;
+  if (this.theme === th) return;
+  this.theme = th;
+  this.musicStep = 0;
+};
+
+EngineAudio.prototype.setLevels = function (engineVol, musicVol) {
+  this.engineVol = clamp(engineVol, 0, 1);
+  this.musicVol = clamp(musicVol, 0, 1);
+  /* Music level is applied in tickMusic, which already ramps the bus every
+     frame; setting it here too would fight that ramp. */
+  if (this.engineBus) this.engineBus.gain.value = this.engineMuted ? 0 : this.engineVol;
+};
 
 EngineAudio.prototype.init = function () {
   if (this.ctx || this.failed) return;
@@ -1717,7 +1761,7 @@ EngineAudio.prototype.init = function () {
     this.master.connect(ctx.destination);
 
     this.engineBus = ctx.createGain();
-    this.engineBus.gain.value = this.engineMuted ? 0 : 1;
+    this.engineBus.gain.value = this.engineMuted ? 0 : this.engineVol;
     this.engineBus.connect(this.master);
 
     this.fxBus = ctx.createGain();
@@ -1772,7 +1816,7 @@ EngineAudio.prototype.resume = function () {
 
 EngineAudio.prototype.setEngineMuted = function (m) {
   this.engineMuted = m;
-  if (this.ready) this.engineBus.gain.setTargetAtTime(m ? 0 : 1, this.ctx.currentTime, 0.08);
+  if (this.ready) this.engineBus.gain.setTargetAtTime(m ? 0 : this.engineVol, this.ctx.currentTime, 0.08);
 };
 
 EngineAudio.prototype.wake = function () {
@@ -1822,6 +1866,13 @@ EngineAudio.prototype.blip = function (freq, dur, type, vol) {
 
 var MUSIC_BPM = 134;
 
+/* NOTE ON THE NEW THEMES BELOW — these are ORIGINAL pieces written in the
+   idiom of mid-80s driving rock: four-on-the-floor kick, backbeat snare,
+   octave-jumping bass, i-VI-III-VII changes, an anthemic lead sitting high
+   over the top. That progression and that drum pattern are the common stock
+   of the entire genre and belong to nobody. No existing melody is quoted,
+   transposed or paraphrased in any of them. */
+
 /* MIDI note numbers; null = rest. 32 eighth-notes = four bars. */
 var BASS_LINE = [
   45, null, 45, 48, 50, null, 48, 45,
@@ -1844,6 +1895,56 @@ var KICK = [1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 1, 0,
             1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 1, 0];
 var SNARE = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
              0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1];
+
+/* SPEEDWAY — Indianapolis. D minor, i-VI-III-VII (Dm-Bb-F-C), four on the
+   floor, bass jumping the octave on the off-beat, hook entering every second
+   bar. Faster and flatter than the road-circuit theme because the oval never
+   asks you to lift. */
+var SPEEDWAY_BASS = [
+  38, 38, 50, 38, 38, 38, 45, 48,
+  34, 34, 46, 34, 34, 34, 41, 43,
+  41, 41, 53, 41, 41, 41, 48, 50,
+  36, 36, 48, 36, 36, 36, 43, 45
+];
+var SPEEDWAY_LEAD = [
+  null, null, null, null, null, null, null, null,
+  69, null, 70, null, 69, 65, 62, null,
+  null, null, null, null, null, null, null, null,
+  72, null, 70, null, 69, 67, 65, null
+];
+var SPEEDWAY_CHORDS = [[50, 53, 57], [46, 50, 53], [53, 57, 60], [48, 52, 55]];
+var SPEEDWAY_KICK = [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+                     1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0];
+var SPEEDWAY_SNARE = [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0,
+                      0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1];
+
+/* DOWNLAND — Brands Hatch. E minor, Em-C-G-D, a syncopated kick rather than a
+   straight four, and a bass that breathes on the off-beat. Darker and rollier
+   to match a circuit that spends its lap going up and down. */
+var DOWNLAND_BASS = [
+  40, null, 40, 47, 40, null, 43, 45,
+  36, null, 36, 43, 36, null, 40, 42,
+  43, null, 43, 50, 43, null, 47, 48,
+  38, null, 38, 45, 38, null, 42, 43
+];
+var DOWNLAND_LEAD = [
+  null, null, null, null, null, null, null, null,
+  71, null, 72, 71, 69, null, 67, null,
+  null, null, null, null, null, null, null, null,
+  67, null, 69, 71, 72, null, 71, null
+];
+var DOWNLAND_CHORDS = [[52, 55, 59], [48, 52, 55], [55, 59, 62], [50, 54, 57]];
+var DOWNLAND_KICK = [1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0,
+                     1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 1, 0];
+var DOWNLAND_SNARE = [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0,
+                      0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0];
+
+/* A circuit names one of these; unknown or absent falls back to `papaya`. */
+var MUSIC_THEMES = {
+  papaya:   { bpm: 134, bass: BASS_LINE,     lead: LEAD_LINE,     chords: CHORDS,          kick: KICK,          snare: SNARE },
+  speedway: { bpm: 142, bass: SPEEDWAY_BASS, lead: SPEEDWAY_LEAD, chords: SPEEDWAY_CHORDS, kick: SPEEDWAY_KICK, snare: SPEEDWAY_SNARE },
+  downland: { bpm: 126, bass: DOWNLAND_BASS, lead: DOWNLAND_LEAD, chords: DOWNLAND_CHORDS, kick: DOWNLAND_KICK, snare: DOWNLAND_SNARE }
+};
 
 function midiFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 
@@ -1915,11 +2016,12 @@ EngineAudio.prototype.tickMusic = function (level) {
   this.initMusic();
   if (!this.musicBus) return;
 
-  var target = this.musicMuted ? 0 : level;
+  var target = this.musicMuted ? 0 : level * this.musicVol;
   this.musicBus.gain.setTargetAtTime(target, this.ctx.currentTime, 0.35);
   if (target <= 0.001 && this.musicBus.gain.value < 0.005) return;
 
-  var stepDur = 30 / MUSIC_BPM;          /* an eighth note */
+  var th = this.theme || MUSIC_THEMES.papaya;
+  var stepDur = 30 / (th.bpm || MUSIC_BPM);   /* an eighth note */
   var now = this.ctx.currentTime;
   if (this.musicNext < now) this.musicNext = now + 0.06;
 
@@ -1927,14 +2029,14 @@ EngineAudio.prototype.tickMusic = function (level) {
   while (this.musicNext < now + 0.25 && guard++ < 16) {
     var i = this.musicStep, t = this.musicNext;
 
-    if (BASS_LINE[i] != null) this.tone(t, midiFreq(BASS_LINE[i]), 0.23, 'sawtooth', 0.30, 620);
-    if (LEAD_LINE[i] != null) this.tone(t, midiFreq(LEAD_LINE[i]), 0.26, 'square', 0.11, 2600);
-    if (KICK[i]) this.drum(t, 'kick');
-    if (SNARE[i]) this.drum(t, 'snare');
+    if (th.bass[i] != null) this.tone(t, midiFreq(th.bass[i]), 0.23, 'sawtooth', 0.30, 620);
+    if (th.lead[i] != null) this.tone(t, midiFreq(th.lead[i]), 0.26, 'square', 0.11, 2600);
+    if (th.kick[i]) this.drum(t, 'kick');
+    if (th.snare[i]) this.drum(t, 'snare');
     this.drum(t, 'hat');
 
     if (i % 8 === 0) {
-      var ch = CHORDS[(i / 8) | 0];
+      var ch = th.chords[(i / 8) | 0];
       for (var c = 0; c < ch.length; c++) {
         this.tone(t, midiFreq(ch[c] + 12), 0.62, 'triangle', 0.055, 1800);
       }
@@ -2191,6 +2293,8 @@ var TRACKS = [
     grid: 33,
     gridCols: 3,
     playerStart: 'mid',
+    /* faster, flatter, four on the floor — the oval never asks for a lift */
+    music: 'speedway',
     control: INDY_CONTROL,
     corners: INDY_CORNERS
   },
@@ -2203,6 +2307,8 @@ var TRACKS = [
        this narrow circuit at Silverstone's 14.4 m */
     halfW: 6.0,
     runoff: 6.0,
+    /* darker and rollier, to match a lap spent going up and down */
+    music: 'downland',
     control: BRANDS_CONTROL,
     corners: BRANDS_CORNERS
   }
@@ -3155,13 +3261,33 @@ function mergeParts(list) {
   return out;
 }
 
+/* INDEX 0 IS THE PLAYER'S AND NOBODY ELSE'S. Papaya is the car you are
+   looking for on a 33-car grid, so buildGrid hands index 0 to the player and
+   draws the AI from 1 upward. Assigning by `i % LIVERIES.length` put a papaya
+   car in six of Indy's 33 slots and made the player's own car unfindable.
+
+   The rest exist in enough number that a full Indy field does not read as the
+   same six cars repeated: 15 AI liveries over 32 opponents is roughly two of
+   each, which is what a real grid looks like anyway. None of them is anywhere
+   near papaya — no yellow-orange, no bronze — so nothing else can be mistaken
+   for the car you are driving. */
 var LIVERIES = [
   { name: 'MCL 64', body: 0xff8000, trim: 0x1b1c22, accent: 0x4fe3e0, helmet: 0xf2f2f4, num: '4' },
   { name: 'ARGENT', body: 0xb9bec7, trim: 0x22242c, accent: 0x39d17a, helmet: 0x2c2f3a, num: '17' },
   { name: 'ROSSO', body: 0xd2352f, trim: 0x1c1417, accent: 0xf2d16b, helmet: 0xf2d16b, num: '9' },
-  { name: 'AZUL', body: 0x2b56c4, trim: 0x141a2c, accent: 0xf25c2a, helmet: 0xe8e8ea, num: '22' },
+  { name: 'AZUL', body: 0x2b56c4, trim: 0x141a2c, accent: 0x4fe3e0, helmet: 0xe8e8ea, num: '22' },
   { name: 'VERDE', body: 0x1f7a54, trim: 0x11251d, accent: 0xd8e84a, helmet: 0xd8e84a, num: '55' },
-  { name: 'VIOLA', body: 0x6b3fb0, trim: 0x1a1426, accent: 0xff8ad1, helmet: 0xffffff, num: '31' }
+  { name: 'VIOLA', body: 0x6b3fb0, trim: 0x1a1426, accent: 0xff8ad1, helmet: 0xffffff, num: '31' },
+  { name: 'NERO', body: 0x2b2f36, trim: 0x121417, accent: 0x4fe3e0, helmet: 0xe8e8ea, num: '3' },
+  { name: 'GIALLO', body: 0xeddb3a, trim: 0x1e1c12, accent: 0x2b2f36, helmet: 0x2b2f36, num: '12' },
+  { name: 'CIELO', body: 0x5bc8f5, trim: 0x14232c, accent: 0xffffff, helmet: 0x14232c, num: '27' },
+  { name: 'ROSA', body: 0xe0559a, trim: 0x2a1420, accent: 0xf2f2f4, helmet: 0xf2f2f4, num: '7' },
+  { name: 'TEAL', body: 0x128f8b, trim: 0x0c2422, accent: 0xd8e84a, helmet: 0xe8e8ea, num: '44' },
+  { name: 'SABBIA', body: 0xcdb894, trim: 0x241f16, accent: 0x7a1f2b, helmet: 0x241f16, num: '18' },
+  { name: 'GRANATO', body: 0x7a1f2b, trim: 0x1a0d10, accent: 0xcdb894, helmet: 0xcdb894, num: '5' },
+  { name: 'INDACO', body: 0x35358f, trim: 0x121230, accent: 0x9bd642, helmet: 0xe8e8ea, num: '63' },
+  { name: 'LIME', body: 0x9bd642, trim: 0x18220c, accent: 0x2b2f36, helmet: 0x2b2f36, num: '81' },
+  { name: 'ARDESIA', body: 0x5b6572, trim: 0x191d22, accent: 0xff8ad1, helmet: 0xe8e8ea, num: '10' }
 ];
 
 var _shadowTex = null;
@@ -4556,6 +4682,9 @@ Game.prototype.buildWorld = function () {
   scene.add(new THREE.AmbientLight(0x4d566a, 0.5));
 
   this.track = new Track(trackById(this.settings.trackId));
+  /* Each circuit brings its own score; absent or unknown falls back to the
+     original theme, so a new circuit needs no music work to ship. */
+  this.audio.setMusicTheme(this.track.def.music);
   buildTrackMeshes(this.track, scene);
   this.gantry = buildStartGantry(this.track, scene);
   this.scenery = buildScenery(this.track, scene);
@@ -4601,7 +4730,11 @@ Game.prototype.buildGrid = function () {
   this.cars = [];
   this.ais = [];
   for (var i = 0; i < this.gridSize(); i++) {
-    var livery = LIVERIES[i % LIVERIES.length];
+    /* Papaya is reserved for the player — see the note on LIVERIES. The AI
+       cycles the rest, never index 0, so exactly one orange car takes the
+       grid however large the field is. */
+    var livery = (i === 0) ? LIVERIES[0]
+      : LIVERIES[1 + ((i - 1) % Math.max(1, LIVERIES.length - 1))];
     var v = new Vehicle(this.track, livery, i === 0);
     this.scene.add(v.group);
     this.scene.add(v.shadow);
@@ -5097,6 +5230,20 @@ Game.prototype.bindInput = function () {
     self.saveSettings();
   });
 
+  var enVol = document.getElementById('set-envol');
+  if (enVol) enVol.addEventListener('input', function () {
+    self.settings.engineVol = clamp(parseInt(enVol.value, 10), 0, 10);
+    self.applySettings();
+    self.saveSettings();
+  });
+
+  var musVol = document.getElementById('set-musvol');
+  if (musVol) musVol.addEventListener('input', function () {
+    self.settings.musicVol = clamp(parseInt(musVol.value, 10), 0, 10);
+    self.applySettings();
+    self.saveSettings();
+  });
+
   var throttleSet = document.getElementById('set-throttle');
   if (throttleSet) throttleSet.addEventListener('click', function (e) {
     e.preventDefault();
@@ -5349,6 +5496,8 @@ Game.prototype.loadSettings = function () {
     steerTilt: false,
     tiltInvert: false,
     steerSens: 6,
+    engineVol: 10,
+    musicVol: 10,
     autoThrottle: touchLikely(),
     autoFullscreen: true,
     /* Retro is the default because it is the point of the thing — modern is
@@ -5378,6 +5527,10 @@ Game.prototype.loadSettings = function () {
          value keeps it instead of being silently reset to 6 */
       var sv = (typeof p.steerSens === 'number') ? p.steerSens : p.tiltSens;
       if (typeof sv === 'number' && isFinite(sv)) s.steerSens = clamp(Math.round(sv), 1, 10);
+      /* 0 is a legitimate value here — silent — so these check isFinite
+         rather than truthiness, or muting a bus would never persist. */
+      if (typeof p.engineVol === 'number' && isFinite(p.engineVol)) s.engineVol = clamp(Math.round(p.engineVol), 0, 10);
+      if (typeof p.musicVol === 'number' && isFinite(p.musicVol)) s.musicVol = clamp(Math.round(p.musicVol), 0, 10);
     }
   } catch (e) { /* blocked storage or corrupt JSON — defaults are fine */ }
   return s;
@@ -5432,6 +5585,14 @@ Game.prototype.syncSettingsUi = function () {
   var fsRow = document.getElementById('row-autofs');
   if (fsRow) fsRow.classList.toggle('is-disabled', !fullscreenSupported() || isStandalone());
   put('set-sens-num', String(s.steerSens));
+  put('set-envol-num', String(s.engineVol));
+  put('set-musvol-num', String(s.musicVol));
+
+  var ev = document.getElementById('set-envol');
+  if (ev && ev.value !== String(s.engineVol)) ev.value = String(s.engineVol);
+  var mv = document.getElementById('set-musvol');
+  if (mv && mv.value !== String(s.musicVol)) mv.value = String(s.musicVol);
+  this.audio.setLevels(s.engineVol / 10, s.musicVol / 10);
 
   var slider = document.getElementById('set-sens');
   if (slider && slider.value !== String(s.steerSens)) slider.value = String(s.steerSens);
@@ -5679,7 +5840,12 @@ Game.prototype.openBoard = function () {
   if (!el || !el.hidden) return;
   this.boardResume = (this.state === STATE.RACING || this.state === STATE.COUNTDOWN) && !this.paused;
   if (this.boardResume) this.paused = true;
+  /* Always open on the circuit you are actually driving. */
+  this.boardTrackId = this.trackVersion();
   el.hidden = false;
+  /* AFTER unhiding — the rail measures 0 wide while the panel is display:none,
+     so scrolling the current card into view has nothing to compute against. */
+  this.syncTrackRail('board-track-list', this.boardTrackId);
   this.loadBoard();
 };
 
@@ -5698,16 +5864,23 @@ Game.prototype.loadBoard = function () {
   if (status) status.textContent = 'Loading…';
 
   /* Ten are visible; the rest are there to scroll to. */
-  var tv = this.trackVersion();
+  var tv = this.boardTrackId || this.trackVersion();
+  var def = trackById(tv) || (this.track && this.track.def);
+  var label = (def && def.name) || tv;
+  var conditions = def ? (def.laps + ' laps · ' + (def.grid || GRID_SIZE) + ' cars') : 'full grid';
+
   this.cloud.leaderboard(tv, 50).then(function (list) {
     rows.textContent = '';
     if (!list.length) {
       if (status) {
-        status.textContent = 'No times posted yet. Race conditions, 3 laps, full grid — first one on the board sets the target.';
+        /* Was hardcoded to "3 laps", which was simply wrong on a 5-lap oval
+           and a 4-lap Brands. Read it off the circuit. */
+        status.textContent = 'No times posted at ' + label + ' yet. Race conditions, ' +
+          conditions + ' — first one on the board sets the target.';
       }
       return;
     }
-    if (status) status.textContent = (self.track.name || tv) + ' · ' + self.track.laps + ' laps · full grid';
+    if (status) status.textContent = label + ' · ' + conditions;
 
     var head = document.createElement('div');
     head.className = 'brow brow-head';
@@ -6393,9 +6566,22 @@ Game.prototype.carName = function (v) {
    you were choosing — every look at the next name cost a full page reload,
    and you had to cycle all the way round to get back. */
 Game.prototype.buildTrackList = function () {
-  var host = document.getElementById('set-track-list');
-  if (!host) return;
   var self = this;
+  /* Two rails, same widget, different consequence: picking in SETTINGS loads
+     that circuit, picking in the LEADERBOARD only changes which board you are
+     reading. Nobody should have to load Indianapolis to see its times. */
+  this.buildTrackRail('set-track-list', function (id) { self.selectTrack(id); });
+  this.buildTrackRail('board-track-list', function (id) {
+    self.boardTrackId = id;
+    self.syncTrackRail('board-track-list', id);
+    self.loadBoard();
+  });
+  this.syncTrackList();
+};
+
+Game.prototype.buildTrackRail = function (hostId, onPick) {
+  var host = document.getElementById(hostId);
+  if (!host) return;
   host.innerHTML = '';
 
   for (var i = 0; i < TRACKS.length; i++) {
@@ -6419,20 +6605,23 @@ Game.prototype.buildTrackList = function () {
 
       b.addEventListener('click', function (e) {
         e.preventDefault();
-        self.selectTrack(def.id);
+        onPick(def.id);
       });
       host.appendChild(b);
     })(TRACKS[i]);
   }
-  this.syncTrackList();
 };
 
 /* Marks the current circuit. Called from applySettings too, so the list is
    right whenever the panel opens rather than only when it is first built. */
 Game.prototype.syncTrackList = function () {
-  var host = document.getElementById('set-track-list');
+  this.syncTrackRail('set-track-list', this.settings.trackId || (this.track && this.track.def.id));
+  this.syncTrackRail('board-track-list', this.boardTrackId || this.trackVersion());
+};
+
+Game.prototype.syncTrackRail = function (hostId, current) {
+  var host = document.getElementById(hostId);
   if (!host) return;
-  var current = this.settings.trackId || (this.track && this.track.def.id);
   var rows = host.children, sel = null;
   for (var i = 0; i < rows.length; i++) {
     var on = rows[i].dataset.trackId === current;

@@ -145,6 +145,9 @@ Game.prototype.buildWorld = function () {
   scene.add(new THREE.AmbientLight(0x4d566a, 0.5));
 
   this.track = new Track(trackById(this.settings.trackId));
+  /* Each circuit brings its own score; absent or unknown falls back to the
+     original theme, so a new circuit needs no music work to ship. */
+  this.audio.setMusicTheme(this.track.def.music);
   buildTrackMeshes(this.track, scene);
   this.gantry = buildStartGantry(this.track, scene);
   this.scenery = buildScenery(this.track, scene);
@@ -190,7 +193,11 @@ Game.prototype.buildGrid = function () {
   this.cars = [];
   this.ais = [];
   for (var i = 0; i < this.gridSize(); i++) {
-    var livery = LIVERIES[i % LIVERIES.length];
+    /* Papaya is reserved for the player — see the note on LIVERIES. The AI
+       cycles the rest, never index 0, so exactly one orange car takes the
+       grid however large the field is. */
+    var livery = (i === 0) ? LIVERIES[0]
+      : LIVERIES[1 + ((i - 1) % Math.max(1, LIVERIES.length - 1))];
     var v = new Vehicle(this.track, livery, i === 0);
     this.scene.add(v.group);
     this.scene.add(v.shadow);
@@ -686,6 +693,20 @@ Game.prototype.bindInput = function () {
     self.saveSettings();
   });
 
+  var enVol = document.getElementById('set-envol');
+  if (enVol) enVol.addEventListener('input', function () {
+    self.settings.engineVol = clamp(parseInt(enVol.value, 10), 0, 10);
+    self.applySettings();
+    self.saveSettings();
+  });
+
+  var musVol = document.getElementById('set-musvol');
+  if (musVol) musVol.addEventListener('input', function () {
+    self.settings.musicVol = clamp(parseInt(musVol.value, 10), 0, 10);
+    self.applySettings();
+    self.saveSettings();
+  });
+
   var throttleSet = document.getElementById('set-throttle');
   if (throttleSet) throttleSet.addEventListener('click', function (e) {
     e.preventDefault();
@@ -938,6 +959,8 @@ Game.prototype.loadSettings = function () {
     steerTilt: false,
     tiltInvert: false,
     steerSens: 6,
+    engineVol: 10,
+    musicVol: 10,
     autoThrottle: touchLikely(),
     autoFullscreen: true,
     /* Retro is the default because it is the point of the thing — modern is
@@ -967,6 +990,10 @@ Game.prototype.loadSettings = function () {
          value keeps it instead of being silently reset to 6 */
       var sv = (typeof p.steerSens === 'number') ? p.steerSens : p.tiltSens;
       if (typeof sv === 'number' && isFinite(sv)) s.steerSens = clamp(Math.round(sv), 1, 10);
+      /* 0 is a legitimate value here — silent — so these check isFinite
+         rather than truthiness, or muting a bus would never persist. */
+      if (typeof p.engineVol === 'number' && isFinite(p.engineVol)) s.engineVol = clamp(Math.round(p.engineVol), 0, 10);
+      if (typeof p.musicVol === 'number' && isFinite(p.musicVol)) s.musicVol = clamp(Math.round(p.musicVol), 0, 10);
     }
   } catch (e) { /* blocked storage or corrupt JSON — defaults are fine */ }
   return s;
@@ -1021,6 +1048,14 @@ Game.prototype.syncSettingsUi = function () {
   var fsRow = document.getElementById('row-autofs');
   if (fsRow) fsRow.classList.toggle('is-disabled', !fullscreenSupported() || isStandalone());
   put('set-sens-num', String(s.steerSens));
+  put('set-envol-num', String(s.engineVol));
+  put('set-musvol-num', String(s.musicVol));
+
+  var ev = document.getElementById('set-envol');
+  if (ev && ev.value !== String(s.engineVol)) ev.value = String(s.engineVol);
+  var mv = document.getElementById('set-musvol');
+  if (mv && mv.value !== String(s.musicVol)) mv.value = String(s.musicVol);
+  this.audio.setLevels(s.engineVol / 10, s.musicVol / 10);
 
   var slider = document.getElementById('set-sens');
   if (slider && slider.value !== String(s.steerSens)) slider.value = String(s.steerSens);
@@ -1268,7 +1303,12 @@ Game.prototype.openBoard = function () {
   if (!el || !el.hidden) return;
   this.boardResume = (this.state === STATE.RACING || this.state === STATE.COUNTDOWN) && !this.paused;
   if (this.boardResume) this.paused = true;
+  /* Always open on the circuit you are actually driving. */
+  this.boardTrackId = this.trackVersion();
   el.hidden = false;
+  /* AFTER unhiding — the rail measures 0 wide while the panel is display:none,
+     so scrolling the current card into view has nothing to compute against. */
+  this.syncTrackRail('board-track-list', this.boardTrackId);
   this.loadBoard();
 };
 
@@ -1287,16 +1327,23 @@ Game.prototype.loadBoard = function () {
   if (status) status.textContent = 'Loading…';
 
   /* Ten are visible; the rest are there to scroll to. */
-  var tv = this.trackVersion();
+  var tv = this.boardTrackId || this.trackVersion();
+  var def = trackById(tv) || (this.track && this.track.def);
+  var label = (def && def.name) || tv;
+  var conditions = def ? (def.laps + ' laps · ' + (def.grid || GRID_SIZE) + ' cars') : 'full grid';
+
   this.cloud.leaderboard(tv, 50).then(function (list) {
     rows.textContent = '';
     if (!list.length) {
       if (status) {
-        status.textContent = 'No times posted yet. Race conditions, 3 laps, full grid — first one on the board sets the target.';
+        /* Was hardcoded to "3 laps", which was simply wrong on a 5-lap oval
+           and a 4-lap Brands. Read it off the circuit. */
+        status.textContent = 'No times posted at ' + label + ' yet. Race conditions, ' +
+          conditions + ' — first one on the board sets the target.';
       }
       return;
     }
-    if (status) status.textContent = (self.track.name || tv) + ' · ' + self.track.laps + ' laps · full grid';
+    if (status) status.textContent = label + ' · ' + conditions;
 
     var head = document.createElement('div');
     head.className = 'brow brow-head';
@@ -1982,9 +2029,22 @@ Game.prototype.carName = function (v) {
    you were choosing — every look at the next name cost a full page reload,
    and you had to cycle all the way round to get back. */
 Game.prototype.buildTrackList = function () {
-  var host = document.getElementById('set-track-list');
-  if (!host) return;
   var self = this;
+  /* Two rails, same widget, different consequence: picking in SETTINGS loads
+     that circuit, picking in the LEADERBOARD only changes which board you are
+     reading. Nobody should have to load Indianapolis to see its times. */
+  this.buildTrackRail('set-track-list', function (id) { self.selectTrack(id); });
+  this.buildTrackRail('board-track-list', function (id) {
+    self.boardTrackId = id;
+    self.syncTrackRail('board-track-list', id);
+    self.loadBoard();
+  });
+  this.syncTrackList();
+};
+
+Game.prototype.buildTrackRail = function (hostId, onPick) {
+  var host = document.getElementById(hostId);
+  if (!host) return;
   host.innerHTML = '';
 
   for (var i = 0; i < TRACKS.length; i++) {
@@ -2008,20 +2068,23 @@ Game.prototype.buildTrackList = function () {
 
       b.addEventListener('click', function (e) {
         e.preventDefault();
-        self.selectTrack(def.id);
+        onPick(def.id);
       });
       host.appendChild(b);
     })(TRACKS[i]);
   }
-  this.syncTrackList();
 };
 
 /* Marks the current circuit. Called from applySettings too, so the list is
    right whenever the panel opens rather than only when it is first built. */
 Game.prototype.syncTrackList = function () {
-  var host = document.getElementById('set-track-list');
+  this.syncTrackRail('set-track-list', this.settings.trackId || (this.track && this.track.def.id));
+  this.syncTrackRail('board-track-list', this.boardTrackId || this.trackVersion());
+};
+
+Game.prototype.syncTrackRail = function (hostId, current) {
+  var host = document.getElementById(hostId);
   if (!host) return;
-  var current = this.settings.trackId || (this.track && this.track.def.id);
   var rows = host.children, sel = null;
   for (var i = 0; i < rows.length; i++) {
     var on = rows[i].dataset.trackId === current;

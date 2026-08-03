@@ -324,7 +324,29 @@ function EngineAudio() {
   this.engineMuted = true;
   this.musicMuted = false;
   this.failed = false;
+  /* 0..1 trims sitting under the mutes, so turning a bus down and turning it
+     off stay separate controls. */
+  this.engineVol = 1;
+  this.musicVol = 1;
+  this.theme = MUSIC_THEMES.papaya;
 }
+
+/* A circuit's theme. Resets the step counter so a switch starts the loop at
+   bar one rather than dropping into the middle of the new pattern. */
+EngineAudio.prototype.setMusicTheme = function (id) {
+  var th = MUSIC_THEMES[id] || MUSIC_THEMES.papaya;
+  if (this.theme === th) return;
+  this.theme = th;
+  this.musicStep = 0;
+};
+
+EngineAudio.prototype.setLevels = function (engineVol, musicVol) {
+  this.engineVol = clamp(engineVol, 0, 1);
+  this.musicVol = clamp(musicVol, 0, 1);
+  /* Music level is applied in tickMusic, which already ramps the bus every
+     frame; setting it here too would fight that ramp. */
+  if (this.engineBus) this.engineBus.gain.value = this.engineMuted ? 0 : this.engineVol;
+};
 
 EngineAudio.prototype.init = function () {
   if (this.ctx || this.failed) return;
@@ -338,7 +360,7 @@ EngineAudio.prototype.init = function () {
     this.master.connect(ctx.destination);
 
     this.engineBus = ctx.createGain();
-    this.engineBus.gain.value = this.engineMuted ? 0 : 1;
+    this.engineBus.gain.value = this.engineMuted ? 0 : this.engineVol;
     this.engineBus.connect(this.master);
 
     this.fxBus = ctx.createGain();
@@ -393,7 +415,7 @@ EngineAudio.prototype.resume = function () {
 
 EngineAudio.prototype.setEngineMuted = function (m) {
   this.engineMuted = m;
-  if (this.ready) this.engineBus.gain.setTargetAtTime(m ? 0 : 1, this.ctx.currentTime, 0.08);
+  if (this.ready) this.engineBus.gain.setTargetAtTime(m ? 0 : this.engineVol, this.ctx.currentTime, 0.08);
 };
 
 EngineAudio.prototype.wake = function () {
@@ -443,6 +465,13 @@ EngineAudio.prototype.blip = function (freq, dur, type, vol) {
 
 var MUSIC_BPM = 134;
 
+/* NOTE ON THE NEW THEMES BELOW — these are ORIGINAL pieces written in the
+   idiom of mid-80s driving rock: four-on-the-floor kick, backbeat snare,
+   octave-jumping bass, i-VI-III-VII changes, an anthemic lead sitting high
+   over the top. That progression and that drum pattern are the common stock
+   of the entire genre and belong to nobody. No existing melody is quoted,
+   transposed or paraphrased in any of them. */
+
 /* MIDI note numbers; null = rest. 32 eighth-notes = four bars. */
 var BASS_LINE = [
   45, null, 45, 48, 50, null, 48, 45,
@@ -465,6 +494,56 @@ var KICK = [1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 1, 0,
             1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 1, 0];
 var SNARE = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
              0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1];
+
+/* SPEEDWAY — Indianapolis. D minor, i-VI-III-VII (Dm-Bb-F-C), four on the
+   floor, bass jumping the octave on the off-beat, hook entering every second
+   bar. Faster and flatter than the road-circuit theme because the oval never
+   asks you to lift. */
+var SPEEDWAY_BASS = [
+  38, 38, 50, 38, 38, 38, 45, 48,
+  34, 34, 46, 34, 34, 34, 41, 43,
+  41, 41, 53, 41, 41, 41, 48, 50,
+  36, 36, 48, 36, 36, 36, 43, 45
+];
+var SPEEDWAY_LEAD = [
+  null, null, null, null, null, null, null, null,
+  69, null, 70, null, 69, 65, 62, null,
+  null, null, null, null, null, null, null, null,
+  72, null, 70, null, 69, 67, 65, null
+];
+var SPEEDWAY_CHORDS = [[50, 53, 57], [46, 50, 53], [53, 57, 60], [48, 52, 55]];
+var SPEEDWAY_KICK = [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+                     1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0];
+var SPEEDWAY_SNARE = [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0,
+                      0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1];
+
+/* DOWNLAND — Brands Hatch. E minor, Em-C-G-D, a syncopated kick rather than a
+   straight four, and a bass that breathes on the off-beat. Darker and rollier
+   to match a circuit that spends its lap going up and down. */
+var DOWNLAND_BASS = [
+  40, null, 40, 47, 40, null, 43, 45,
+  36, null, 36, 43, 36, null, 40, 42,
+  43, null, 43, 50, 43, null, 47, 48,
+  38, null, 38, 45, 38, null, 42, 43
+];
+var DOWNLAND_LEAD = [
+  null, null, null, null, null, null, null, null,
+  71, null, 72, 71, 69, null, 67, null,
+  null, null, null, null, null, null, null, null,
+  67, null, 69, 71, 72, null, 71, null
+];
+var DOWNLAND_CHORDS = [[52, 55, 59], [48, 52, 55], [55, 59, 62], [50, 54, 57]];
+var DOWNLAND_KICK = [1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0,
+                     1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 1, 0];
+var DOWNLAND_SNARE = [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0,
+                      0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0];
+
+/* A circuit names one of these; unknown or absent falls back to `papaya`. */
+var MUSIC_THEMES = {
+  papaya:   { bpm: 134, bass: BASS_LINE,     lead: LEAD_LINE,     chords: CHORDS,          kick: KICK,          snare: SNARE },
+  speedway: { bpm: 142, bass: SPEEDWAY_BASS, lead: SPEEDWAY_LEAD, chords: SPEEDWAY_CHORDS, kick: SPEEDWAY_KICK, snare: SPEEDWAY_SNARE },
+  downland: { bpm: 126, bass: DOWNLAND_BASS, lead: DOWNLAND_LEAD, chords: DOWNLAND_CHORDS, kick: DOWNLAND_KICK, snare: DOWNLAND_SNARE }
+};
 
 function midiFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 
@@ -536,11 +615,12 @@ EngineAudio.prototype.tickMusic = function (level) {
   this.initMusic();
   if (!this.musicBus) return;
 
-  var target = this.musicMuted ? 0 : level;
+  var target = this.musicMuted ? 0 : level * this.musicVol;
   this.musicBus.gain.setTargetAtTime(target, this.ctx.currentTime, 0.35);
   if (target <= 0.001 && this.musicBus.gain.value < 0.005) return;
 
-  var stepDur = 30 / MUSIC_BPM;          /* an eighth note */
+  var th = this.theme || MUSIC_THEMES.papaya;
+  var stepDur = 30 / (th.bpm || MUSIC_BPM);   /* an eighth note */
   var now = this.ctx.currentTime;
   if (this.musicNext < now) this.musicNext = now + 0.06;
 
@@ -548,14 +628,14 @@ EngineAudio.prototype.tickMusic = function (level) {
   while (this.musicNext < now + 0.25 && guard++ < 16) {
     var i = this.musicStep, t = this.musicNext;
 
-    if (BASS_LINE[i] != null) this.tone(t, midiFreq(BASS_LINE[i]), 0.23, 'sawtooth', 0.30, 620);
-    if (LEAD_LINE[i] != null) this.tone(t, midiFreq(LEAD_LINE[i]), 0.26, 'square', 0.11, 2600);
-    if (KICK[i]) this.drum(t, 'kick');
-    if (SNARE[i]) this.drum(t, 'snare');
+    if (th.bass[i] != null) this.tone(t, midiFreq(th.bass[i]), 0.23, 'sawtooth', 0.30, 620);
+    if (th.lead[i] != null) this.tone(t, midiFreq(th.lead[i]), 0.26, 'square', 0.11, 2600);
+    if (th.kick[i]) this.drum(t, 'kick');
+    if (th.snare[i]) this.drum(t, 'snare');
     this.drum(t, 'hat');
 
     if (i % 8 === 0) {
-      var ch = CHORDS[(i / 8) | 0];
+      var ch = th.chords[(i / 8) | 0];
       for (var c = 0; c < ch.length; c++) {
         this.tone(t, midiFreq(ch[c] + 12), 0.62, 'triangle', 0.055, 1800);
       }

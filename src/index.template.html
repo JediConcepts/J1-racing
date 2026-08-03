@@ -910,6 +910,10 @@
     <div class="settings" id="board" hidden>
       <div class="settings-box" role="dialog" aria-modal="true" aria-labelledby="board-title">
         <h2 class="settings-title" id="board-title">GLOBAL LEADERBOARD</h2>
+        <!-- Every circuit keeps its own board, so you need to be able to read
+             one without loading that circuit just to look. Same rail as the
+             settings picker; filled from TRACKS at runtime. -->
+        <div class="tracklist" id="board-track-list" role="radiogroup" aria-label="Leaderboard circuit"></div>
         <p class="shint" id="board-status">Loading&hellip;</p>
         <div id="board-rows"></div>
         <div class="srow srow-actions">
@@ -970,6 +974,24 @@
         </div>
 
         <p class="shint" id="set-sens-hint">Shapes the stick around centre and how fast the arrow keys wind on.</p>
+
+        <!-- Separate trims, because the engine and the score want very
+             different levels depending on whether you are wearing headphones.
+             These sit under the ENGINE/MUSIC on-off toggles, not instead of
+             them: turning a bus down and switching it off stay distinct. -->
+        <div class="srow">
+          <span class="slabel">ENGINE VOL</span>
+          <input type="range" class="srange" id="set-envol" min="0" max="10" step="1" value="10"
+                 aria-label="Engine volume, 0 silent to 10 full." />
+          <span class="snum" id="set-envol-num">10</span>
+        </div>
+
+        <div class="srow">
+          <span class="slabel">MUSIC VOL</span>
+          <input type="range" class="srange" id="set-musvol" min="0" max="10" step="1" value="10"
+                 aria-label="Music volume, 0 silent to 10 full." />
+          <span class="snum" id="set-musvol-num">10</span>
+        </div>
 
         <div class="srow">
           <span class="slabel">THROTTLE</span>

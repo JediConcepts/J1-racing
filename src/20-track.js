@@ -226,6 +226,8 @@ var TRACKS = [
     grid: 33,
     gridCols: 3,
     playerStart: 'mid',
+    /* faster, flatter, four on the floor — the oval never asks for a lift */
+    music: 'speedway',
     control: INDY_CONTROL,
     corners: INDY_CORNERS
   },
@@ -238,6 +240,8 @@ var TRACKS = [
        this narrow circuit at Silverstone's 14.4 m */
     halfW: 6.0,
     runoff: 6.0,
+    /* darker and rollier, to match a lap spent going up and down */
+    music: 'downland',
     control: BRANDS_CONTROL,
     corners: BRANDS_CORNERS
   }

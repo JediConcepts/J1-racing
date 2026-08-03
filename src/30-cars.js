@@ -38,13 +38,33 @@ function mergeParts(list) {
   return out;
 }
 
+/* INDEX 0 IS THE PLAYER'S AND NOBODY ELSE'S. Papaya is the car you are
+   looking for on a 33-car grid, so buildGrid hands index 0 to the player and
+   draws the AI from 1 upward. Assigning by `i % LIVERIES.length` put a papaya
+   car in six of Indy's 33 slots and made the player's own car unfindable.
+
+   The rest exist in enough number that a full Indy field does not read as the
+   same six cars repeated: 15 AI liveries over 32 opponents is roughly two of
+   each, which is what a real grid looks like anyway. None of them is anywhere
+   near papaya — no yellow-orange, no bronze — so nothing else can be mistaken
+   for the car you are driving. */
 var LIVERIES = [
   { name: 'MCL 64', body: 0xff8000, trim: 0x1b1c22, accent: 0x4fe3e0, helmet: 0xf2f2f4, num: '4' },
   { name: 'ARGENT', body: 0xb9bec7, trim: 0x22242c, accent: 0x39d17a, helmet: 0x2c2f3a, num: '17' },
   { name: 'ROSSO', body: 0xd2352f, trim: 0x1c1417, accent: 0xf2d16b, helmet: 0xf2d16b, num: '9' },
-  { name: 'AZUL', body: 0x2b56c4, trim: 0x141a2c, accent: 0xf25c2a, helmet: 0xe8e8ea, num: '22' },
+  { name: 'AZUL', body: 0x2b56c4, trim: 0x141a2c, accent: 0x4fe3e0, helmet: 0xe8e8ea, num: '22' },
   { name: 'VERDE', body: 0x1f7a54, trim: 0x11251d, accent: 0xd8e84a, helmet: 0xd8e84a, num: '55' },
-  { name: 'VIOLA', body: 0x6b3fb0, trim: 0x1a1426, accent: 0xff8ad1, helmet: 0xffffff, num: '31' }
+  { name: 'VIOLA', body: 0x6b3fb0, trim: 0x1a1426, accent: 0xff8ad1, helmet: 0xffffff, num: '31' },
+  { name: 'NERO', body: 0x2b2f36, trim: 0x121417, accent: 0x4fe3e0, helmet: 0xe8e8ea, num: '3' },
+  { name: 'GIALLO', body: 0xeddb3a, trim: 0x1e1c12, accent: 0x2b2f36, helmet: 0x2b2f36, num: '12' },
+  { name: 'CIELO', body: 0x5bc8f5, trim: 0x14232c, accent: 0xffffff, helmet: 0x14232c, num: '27' },
+  { name: 'ROSA', body: 0xe0559a, trim: 0x2a1420, accent: 0xf2f2f4, helmet: 0xf2f2f4, num: '7' },
+  { name: 'TEAL', body: 0x128f8b, trim: 0x0c2422, accent: 0xd8e84a, helmet: 0xe8e8ea, num: '44' },
+  { name: 'SABBIA', body: 0xcdb894, trim: 0x241f16, accent: 0x7a1f2b, helmet: 0x241f16, num: '18' },
+  { name: 'GRANATO', body: 0x7a1f2b, trim: 0x1a0d10, accent: 0xcdb894, helmet: 0xcdb894, num: '5' },
+  { name: 'INDACO', body: 0x35358f, trim: 0x121230, accent: 0x9bd642, helmet: 0xe8e8ea, num: '63' },
+  { name: 'LIME', body: 0x9bd642, trim: 0x18220c, accent: 0x2b2f36, helmet: 0x2b2f36, num: '81' },
+  { name: 'ARDESIA', body: 0x5b6572, trim: 0x191d22, accent: 0xff8ad1, helmet: 0xe8e8ea, num: '10' }
 ];
 
 var _shadowTex = null;
