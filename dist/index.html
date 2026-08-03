@@ -3815,7 +3815,17 @@ Vehicle.prototype.sync = function (dt, alpha) {
 
   /* About 1.5 turns lock to lock, against the front wheels' 0.42 rad — the
      rim moves far more than the tyres, which is what makes it readable. */
-  if (this.steerWheel) this.steerWheel.rotation.z = -this.steerVis * 2.4;
+  /* NOT negated, unlike the road wheels below — the two axes are handed
+     differently and it is only a coincidence that they look alike.
+
+     The road wheels steer about Y, where a positive angle points them at the
+     car's LEFT (local +X is the left), so turning right needs -steerVis.
+
+     The rim spins about Z, whose axis points FORWARD, away from the driver.
+     Seen from behind it — which is the only place anyone ever sees it from —
+     a positive rotation reads CLOCKWISE, which is a right turn. Negating it
+     turned the wheel the opposite way to the car. */
+  if (this.steerWheel) this.steerWheel.rotation.z = this.steerVis * 2.4;
   this.wheels[0].rotation.set(0, -this.steerVis * 0.42, 0);
   this.wheels[1].rotation.set(0, -this.steerVis * 0.42, 0);
   for (var i = 0; i < 4; i++) {
