@@ -2448,17 +2448,46 @@ Track.prototype.frame = function (x, z, hint, out) {
   var dx = x - p.x, dz = z - p.z;
   var along = dx * f.x + dz * f.z;
   var lateral = dx * l.x + dz * l.z;
-  /* refine to the neighbouring segment when we've run past this sample */
-  if (along > this.ds) { i = (i + 1) % n; p = this.p[i]; f = this.fwd[i]; l = this.lat[i]; dx = x - p.x; dz = z - p.z; along = dx * f.x + dz * f.z; lateral = dx * l.x + dz * l.z; }
-  else if (along < -this.ds) { i = (i - 1 + n) % n; p = this.p[i]; f = this.fwd[i]; l = this.lat[i]; dx = x - p.x; dz = z - p.z; along = dx * f.x + dz * f.z; lateral = dx * l.x + dz * l.z; }
+  /* THE REAL LENGTH OF THIS SEGMENT, not the average.
 
-  var t = clamp(along / this.ds, 0, 1);
+     `ds` is length/n, but the spline is sampled at uniform PARAMETER rather
+     than uniform arc length, so segments vary — at Brands they run 3.09 m to
+     5.43 m against a 4.34 m average, nearly 30% either way. Normalising the
+     interpolation by `ds` therefore makes t reach 1 before the next sample on
+     a short segment, and never reach it on a long one, so the height flat-
+     lines and then snaps at every boundary.
+
+     Flat circuits hide this completely: with every p.y at zero the lerp has
+     nothing to get wrong. Brands climbs up to 0.626 m per segment and it
+     showed up as the car shaking — 0.111 m RMS of pure frame-to-frame jitter
+     in the car's vertical position, against a predicted 0.11 m worst case. */
+  var seg = this.cum[i + 1] - this.cum[i];
+  /* Step back to the segment we are actually ON.
+
+     nearestIndex returns the nearest sample POINT, which flips to i+1 at the
+     MIDPOINT of a segment — but everything below treats i as the segment
+     START. So for the second half of every segment the nearest sample is
+     ahead of the car, `along` comes out NEGATIVE, and t clamps to 0: the
+     height stops interpolating and snaps to that sample's value.
+
+     The old guard was `along < -seg`, which can never fire, because
+     nearestIndex has already guaranteed |along| <= seg/2. The result was a
+     jump of half a segment's climb at every single sample crossing — 0.4 m at
+     Brands, once every five frames at racing speed. That is the shaking.
+
+     `along < 0` is the correct test: it puts the car back on the segment
+     whose start it has passed, so along lands in [0, seg] and t sweeps the
+     full 0..1 continuously. */
+  if (along > seg) { i = (i + 1) % n; p = this.p[i]; f = this.fwd[i]; l = this.lat[i]; dx = x - p.x; dz = z - p.z; along = dx * f.x + dz * f.z; lateral = dx * l.x + dz * l.z; seg = this.cum[i + 1] - this.cum[i]; }
+  else if (along < 0) { i = (i - 1 + n) % n; p = this.p[i]; f = this.fwd[i]; l = this.lat[i]; dx = x - p.x; dz = z - p.z; along = dx * f.x + dz * f.z; lateral = dx * l.x + dz * l.z; seg = this.cum[i + 1] - this.cum[i]; }
+
+  var t = clamp(along / seg, 0, 1);
   var nextY = this.p[(i + 1) % n].y;
   var y = lerp(p.y, nextY, t) + lateral * dtan(this.bank[i]);
 
   out.i = i;
   out.lateral = lateral;
-  out.s = this.cum[i] + clamp(along, 0, this.ds);
+  out.s = this.cum[i] + clamp(along, 0, seg);
   out.y = y;
   out.fwd = f;
   out.lat = l;
