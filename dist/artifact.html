@@ -3275,7 +3275,7 @@ function mergeParts(list) {
    near papaya — no yellow-orange, no bronze — so nothing else can be mistaken
    for the car you are driving. */
 var LIVERIES = [
-  { name: 'MCL 64', body: 0xff8000, trim: 0x1b1c22, accent: 0x4fe3e0, helmet: 0xf2f2f4, num: '4' },
+  { name: 'MCL 64', body: 0xff8000, body2: 0x23262e, trim: 0x1b1c22, accent: 0x4fe3e0, helmet: 0xf2f2f4, num: '4' },
   { name: 'ARGENT', body: 0xb9bec7, trim: 0x22242c, accent: 0x39d17a, helmet: 0x2c2f3a, num: '17' },
   { name: 'ROSSO', body: 0xd2352f, trim: 0x1c1417, accent: 0xf2d16b, helmet: 0xf2d16b, num: '9' },
   { name: 'AZUL', body: 0x2b56c4, trim: 0x141a2c, accent: 0x4fe3e0, helmet: 0xe8e8ea, num: '22' },
@@ -3313,6 +3313,12 @@ function shadowTexture() {
    of the car forward of centre; +Z is the nose. */
 function buildCarMesh(livery) {
   var body = livery.body, trim = livery.trim, accent = livery.accent;
+  /* Secondary body colour for the sidepods and engine cover. Modern cars are
+     two-tone — the MCL38 runs papaya over the nose, monocoque and rear wing
+     with the flanks and deck in anthracite — and a car painted one flat colour
+     end to end reads as a toy next to it. Optional, and defaults to `body`, so
+     a livery that does not want the split is unchanged. */
+  var body2 = (livery.body2 == null) ? body : livery.body2;
   var parts = [];
   var RX = Math.PI / 2;          /* stand a cylinder up along Z */
 
@@ -3336,7 +3342,7 @@ function buildCarMesh(livery) {
 
   /* Sidepods: wide and low at the inlet, undercut into the coke-bottle */
   for (var s = -1; s <= 1; s += 2) {
-    parts.push(part(new THREE.CylinderGeometry(0.16, 0.40, 2.35, 8), body,
+    parts.push(part(new THREE.CylinderGeometry(0.16, 0.40, 2.35, 8), body2,
       [s * 0.58, 0.33, -0.55], [RX, 0, 0], [1.34, 1, 0.60]));
     /* dark inlet mouth */
     parts.push(part(new THREE.CylinderGeometry(0.30, 0.30, 0.22, 8), trim,
@@ -3351,7 +3357,7 @@ function buildCarMesh(livery) {
   /* Airbox and engine cover, tapering into the gearbox */
   parts.push(part(new THREE.CylinderGeometry(0.21, 0.27, 0.54, 8), trim,
     [0, 0.78, -0.34], [RX, 0, 0], [1, 1, 0.86]));
-  parts.push(part(new THREE.CylinderGeometry(0.09, 0.30, 2.45, 8), body,
+  parts.push(part(new THREE.CylinderGeometry(0.09, 0.30, 2.45, 8), body2,
     [0, 0.50, -1.55], [RX, 0, 0], [0.94, 1, 0.66]));
   /* shark-fin spine */
   parts.push(part(new THREE.BoxGeometry(0.04, 0.26, 1.40), trim, [0, 0.74, -1.70]));
