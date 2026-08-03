@@ -2043,7 +2043,10 @@ EngineAudio.prototype.initMusic = function () {
   this.musicBus.connect(this.master);
   this.musicStep = 0;
   this.musicNext = 0;
-  this.musicMuted = false;
+  /* Does NOT touch musicMuted. Building the bus is lazy and happens on the
+     first gesture, long after the saved preference has been applied — forcing
+     it false here would silently turn the music back on for anyone who had
+     switched it off, which is precisely the setting we are trying to keep. */
 };
 
 EngineAudio.prototype.tone = function (t, freq, dur, type, vol, cutoff) {
@@ -5403,19 +5406,19 @@ Game.prototype.bindInput = function () {
 
 Game.prototype.toggleMute = function () {
   this.audio.init();
-  this.audio.setEngineMuted(!this.audio.engineMuted);
-  var b = document.getElementById('btn-sound');
-  if (b) b.textContent = this.audio.engineMuted ? 'ENGINE OFF' : 'ENGINE ON';
-  this.flash(this.audio.engineMuted ? 'ENGINE OFF' : 'ENGINE ON');
+  this.settings.engineOn = !this.settings.engineOn;
+  this.applySettings();          /* pushes the mute and relabels the button */
+  this.saveSettings();
+  this.flash(this.settings.engineOn ? 'ENGINE ON' : 'ENGINE OFF');
 };
 
 Game.prototype.toggleMusic = function () {
   this.audio.init();
   this.audio.initMusic();
-  this.audio.musicMuted = !this.audio.musicMuted;
-  var b = document.getElementById('btn-music');
-  if (b) b.textContent = this.audio.musicMuted ? 'MUSIC OFF' : 'MUSIC ON';
-  this.flash(this.audio.musicMuted ? 'MUSIC OFF' : 'MUSIC ON');
+  this.settings.musicOn = !this.settings.musicOn;
+  this.applySettings();          /* pushes the mute and relabels the button */
+  this.saveSettings();
+  this.flash(this.settings.musicOn ? 'MUSIC ON' : 'MUSIC OFF');
 };
 
 Game.prototype.flash = function (msg) {
@@ -5603,6 +5606,11 @@ Game.prototype.loadSettings = function () {
     steerSens: 6,
     engineVol: 10,
     musicVol: 10,
+    /* The on/off state of each bus, kept here rather than only on the audio
+       object — see applySettings. Engine off is the deliberate default: the
+       drone is punishing over three laps, the score is not. */
+    musicOn: true,
+    engineOn: false,
     autoThrottle: touchLikely(),
     autoFullscreen: true,
     /* Retro is the default because it is the point of the thing — modern is
@@ -5634,6 +5642,8 @@ Game.prototype.loadSettings = function () {
       if (typeof sv === 'number' && isFinite(sv)) s.steerSens = clamp(Math.round(sv), 1, 10);
       /* 0 is a legitimate value here — silent — so these check isFinite
          rather than truthiness, or muting a bus would never persist. */
+      if (typeof p.musicOn === 'boolean') s.musicOn = p.musicOn;
+      if (typeof p.engineOn === 'boolean') s.engineOn = p.engineOn;
       if (typeof p.engineVol === 'number' && isFinite(p.engineVol)) s.engineVol = clamp(Math.round(p.engineVol), 0, 10);
       if (typeof p.musicVol === 'number' && isFinite(p.musicVol)) s.musicVol = clamp(Math.round(p.musicVol), 0, 10);
     }
@@ -5698,6 +5708,15 @@ Game.prototype.syncSettingsUi = function () {
   var mv = document.getElementById('set-musvol');
   if (mv && mv.value !== String(s.musicVol)) mv.value = String(s.musicVol);
   this.audio.setLevels(s.engineVol / 10, s.musicVol / 10);
+  /* The mutes live in settings so they survive a reload — and a reload is not
+     rare, since choosing a circuit performs one. Turning the music off and
+     then switching track used to turn it straight back on. */
+  this.audio.musicMuted = !s.musicOn;
+  this.audio.setEngineMuted(!s.engineOn);
+  var mb = document.getElementById('btn-music');
+  if (mb) mb.textContent = s.musicOn ? 'MUSIC ON' : 'MUSIC OFF';
+  var sb = document.getElementById('btn-sound');
+  if (sb) sb.textContent = s.engineOn ? 'ENGINE ON' : 'ENGINE OFF';
 
   var slider = document.getElementById('set-sens');
   if (slider && slider.value !== String(s.steerSens)) slider.value = String(s.steerSens);

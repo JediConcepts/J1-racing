@@ -555,7 +555,10 @@ EngineAudio.prototype.initMusic = function () {
   this.musicBus.connect(this.master);
   this.musicStep = 0;
   this.musicNext = 0;
-  this.musicMuted = false;
+  /* Does NOT touch musicMuted. Building the bus is lazy and happens on the
+     first gesture, long after the saved preference has been applied — forcing
+     it false here would silently turn the music back on for anyone who had
+     switched it off, which is precisely the setting we are trying to keep. */
 };
 
 EngineAudio.prototype.tone = function (t, freq, dur, type, vol, cutoff) {
