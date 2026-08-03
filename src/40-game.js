@@ -424,11 +424,7 @@ Game.prototype.bindInput = function () {
     if (e.target === a2hsOverlay) self.closeA2HS();
   });
 
-  var trackSet = document.getElementById('set-track');
-  if (trackSet) trackSet.addEventListener('click', function (e) {
-    e.preventDefault();
-    self.cycleTrack();
-  });
+  this.buildTrackList();
 
   var qualitySet = document.getElementById('set-quality');
   if (qualitySet) qualitySet.addEventListener('click', function (e) {
@@ -1011,10 +1007,7 @@ Game.prototype.syncSettingsUi = function () {
   put('set-invert', s.tiltInvert ? 'ON' : 'OFF');
   put('set-throttle', s.autoThrottle ? 'AUTO' : 'MANUAL');
   put('set-autofs', s.autoFullscreen ? 'AUTO' : 'MANUAL');
-  var tdef = trackById(s.trackId);
-  put('set-track', tdef.name);
-  var th = document.getElementById('set-track-hint');
-  if (th) th.textContent = tdef.laps + ' laps · ' + (tdef.blurb || 'full grid');
+  this.syncTrackList();
 
   put('set-quality', s.quality === 'modern' ? 'MODERN' : 'RETRO 240p');
   var qh = document.getElementById('set-quality-hint');
@@ -1977,16 +1970,72 @@ Game.prototype.carName = function (v) {
    and the page is one file that loads in about a second.
    Unlock rules would go here: filter TRACKS by what the player has earned
    before picking the next one. */
-Game.prototype.cycleTrack = function () {
-  var list = TRACKS;
-  var i = 0;
-  for (var k = 0; k < list.length; k++) if (list[k].id === this.settings.trackId) i = k;
-  var next = list[(i + 1) % list.length];
-  if (next.id === this.settings.trackId) return;      /* only one circuit */
+/* Renders one row per circuit from the TRACKS registry, so a new entry in
+   20-track.js appears here with no markup and no wiring.
 
-  this.settings.trackId = next.id;
+   This replaced a single button that cycled to the next circuit and reloaded.
+   With two circuits that was fine; at three or more you could not see what
+   you were choosing — every look at the next name cost a full page reload,
+   and you had to cycle all the way round to get back. */
+Game.prototype.buildTrackList = function () {
+  var host = document.getElementById('set-track-list');
+  if (!host) return;
+  var self = this;
+  host.innerHTML = '';
+
+  for (var i = 0; i < TRACKS.length; i++) {
+    (function (def) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tracko';
+      b.setAttribute('role', 'radio');
+      b.dataset.trackId = def.id;
+
+      var name = document.createElement('span');
+      name.className = 'tracko-name';
+      name.textContent = def.name;
+
+      var meta = document.createElement('span');
+      meta.className = 'tracko-meta';
+      meta.textContent = def.laps + ' laps · ' + (def.blurb || 'full grid');
+
+      b.appendChild(name);
+      b.appendChild(meta);
+
+      b.addEventListener('click', function (e) {
+        e.preventDefault();
+        self.selectTrack(def.id);
+      });
+      host.appendChild(b);
+    })(TRACKS[i]);
+  }
+  this.syncTrackList();
+};
+
+/* Marks the current circuit. Called from applySettings too, so the list is
+   right whenever the panel opens rather than only when it is first built. */
+Game.prototype.syncTrackList = function () {
+  var host = document.getElementById('set-track-list');
+  if (!host) return;
+  var current = this.settings.trackId || (this.track && this.track.def.id);
+  var rows = host.children;
+  for (var i = 0; i < rows.length; i++) {
+    var on = rows[i].dataset.trackId === current;
+    rows[i].setAttribute('aria-checked', on ? 'true' : 'false');
+    rows[i].tabIndex = on ? 0 : -1;
+  }
+};
+
+Game.prototype.selectTrack = function (id) {
+  if (id === this.settings.trackId) return;          /* already on it */
+  var def = null;
+  for (var i = 0; i < TRACKS.length; i++) if (TRACKS[i].id === id) def = TRACKS[i];
+  if (!def) return;
+
+  this.settings.trackId = id;
   this.saveSettings();
-  this.flash('LOADING ' + next.name);
+  this.syncTrackList();
+  this.flash('LOADING ' + def.name);
   /* let the flash paint before the navigation stalls the frame */
   setTimeout(function () { location.reload(); }, 220);
 };
