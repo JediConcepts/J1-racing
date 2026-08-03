@@ -2549,10 +2549,8 @@ Track.prototype.frame = function (x, z, hint, out) {
 Track.prototype.heightAt = function (x, z, hint) {
   var tmp = TMP_FRAME_B;
   this.frame(x, z, hint, tmp);
-  var off = Math.abs(tmp.lateral);
-  var h = tmp.y;
-  if (off > HALF_W) h -= Math.min((off - HALF_W) * 0.05, 0.5);   /* runoff/grass dips away */
-  return h;
+  /* same drop the mesh uses, so the car rides the surface you can see */
+  return tmp.y - runoffDrop(tmp.lateral);
 };
 
 Track.prototype.pointAt = function (i, off, out) {
@@ -2690,9 +2688,31 @@ function edge(track, i, off) {
   return vec(p.x + l.x * off, p.y + off * dtan(track.bank[i]), p.z + l.z * off);
 }
 
+/* The runoff sits below the racing surface, so dropping a wheel off the road
+   is felt as well as seen.
+
+   THIS MUST BE APPLIED TO THE MESH AND TO heightAt ALIKE. It used to live only
+   in heightAt, so the car drove along a surface up to half a metre below the
+   one on screen — which reads exactly as sinking into the gravel. */
+function runoffDrop(off) {
+  var a = Math.abs(off);
+  return a > HALF_W ? Math.min((a - HALF_W) * 0.05, 0.5) : 0;
+}
+
+/* Ground height at a lateral offset from sample i.
+
+   Anything standing beside the circuit must be placed with this rather than
+   with p.y. p.y is the height on the CENTRELINE, and on a banked circuit the
+   verge is nowhere near it: at Indy's 9.2 degrees the apron where the corner
+   boards stand is 3.5 m above the centreline, so a board pinned to p.y is
+   buried up to its lettering and its legs never surface. */
+function groundY(track, i, off) {
+  return track.p[i].y + off * dtan(track.bank[i]) - runoffDrop(off);
+}
+
 function edgeY(track, i, off, dy) {
   var p = track.p[i], l = track.lat[i];
-  return vec(p.x + l.x * off, p.y + off * dtan(track.bank[i]) + dy, p.z + l.z * off);
+  return vec(p.x + l.x * off, groundY(track, i, off) + dy, p.z + l.z * off);
 }
 
 function pushStrip(rb, track, i, i2, offA, offB, dy, v0, v1, color) {
@@ -2755,8 +2775,8 @@ function buildStandRing(scene, track, crowdMat) {
       var u = run / TILE;
       for (var t = 0; t < 2; t++) {
         var st = strips[t];
-        st.pos.push(p.x + l.x * side * st.near, p.y + st.y0, p.z + l.z * side * st.near);
-        st.pos.push(p.x + l.x * side * st.far, p.y + st.y1, p.z + l.z * side * st.far);
+        st.pos.push(p.x + l.x * side * st.near, groundY(track, i, side * st.near) + st.y0, p.z + l.z * side * st.near);
+        st.pos.push(p.x + l.x * side * st.far, groundY(track, i, side * st.far) + st.y1, p.z + l.z * side * st.far);
         st.uv.push(u, 0, u, 1);
       }
       cols++;
@@ -2797,7 +2817,7 @@ function buildStartGantry(track, scene) {
   var pillarGeo = new THREE.BoxGeometry(1.1, 8.4, 1.1);
   for (var s = -1; s <= 1; s += 2) {
     var pillar = new THREE.Mesh(pillarGeo, darkMat);
-    pillar.position.set(mid.x + lat.x * s * (WALL_HALF + 1.2), mid.y + 4.2, mid.z + lat.z * s * (WALL_HALF + 1.2));
+    pillar.position.set(mid.x + lat.x * s * (WALL_HALF + 1.2), groundY(track, idx, s * (WALL_HALF + 1.2)) + 4.2, mid.z + lat.z * s * (WALL_HALF + 1.2));
     g.add(pillar);
   }
 
@@ -2820,7 +2840,7 @@ function buildStartGantry(track, scene) {
   for (var i = 0; i < 5; i++) {
     var t = (i - 2) * 3.2;
     var m = new THREE.Mesh(offGeo, new THREE.MeshBasicMaterial({ color: 0x2a1a18, fog: false }));
-    m.position.set(mid.x + lat.x * t, mid.y + 7.2, mid.z + lat.z * t);
+    m.position.set(mid.x + lat.x * t, groundY(track, idx, t) + 7.2, mid.z + lat.z * t);
     m.rotation.y = yaw + Math.PI / 2;
     g.add(m);
     lights.push(m);
@@ -2867,13 +2887,13 @@ function buildScenery(track, scene) {
     var facing = yaw + (side > 0 ? -Math.PI / 2 : Math.PI / 2);
 
     var base = new THREE.Mesh(new THREE.BoxGeometry(46, 8, 15), standMat);
-    base.position.set(p.x + l.x * side * dist, p.y + 3.2, p.z + l.z * side * dist);
+    base.position.set(p.x + l.x * side * dist, groundY(track, idx, side * dist) + 3.2, p.z + l.z * side * dist);
     base.rotation.y = yaw;
     scene.add(base);
 
     var cd = dist - 8.2;
     var crowd = new THREE.Mesh(new THREE.PlaneGeometry(44, 10.5), crowdMat);
-    crowd.position.set(p.x + l.x * side * cd, p.y + 5.4, p.z + l.z * side * cd);
+    crowd.position.set(p.x + l.x * side * cd, groundY(track, idx, side * cd) + 5.4, p.z + l.z * side * cd);
     crowd.rotation.order = 'YXZ';
     crowd.rotation.y = facing;
     /* NEGATIVE. With order YXZ the world normal is
@@ -2886,7 +2906,7 @@ function buildScenery(track, scene) {
     scene.add(crowd);
 
     var roof = new THREE.Mesh(new THREE.BoxGeometry(48, 0.7, 17), roofMat);
-    roof.position.set(p.x + l.x * side * (dist + 1.5), p.y + 11.2, p.z + l.z * side * (dist + 1.5));
+    roof.position.set(p.x + l.x * side * (dist + 1.5), groundY(track, idx, side * (dist + 1.5)) + 11.2, p.z + l.z * side * (dist + 1.5));
     roof.rotation.y = yaw;
     scene.add(roof);
 
@@ -2894,7 +2914,7 @@ function buildScenery(track, scene) {
       var post = new THREE.Mesh(new THREE.BoxGeometry(1, 12, 1), standMat);
       post.position.set(
         p.x + l.x * side * (dist + 7) + f.x * pil * 21,
-        p.y + 5.6,
+        groundY(track, idx, side * (dist + 7)) + 5.6,
         p.z + l.z * side * (dist + 7) + f.z * pil * 21
       );
       scene.add(post);
@@ -2906,7 +2926,7 @@ function buildScenery(track, scene) {
     var pi = (track.startIndex - 20 + i * 4 + n) % n;
     var pp = track.p[pi], pl = track.lat[pi], pf = track.fwd[pi];
     var board = new THREE.Mesh(new THREE.BoxGeometry(11, 2.0, 0.4), pitMat);
-    board.position.set(pp.x + pl.x * (WALL_HALF + 2.6), pp.y + 1.6, pp.z + pl.z * (WALL_HALF + 2.6));
+    board.position.set(pp.x + pl.x * (WALL_HALF + 2.6), groundY(track, pi, WALL_HALF + 2.6) + 1.6, pp.z + pl.z * (WALL_HALF + 2.6));
     /* -PI/2 runs the board along the track and turns its lettered face inward */
     board.rotation.y = datan2(pf.x, pf.z) - Math.PI / 2;
     scene.add(board);
@@ -2924,7 +2944,7 @@ function buildScenery(track, scene) {
       side: THREE.DoubleSide
     });
     var sign = new THREE.Mesh(new THREE.PlaneGeometry(11, 2.75), signMat);
-    sign.position.set(sp.x + sl.x * sideS * (WALL_HALF + 3.6), sp.y + 2.9, sp.z + sl.z * sideS * (WALL_HALF + 3.6));
+    sign.position.set(sp.x + sl.x * sideS * (WALL_HALF + 3.6), groundY(track, si, sideS * (WALL_HALF + 3.6)) + 2.9, sp.z + sl.z * sideS * (WALL_HALF + 3.6));
     /* +PI so the lettered FRONT face turns back up the road to meet the
        driver. Facing it down-track shows the mirrored reverse. */
     sign.rotation.y = datan2(sf.x, sf.z) + Math.PI;
@@ -2934,7 +2954,7 @@ function buildScenery(track, scene) {
       var legMesh = new THREE.Mesh(new THREE.BoxGeometry(0.35, 3.0, 0.35), standMat);
       legMesh.position.set(
         sp.x + sl.x * sideS * (WALL_HALF + 3.6) + sf.x * leg * 4.6,
-        sp.y + 1.5,
+        groundY(track, si, sideS * (WALL_HALF + 3.6)) + 1.5,
         sp.z + sl.z * sideS * (WALL_HALF + 3.6) + sf.z * leg * 4.6
       );
       scene.add(legMesh);
