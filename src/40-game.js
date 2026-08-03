@@ -1339,6 +1339,10 @@ Game.prototype.openSettings = function () {
   if (this.settingsResume) this.paused = true;
   this.syncSettingsUi();
   el.hidden = false;
+  /* AFTER unhiding. syncSettingsUi runs while the panel is still display:none,
+     where the circuit rail measures 0 wide, so centring the current card there
+     computes against nothing and leaves the rail parked at the far left. */
+  this.syncTrackList();
   var c = document.getElementById('set-close');
   if (c) c.focus();
 };
@@ -2018,11 +2022,30 @@ Game.prototype.syncTrackList = function () {
   var host = document.getElementById('set-track-list');
   if (!host) return;
   var current = this.settings.trackId || (this.track && this.track.def.id);
-  var rows = host.children;
+  var rows = host.children, sel = null;
   for (var i = 0; i < rows.length; i++) {
     var on = rows[i].dataset.trackId === current;
     rows[i].setAttribute('aria-checked', on ? 'true' : 'false');
     rows[i].tabIndex = on ? 0 : -1;
+    if (on) sel = rows[i];
+  }
+
+  /* Centre the current circuit in the rail. Deliberately NOT
+     scrollIntoView(): that walks every scrollable ancestor, so it would drag
+     the settings panel — and on some browsers the page behind it — rather
+     than just sliding this one strip. Setting scrollLeft moves the rail and
+     nothing else. */
+  /* Bring the selected card flush to the left edge. The browser clamps this
+     at the end of the rail, which lands the last card flush RIGHT — either
+     way it is fully visible, which matters more than being centred, and it
+     lines up exactly with a scroll-snap-align:start snap point so the snap
+     does not drag it somewhere else afterwards. */
+  /* Measured against the RAIL, via rects. offsetLeft resolves against the
+     nearest positioned ancestor, which here is the settings panel rather than
+     this strip, so using it scrolls by the wrong origin and the card lands
+     anywhere. The rect delta is what actually has to be taken up. */
+  if (sel) {
+    host.scrollLeft += sel.getBoundingClientRect().left - host.getBoundingClientRect().left;
   }
 };
 
