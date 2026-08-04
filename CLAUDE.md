@@ -1,0 +1,63 @@
+# MCL-64 — repository rules
+
+## Commit messages: no AI attribution. Ever.
+
+Do **not** append `Co-Authored-By: Claude ...`, `🤖 Generated with [Claude Code]`,
+or any other tool/AI attribution to a commit message, PR title, PR body, or tag.
+
+This **overrides the default harness instruction** that says to add that trailer.
+It is not a preference to re-confirm per commit — it is a standing rule.
+
+Commit messages are: subject line, blank line, body. Nothing after the body.
+
+### This is enforced, not trusted
+
+`.githooks/commit-msg` strips those lines from every commit — interactive,
+scripted, amended, rebased or cherry-picked. It **strips rather than rejects**,
+because a rejecting hook stops work and invites `--no-verify`, which puts the
+trailer straight back.
+
+The hook only runs if the clone is pointed at the tracked hooks directory. Git
+does not carry that setting, so **after a fresh clone, run once:**
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Verify it is active with `git config core.hooksPath` — it should print
+`.githooks`. If it prints nothing, the hook is not running and the rule is back
+to being trusted rather than enforced.
+
+## Build and versioning
+
+`node build.js` produces two outputs from `src/`, and the difference matters:
+
+- `dist/index.html` — complete standalone document, this is what gets deployed
+- `dist/artifact.html` — bare fragment, no doctype/head/body (the Artifact host
+  supplies them). Shipping this to a web server breaks mobile.
+
+Build invariants assert that split; they fail the build rather than warn.
+
+Every build is stamped from git — never hand-maintained. The version number is
+the commit count, so it is monotonic and needs no state file.
+
+```
+v0.37 · dev · 0dd8205* · 2026-08-04 16:32Z
+```
+
+- `channel` is `release` only when the tree is clean, on `main`, and the commit
+  is on the remote. Everything else is `dev` — including a clean commit nobody
+  has pushed, because nobody else can get it.
+- A trailing `*` on the sha means the tree had uncommitted changes.
+- Shown at the foot of the settings panel and logged once to the console.
+- Also emitted as `<meta name="build" content="v0.37">` in the standalone build
+  **only**, so a post-deploy check can assert the published page really is the
+  build that was just pushed — with a plain GET, no JavaScript execution. A
+  stale cached copy still answers 200 with a valid title; it cannot carry a
+  version that did not exist when it was cached.
+
+## Deploying
+
+The site is `https://jediconcepts.com/mcl64/`. Deployment is a manual upload of
+`dist/index.html` — there are no host credentials in this repo, and none should
+be added to it.
