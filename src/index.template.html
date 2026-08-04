@@ -405,6 +405,20 @@
     text-align: right;
   }
 
+  /* Build stamp: quiet, monospaced, and user-selectable so it can be copied
+     into a bug report. The dev channel is called out in papaya — if you are
+     looking at a build that is not the published one, you should know. */
+  .sbuild {
+    margin: 14px 0 0;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    text-align: center;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  .sbuild.is-dev { color: var(--papaya-soft); }
+
   .shint {
     margin: 9px 0 0;
     color: #7d7772;
@@ -1105,6 +1119,11 @@
             </div>
           </div>
         </div>
+
+        <!-- Build stamp. Stamped in by build.js from git, so it cannot drift
+             from what is actually running. Selectable, because the first thing
+             you ask a bug reporter is which build they are on. -->
+        <p class="sbuild" id="set-build">&mdash;</p>
 
         <div class="srow srow-actions">
           <button type="button" class="sval" id="set-recentre">RECENTRE TILT</button>

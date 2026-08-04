@@ -19,8 +19,62 @@
 
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
 const root = __dirname;
+
+/* ---------------------------------------------------------------------------
+   BUILD STAMP
+
+   Derived from git at compile time, never hand-maintained — a version someone
+   has to remember to bump is a version that lies. The number is the commit
+   COUNT, so it is monotonic, needs no state file to increment, and every
+   commit gets its own.
+
+   `channel` is what separates a build you are testing from one you shipped:
+
+     release   clean tree, on main, and the commit exists on the remote
+     dev       anything else — uncommitted edits, a side branch, or a commit
+               that has not been pushed
+
+   That distinction is the point of the whole exercise. When someone reports a
+   bug against "the version on the site", this is how you tell whether they are
+   actually running it.
+   --------------------------------------------------------------------------- */
+function git(cmd, fallback) {
+  try {
+    return execSync('git ' + cmd, { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString().trim();
+  } catch (e) {
+    return fallback;                 /* no git, or not a repo — ship anyway */
+  }
+}
+
+function buildStamp() {
+  const count = git('rev-list --count HEAD', '0');
+  const sha = git('rev-parse --short HEAD', 'nogit');
+  const branch = git('rev-parse --abbrev-ref HEAD', 'detached');
+  const dirty = git('status --porcelain', '') !== '';
+  /* Is this commit actually on the remote? An unpushed commit is a dev build
+     however clean the tree looks. */
+  const pushed = git('branch -r --contains HEAD', '') !== '';
+  const released = !dirty && branch === 'main' && pushed;
+
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  const at = d.getUTCFullYear() + '-' + p(d.getUTCMonth() + 1) + '-' + p(d.getUTCDate()) +
+             ' ' + p(d.getUTCHours()) + ':' + p(d.getUTCMinutes()) + 'Z';
+
+  return {
+    version: 'v0.' + count,
+    channel: released ? 'release' : 'dev',
+    sha: sha + (dirty ? '*' : ''),   /* the star means uncommitted changes */
+    branch: branch,
+    at: at
+  };
+}
+
+const BUILD = buildStamp();
 const SRC = [
   /* First: 20-track.js and 30-cars.js call dsin/dcos/dtan/datan2 instead of
      the built-ins, so the whole simulation produces identical bits on every
@@ -72,7 +126,8 @@ const SITE = {
 };
 
 const game = SRC.map(f => '\n/* ===== ' + f + ' ===== */\n' + read(f)).join('\n');
-const wrapped = '(function(){\n"use strict";\n' + game + '\n})();\n';
+const wrapped = 'window.MCL64_BUILD = ' + JSON.stringify(BUILD) + ';\n'
+  + '(function(){\n"use strict";\n' + game + '\n})();\n';
 
 /* A literal </script> anywhere in the payload would close the tag early. */
 for (const [label, body] of [['three.min.js', three], ['supabase.js', supabase], ['game', wrapped]]) {
@@ -223,3 +278,4 @@ if (standalone.indexOf(CLOUD.key) === -1) problems.push('index.html is missing t
 if (problems.length) throw new Error('Build invariant failed:\n  - ' + problems.join('\n  - '));
 
 console.log('\n  invariants OK — fragment stays bare, standalone is a full document');
+console.log('  ' + BUILD.version + '  ' + BUILD.channel + '  ' + BUILD.sha + '  ' + BUILD.at);
