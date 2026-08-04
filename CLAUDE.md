@@ -28,6 +28,20 @@ Verify it is active with `git config core.hooksPath` — it should print
 `.githooks`. If it prints nothing, the hook is not running and the rule is back
 to being trusted rather than enforced.
 
+`.github/workflows/no-ai-attribution.yml` is the server-side half, for exactly
+that case. GitHub cannot run a `commit-msg` hook — client-side hooks only ever
+run on the machine making the commit, and `pre-receive` hooks exist only on
+GitHub Enterprise Server. So the workflow cannot strip; it fails the check on
+any new commit carrying a trailer, and the fix is a reword and force-push.
+
+It scans only the commits being pushed, not all history — 35 existing commits
+carry the trailer, and a check that fails forever is a check everyone learns to
+ignore.
+
+**It only blocks merges once it is a required status check:**
+Settings → Branches → protect `main` → require `no-ai-attribution`. Until then
+it reports, and a red tick is easy to scroll past.
+
 ## Build and versioning
 
 `node build.js` produces two outputs from `src/`, and the difference matters:
