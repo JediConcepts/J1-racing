@@ -52,7 +52,9 @@
 
   html, body {
     margin: 0;
-    background: var(--bg);
+    /* The page surface, not the game's. .cabinet sets var(--bg) itself, so the
+       console stays near-black while everything below it is navy. */
+    background: #070747;
     /* The page scrolls so the written content below the game is reachable —
        a canvas has no text for a search engine to read, and hiding that
        content from users to feed crawlers would be cloaking. The game itself
@@ -426,14 +428,25 @@
      Real prose for real readers. It also happens to be the only thing a
      crawler can index, since the game itself is a canvas. */
 
+  /* Deep navy, distinct from the game's near-black bezel so the written part
+     of the page reads as a separate surface rather than dead space below it. */
   .about {
-    max-width: 44rem;
-    margin: 0 auto;
-    padding: 44px 20px 72px;
+    background: #070747;
     color: #b9b2ab;
     font-size: 14px;
     line-height: 1.75;
   }
+
+  .about > * {
+    max-width: 44rem;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .about > section:first-child { padding-top: 44px; }
+  .about > footer { padding-bottom: 72px; }
 
   .about section { margin-bottom: 30px; }
 
@@ -495,6 +508,54 @@
   }
 
   .sval-wide { min-width: 148px; }
+
+  /* Circuit picker. Stacks under its label rather than sitting beside it,
+     because the roster is open-ended and a row of buttons would not fit a
+     phone once there are more than a couple. */
+  .srow-stack { display: block; }
+  .srow-stack .slabel { display: block; margin-bottom: 8px; }
+
+  /* Horizontal rail rather than a full vertical list. The roster is
+     open-ended, so showing every circuit at once would push the rest of the
+     panel off a phone screen the moment a fourth one lands. Cards are sized
+     so the NEXT one is always part-visible — that sliver is the only cue that
+     there is more to scroll to. */
+  .tracklist {
+    display: flex; flex-direction: row; gap: 8px;
+    overflow-x: auto; overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-bottom: 6px;
+  }
+  .tracklist::-webkit-scrollbar { height: 6px; }
+  .tracklist::-webkit-scrollbar-thumb { background: rgba(255, 128, 0, 0.5); border-radius: 3px; }
+  .tracklist::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.06); border-radius: 3px; }
+
+  .tracko {
+    flex: 0 0 66%; min-width: 150px;
+    /* start, not center: programmatic scrollLeft gets SNAPPED, so if the snap
+       points sat at card centres the browser would silently overrule the
+       position that keeps the selected card fully visible. */
+    scroll-snap-align: start;
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 10px; text-align: left; cursor: pointer;
+    font: inherit; letter-spacing: 0.06em;
+    color: #f0e7dc; background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 4px;
+  }
+  .tracko:hover { background: rgba(255, 128, 0, 0.22); border-color: rgba(255, 128, 0, 0.5); }
+  .tracko:focus-visible { outline: 2px solid var(--papaya); outline-offset: 2px; }
+  /* Ellipsis rather than wrap: a broken circuit name reads as two entries. */
+  .tracko-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tracko-meta { font-size: 0.82em; opacity: 0.62; letter-spacing: 0.04em; }
+  /* The current circuit is marked by more than colour, so it still reads
+     for anyone who cannot separate the papaya from the cream. */
+  .tracko[aria-checked="true"] {
+    background: rgba(255, 128, 0, 0.9); border-color: var(--papaya); color: #14120f;
+  }
+  .tracko[aria-checked="true"] .tracko-meta { opacity: 0.8; }
+  .tracko[aria-checked="true"] .tracko-name::before { content: "\25B6 "; }
 
   .sval-oauth {
     flex: 1;
@@ -849,6 +910,10 @@
     <div class="settings" id="board" hidden>
       <div class="settings-box" role="dialog" aria-modal="true" aria-labelledby="board-title">
         <h2 class="settings-title" id="board-title">GLOBAL LEADERBOARD</h2>
+        <!-- Every circuit keeps its own board, so you need to be able to read
+             one without loading that circuit just to look. Same rail as the
+             settings picker; filled from TRACKS at runtime. -->
+        <div class="tracklist" id="board-track-list" role="radiogroup" aria-label="Leaderboard circuit"></div>
         <p class="shint" id="board-status">Loading&hellip;</p>
         <div id="board-rows"></div>
         <div class="srow srow-actions">
@@ -882,6 +947,15 @@
       <div class="settings-box" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <h2 class="settings-title" id="settings-title">SETTINGS</h2>
 
+        <div class="srow srow-stack">
+          <span class="slabel">CIRCUIT</span>
+          <!-- Filled from the TRACKS registry at runtime, so adding a circuit
+               needs no markup. A list rather than a cycle button: each pick
+               reloads the page, so cycling blind through a growing roster
+               meant a full reload just to read the next name. -->
+          <div class="tracklist" id="set-track-list" role="radiogroup" aria-label="Circuit"></div>
+        </div>
+
         <div class="srow">
           <span class="slabel">STEERING</span>
           <button type="button" class="sval" id="set-steer">JOYSTICK</button>
@@ -901,6 +975,24 @@
 
         <p class="shint" id="set-sens-hint">Shapes the stick around centre and how fast the arrow keys wind on.</p>
 
+        <!-- Separate trims, because the engine and the score want very
+             different levels depending on whether you are wearing headphones.
+             These sit under the ENGINE/MUSIC on-off toggles, not instead of
+             them: turning a bus down and switching it off stay distinct. -->
+        <div class="srow">
+          <span class="slabel">ENGINE VOL</span>
+          <input type="range" class="srange" id="set-envol" min="0" max="10" step="1" value="10"
+                 aria-label="Engine volume, 0 silent to 10 full." />
+          <span class="snum" id="set-envol-num">10</span>
+        </div>
+
+        <div class="srow">
+          <span class="slabel">MUSIC VOL</span>
+          <input type="range" class="srange" id="set-musvol" min="0" max="10" step="1" value="10"
+                 aria-label="Music volume, 0 silent to 10 full." />
+          <span class="snum" id="set-musvol-num">10</span>
+        </div>
+
         <div class="srow">
           <span class="slabel">THROTTLE</span>
           <button type="button" class="sval" id="set-throttle">MANUAL</button>
@@ -910,6 +1002,12 @@
           <span class="slabel">FULLSCREEN</span>
           <button type="button" class="sval" id="set-autofs">AUTO</button>
         </div>
+
+        <div class="srow">
+          <span class="slabel">GRAPHICS</span>
+          <button type="button" class="sval" id="set-quality">RETRO 240p</button>
+        </div>
+        <p class="shint" id="set-quality-hint">Retro: 240p with a 5-bit dither, as the hardware did it.</p>
 
         <p class="shint" id="set-hint">Manual: push forward for gas, pull back to brake.</p>
 
@@ -1466,6 +1564,14 @@ function makeCanvas(w, h) {
   return c;
 }
 
+/* Hex literals in this file are sRGB — that is how anyone reads or picks a
+   colour. The renderer now works in linear light, and a value handed over
+   unconverted is interpreted as linear, which lifts every midtone on the way
+   back out: papaya turns into pale apricot and the whole scene washes. This
+   is the other half of colour management, and it applies to material colours
+   and vertex colours exactly as it does to textures. */
+function srgb(hex) { return new THREE.Color(hex).convertSRGBToLinear(); }
+
 function texFromCanvas(cv, repX, repY, nearest) {
   var t = new THREE.CanvasTexture(cv);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
@@ -1474,6 +1580,11 @@ function texFromCanvas(cv, repX, repY, nearest) {
   else { t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; }
   t.generateMipmaps = true;
   t.anisotropy = 1;
+  /* These canvases are painted in sRGB — that is what a 2D context gives you.
+     Flagging it lets the renderer decode to linear before lighting, which is
+     the half of colour management that happens on the way IN. Skip it and
+     every texture reads too bright and too contrasty under PBR. */
+  t.encoding = THREE.sRGBEncoding;
   return t;
 }
 
@@ -1627,7 +1738,29 @@ function EngineAudio() {
   this.engineMuted = true;
   this.musicMuted = false;
   this.failed = false;
+  /* 0..1 trims sitting under the mutes, so turning a bus down and turning it
+     off stay separate controls. */
+  this.engineVol = 1;
+  this.musicVol = 1;
+  this.theme = MUSIC_THEMES.papaya;
 }
+
+/* A circuit's theme. Resets the step counter so a switch starts the loop at
+   bar one rather than dropping into the middle of the new pattern. */
+EngineAudio.prototype.setMusicTheme = function (id) {
+  var th = MUSIC_THEMES[id] || MUSIC_THEMES.papaya;
+  if (this.theme === th) return;
+  this.theme = th;
+  this.musicStep = 0;
+};
+
+EngineAudio.prototype.setLevels = function (engineVol, musicVol) {
+  this.engineVol = clamp(engineVol, 0, 1);
+  this.musicVol = clamp(musicVol, 0, 1);
+  /* Music level is applied in tickMusic, which already ramps the bus every
+     frame; setting it here too would fight that ramp. */
+  if (this.engineBus) this.engineBus.gain.value = this.engineMuted ? 0 : this.engineVol;
+};
 
 EngineAudio.prototype.init = function () {
   if (this.ctx || this.failed) return;
@@ -1641,7 +1774,7 @@ EngineAudio.prototype.init = function () {
     this.master.connect(ctx.destination);
 
     this.engineBus = ctx.createGain();
-    this.engineBus.gain.value = this.engineMuted ? 0 : 1;
+    this.engineBus.gain.value = this.engineMuted ? 0 : this.engineVol;
     this.engineBus.connect(this.master);
 
     this.fxBus = ctx.createGain();
@@ -1696,7 +1829,7 @@ EngineAudio.prototype.resume = function () {
 
 EngineAudio.prototype.setEngineMuted = function (m) {
   this.engineMuted = m;
-  if (this.ready) this.engineBus.gain.setTargetAtTime(m ? 0 : 1, this.ctx.currentTime, 0.08);
+  if (this.ready) this.engineBus.gain.setTargetAtTime(m ? 0 : this.engineVol, this.ctx.currentTime, 0.08);
 };
 
 EngineAudio.prototype.wake = function () {
@@ -1746,6 +1879,13 @@ EngineAudio.prototype.blip = function (freq, dur, type, vol) {
 
 var MUSIC_BPM = 134;
 
+/* NOTE ON THE NEW THEMES BELOW — these are ORIGINAL pieces written in the
+   idiom of mid-80s driving rock: four-on-the-floor kick, backbeat snare,
+   octave-jumping bass, i-VI-III-VII changes, an anthemic lead sitting high
+   over the top. That progression and that drum pattern are the common stock
+   of the entire genre and belong to nobody. No existing melody is quoted,
+   transposed or paraphrased in any of them. */
+
 /* MIDI note numbers; null = rest. 32 eighth-notes = four bars. */
 var BASS_LINE = [
   45, null, 45, 48, 50, null, 48, 45,
@@ -1769,6 +1909,56 @@ var KICK = [1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 1, 0,
 var SNARE = [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0,
              0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1];
 
+/* SPEEDWAY — Indianapolis. D minor, i-VI-III-VII (Dm-Bb-F-C), four on the
+   floor, bass jumping the octave on the off-beat, hook entering every second
+   bar. Faster and flatter than the road-circuit theme because the oval never
+   asks you to lift. */
+var SPEEDWAY_BASS = [
+  38, 38, 50, 38, 38, 38, 45, 48,
+  34, 34, 46, 34, 34, 34, 41, 43,
+  41, 41, 53, 41, 41, 41, 48, 50,
+  36, 36, 48, 36, 36, 36, 43, 45
+];
+var SPEEDWAY_LEAD = [
+  null, null, null, null, null, null, null, null,
+  69, null, 70, null, 69, 65, 62, null,
+  null, null, null, null, null, null, null, null,
+  72, null, 70, null, 69, 67, 65, null
+];
+var SPEEDWAY_CHORDS = [[50, 53, 57], [46, 50, 53], [53, 57, 60], [48, 52, 55]];
+var SPEEDWAY_KICK = [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+                     1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0];
+var SPEEDWAY_SNARE = [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0,
+                      0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1];
+
+/* DOWNLAND — Brands Hatch. E minor, Em-C-G-D, a syncopated kick rather than a
+   straight four, and a bass that breathes on the off-beat. Darker and rollier
+   to match a circuit that spends its lap going up and down. */
+var DOWNLAND_BASS = [
+  40, null, 40, 47, 40, null, 43, 45,
+  36, null, 36, 43, 36, null, 40, 42,
+  43, null, 43, 50, 43, null, 47, 48,
+  38, null, 38, 45, 38, null, 42, 43
+];
+var DOWNLAND_LEAD = [
+  null, null, null, null, null, null, null, null,
+  71, null, 72, 71, 69, null, 67, null,
+  null, null, null, null, null, null, null, null,
+  67, null, 69, 71, 72, null, 71, null
+];
+var DOWNLAND_CHORDS = [[52, 55, 59], [48, 52, 55], [55, 59, 62], [50, 54, 57]];
+var DOWNLAND_KICK = [1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0,
+                     1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 1, 0];
+var DOWNLAND_SNARE = [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0,
+                      0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0];
+
+/* A circuit names one of these; unknown or absent falls back to `papaya`. */
+var MUSIC_THEMES = {
+  papaya:   { bpm: 134, bass: BASS_LINE,     lead: LEAD_LINE,     chords: CHORDS,          kick: KICK,          snare: SNARE },
+  speedway: { bpm: 142, bass: SPEEDWAY_BASS, lead: SPEEDWAY_LEAD, chords: SPEEDWAY_CHORDS, kick: SPEEDWAY_KICK, snare: SPEEDWAY_SNARE },
+  downland: { bpm: 126, bass: DOWNLAND_BASS, lead: DOWNLAND_LEAD, chords: DOWNLAND_CHORDS, kick: DOWNLAND_KICK, snare: DOWNLAND_SNARE }
+};
+
 function midiFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 
 EngineAudio.prototype.initMusic = function () {
@@ -1779,7 +1969,10 @@ EngineAudio.prototype.initMusic = function () {
   this.musicBus.connect(this.master);
   this.musicStep = 0;
   this.musicNext = 0;
-  this.musicMuted = false;
+  /* Does NOT touch musicMuted. Building the bus is lazy and happens on the
+     first gesture, long after the saved preference has been applied — forcing
+     it false here would silently turn the music back on for anyone who had
+     switched it off, which is precisely the setting we are trying to keep. */
 };
 
 EngineAudio.prototype.tone = function (t, freq, dur, type, vol, cutoff) {
@@ -1839,11 +2032,12 @@ EngineAudio.prototype.tickMusic = function (level) {
   this.initMusic();
   if (!this.musicBus) return;
 
-  var target = this.musicMuted ? 0 : level;
+  var target = this.musicMuted ? 0 : level * this.musicVol;
   this.musicBus.gain.setTargetAtTime(target, this.ctx.currentTime, 0.35);
   if (target <= 0.001 && this.musicBus.gain.value < 0.005) return;
 
-  var stepDur = 30 / MUSIC_BPM;          /* an eighth note */
+  var th = this.theme || MUSIC_THEMES.papaya;
+  var stepDur = 30 / (th.bpm || MUSIC_BPM);   /* an eighth note */
   var now = this.ctx.currentTime;
   if (this.musicNext < now) this.musicNext = now + 0.06;
 
@@ -1851,14 +2045,14 @@ EngineAudio.prototype.tickMusic = function (level) {
   while (this.musicNext < now + 0.25 && guard++ < 16) {
     var i = this.musicStep, t = this.musicNext;
 
-    if (BASS_LINE[i] != null) this.tone(t, midiFreq(BASS_LINE[i]), 0.23, 'sawtooth', 0.30, 620);
-    if (LEAD_LINE[i] != null) this.tone(t, midiFreq(LEAD_LINE[i]), 0.26, 'square', 0.11, 2600);
-    if (KICK[i]) this.drum(t, 'kick');
-    if (SNARE[i]) this.drum(t, 'snare');
+    if (th.bass[i] != null) this.tone(t, midiFreq(th.bass[i]), 0.23, 'sawtooth', 0.30, 620);
+    if (th.lead[i] != null) this.tone(t, midiFreq(th.lead[i]), 0.26, 'square', 0.11, 2600);
+    if (th.kick[i]) this.drum(t, 'kick');
+    if (th.snare[i]) this.drum(t, 'snare');
     this.drum(t, 'hat');
 
     if (i % 8 === 0) {
-      var ch = CHORDS[(i / 8) | 0];
+      var ch = th.chords[(i / 8) | 0];
       for (var c = 0; c < ch.length; c++) {
         this.tone(t, midiFreq(ch[c] + 12), 0.62, 'triangle', 0.055, 1800);
       }
@@ -1945,31 +2139,247 @@ var CORNER_NAMES = [
   ['VALE', 31], ['CLUB', 32]
 ];
 
-var HALF_W = 7.2;        /* 14.4m racing surface */
-var RUNOFF = 7.0;        /* sealed runoff before the wall */
+/* =====================================================================
+   CIRCUIT REGISTRY
+   Everything a circuit needs is data: control points, corner names, road
+   width and how many laps. Curvature, the racing line, the speed profile,
+   the straights and the DRS zones are all derived from the geometry, so a
+   new circuit is a new entry here and nothing else.
+
+   `id` is what the leaderboard partitions on. Change a circuit's shape and
+   you must bump its id, or old times get ranked against a track that no
+   longer exists.
+   ===================================================================== */
+
+
+/* Indianapolis Motor Speedway. 2.5 miles of rectangle with rounded corners:
+   two 5/8-mile straights, two short chutes, four identical quarter-circle
+   turns banked at 9 degrees 12 minutes. Flat throughout — no elevation.
+
+   The point order is REVERSED relative to how it was authored, so the lap runs
+   anti-clockwise on left-hand turns as the real 500 does. Checked by summing
+   signed curvature over the lap: Silverstone (clockwise in reality) comes to
+   -2pi, so anti-clockwise must come to +2pi. Authored, it matched Silverstone
+   and therefore ran the wrong way. */
+var INDY_CONTROL = [
+  [    0, -357,  0],
+  [ -126, -357,  0],
+  [ -252, -357,  0],
+  [ -377, -357,  0],
+  [ -503, -357,  0],
+  [ -601, -337,  0],
+  [ -684, -282,  0],
+  [ -740, -199,  0],
+  [ -759, -101,  0],
+  [ -759,    0,  0],
+  [ -759,  101,  0],
+  [ -740,  199,  0],
+  [ -684,  282,  0],
+  [ -601,  337,  0],
+  [ -503,  357,  0],
+  [ -377,  357,  0],
+  [ -252,  357,  0],
+  [ -126,  357,  0],
+  [    0,  357,  0],
+  [  126,  357,  0],
+  [  252,  357,  0],
+  [  377,  357,  0],
+  [  503,  357,  0],
+  [  601,  337,  0],
+  [  684,  282,  0],
+  [  740,  199,  0],
+  [  759,  101,  0],
+  [  759,    0,  0],
+  [  759, -101,  0],
+  [  740, -199,  0],
+  [  684, -282,  0],
+  [  601, -337,  0],
+  [  503, -357,  0],
+  [  377, -357,  0],
+  [  252, -357,  0],
+  [  126, -357,  0]
+];
+
+var INDY_CORNERS = [['FRONT STRETCH', 0], ['TURN 1', 6], ['TURN 2', 12], ['BACK STRETCH', 18], ['TURN 3', 24], ['TURN 4', 30]];
+
+
+/* Brands Hatch Grand Prix circuit. 3.9 km, clockwise, and defined by its
+   elevation: 34 m between the low point at the bottom of Paddock Hill and the
+   summit at Druids. The road falls away the instant you cross the line.
+
+   Corrected from the authored geometry in two ways. The point order was
+   mirrored, which inverts chirality and would have made every corner a
+   left-hander. And Druids was a 105 degree direction change across two ~47 m
+   chords, which drove the spline's minimum radius down to 6.1 m — narrower
+   than the road's own half width, so the ribbon and both barriers folded
+   through the centreline. The hairpin is now six points on a 28 m arc. */
+var BRANDS_CONTROL = [
+  [    0,    0, 20],
+  [    2, -124, 19],
+  [   31, -219, 16],
+  [   69, -275,  8],
+  [  130, -314,  0],
+  [  178, -403,  9],
+  [  232, -492, 19],
+  [  275, -569, 28],
+  [  303, -628, 32],
+  [  314, -640, 33],
+  [  330, -644, 34],
+  [  345, -638, 34],
+  [  355, -625, 33],
+  [  356, -609, 32],
+  [  341, -545, 26],
+  [  326, -480, 18],
+  [  310, -420, 11],
+  [  303, -355,  8],
+  [  298, -237,  6],
+  [  295, -130,  5],
+  [  293,  -24,  6],
+  [  290,   53,  8],
+  [  306,  113,  9],
+  [  391,  160,  6],
+  [  492,  207,  3],
+  [  590,  255,  1],
+  [  666,  293,  1],
+  [  728,  347,  2],
+  [  772,  430,  8],
+  [  791,  506, 13],
+  [  791,  577, 14],
+  [  758,  667,  8],
+  [  711,  750,  3],
+  [  661,  809,  4],
+  [  598,  849,  7],
+  [  519,  873,  9],
+  [  436,  885, 10],
+  [  355,  878, 11],
+  [  275,  849, 13],
+  [  199,  809, 15],
+  [  128,  750, 16],
+  [   77,  676, 18],
+  [   45,  591, 19],
+  [   19,  501, 20],
+  [    2,  397, 20],
+  [    0,  243, 20],
+  [    0,  113, 20]
+];
+
+/* [name, index] PAIRS — mapCorners reads names[c][0] and names[c][1], so an
+   array of objects silently yields undefined and every label is dropped. */
+var BRANDS_CORNERS = [
+  ['PADDOCK HILL BEND', 3], ['DRUIDS', 10], ['GRAHAM HILL BEND', 16],
+  ['SURTEES', 22], ['HAWTHORN', 27], ['WESTFIELD', 30], ['DINGLE DELL', 31],
+  ['SHEENE CURVE', 34], ['STIRLINGS', 37], ['CLEARWAYS', 40], ['CLARK CURVE', 43]
+];
+
+var TRACKS = [
+  {
+    id: 'silverstone-v1',
+    name: 'SILVERSTONE',
+    blurb: 'FAST AND OPEN',
+    laps: 3,
+    halfW: 7.2,          /* 14.4m racing surface */
+    runoff: 7.0,         /* sealed runoff before the wall */
+    control: TRACK_CONTROL,
+    corners: CORNER_NAMES
+  },
+  {
+    id: 'indianapolis-v1',
+    name: 'INDIANAPOLIS',
+    blurb: 'BANKED OVAL',
+    laps: 5,
+    halfW: 9,
+    runoff: 9.0,
+    /* The real 9 deg 12 min = 0.1606 rad, kept because it is purely visual.
+       BANKING DOES NOT AFFECT GRIP in this model — `bank` never appears in
+       30-cars.js; it only tilts the road surface geometry, and latCapacity()
+       depends on speed alone. Measured: every value from 0 to 9.2 degrees
+       produces an identical lap, to the hundredth of a second. So there is no
+       point trading away the look for handling that will not change.
+
+       This corner is flat regardless: a 256 m radius at 216 km/h demands
+       14.1 m/s2 and the car has 46, a 3.3x margin. Forcing a lift would need
+       a 78 m radius, which is a short oval rather than Indianapolis. */
+    bankGain: 90,
+    bankMax: 0.1606,
+    /* crowd the whole way round, outside wall and infield both */
+    standRing: true,
+    /* The 500 runs 33 cars in 11 rows of three — the field size and the
+       three-abreast rows are the event's signature, and a six-car grid on a
+       2.5 mile oval looks like an empty car park. */
+    grid: 33,
+    gridCols: 3,
+    playerStart: 'mid',
+    /* faster, flatter, four on the floor — the oval never asks for a lift */
+    music: 'speedway',
+    control: INDY_CONTROL,
+    corners: INDY_CORNERS
+  },
+  {
+    id: 'brands-hatch-v1',
+    name: 'BRANDS HATCH',
+    blurb: 'NARROW AND HILLY',
+    laps: 4,
+    /* the key is halfW — halfWidthM is read by nothing and would have left
+       this narrow circuit at Silverstone's 14.4 m */
+    halfW: 6.0,
+    runoff: 6.0,
+    /* darker and rollier, to match a lap spent going up and down */
+    music: 'downland',
+    control: BRANDS_CONTROL,
+    corners: BRANDS_CORNERS
+  }
+];
+
+function trackById(id) {
+  for (var i = 0; i < TRACKS.length; i++) if (TRACKS[i].id === id) return TRACKS[i];
+  return TRACKS[0];
+}
+
+/* Set from the active circuit when a Track is built. Kept as module globals
+   rather than threaded through every call site because exactly one circuit is
+   ever live at a time, and the physics reads these on the hot path. */
+var HALF_W = 7.2;
+var RUNOFF = 7.0;
 var WALL_HALF = HALF_W + RUNOFF;
 var VERGE = 46;          /* grass skirt */
 var SAMPLES = 900;       /* ~6m per sample over a 5.5km lap */
 
 var COL = {
-  asphalt: new THREE.Color(0x9c9caa),
-  asphaltDark: new THREE.Color(0x8a8a95),
-  runoff: new THREE.Color(0xa8a4ae),
-  grass: new THREE.Color(0x6f9b52),
-  grassDark: new THREE.Color(0x5c8544),
-  papaya: 0xff8000,
-  anthracite: 0x1b1c22,
-  cyan: 0x4fe3e0
+  asphalt: srgb(0x9c9caa),
+  asphaltDark: srgb(0x8a8a95),
+  runoff: srgb(0xa8a4ae),
+  grass: srgb(0x6f9b52),
+  grassDark: srgb(0x5c8544),
+  papaya: srgb(0xff8000),
+  anthracite: srgb(0x1b1c22),
+  cyan: srgb(0x4fe3e0)
 };
 
-function Track() {
+function Track(def) {
   var i;
+  def = def || TRACKS[0];
+  this.def = def;
+  this.id = def.id;
+  this.name = def.name;
+  this.laps = def.laps || 3;
+
+  /* The physics reads these globally, so they must be set before anything
+     below samples the circuit. */
+  HALF_W = def.halfW || 7.2;
+  RUNOFF = def.runoff || 7.0;
+  /* Derived, so it has to be recomputed here too — left at its module-level
+     value it would keep Silverstone's barrier line on a wider circuit, and the
+     walls would sit inside the runoff. */
+  WALL_HALF = HALF_W + RUNOFF;
+
+  var control = def.control;
+
   /* Control rows are [x, z, y] so the array reads like a map; Vector3 wants
      (x, y, z), and y is the height. Swapping these is what sends the circuit
      climbing into the sky. */
   var pts = [];
-  for (i = 0; i < TRACK_CONTROL.length; i++) {
-    pts.push(new THREE.Vector3(TRACK_CONTROL[i][0], TRACK_CONTROL[i][2], TRACK_CONTROL[i][1]));
+  for (i = 0; i < control.length; i++) {
+    pts.push(new THREE.Vector3(control[i][0], control[i][2], control[i][1]));
   }
   /* centripetal parameterisation: the control points are unevenly spaced and
      this is the variant that will not cusp or self-intersect between them */
@@ -2007,11 +2417,31 @@ function Track() {
   }
   this.curv = smoothLoop(curvRaw, 7, 2);
 
-  /* Banking, capped at ~5.5 degrees. Sign convention used throughout:
-     curv > 0 means the circuit turns toward +lat, so the inside of the
-     corner is at positive lateral offset and the outside must ride higher. */
+  /* Banking follows curvature, capped. A road circuit gets a token 2.6 degrees
+     of camber; a speedway needs its real figure, and because an oval's turns
+     hold constant radius a high gain saturates at the cap through the whole
+     turn and smoothLoop blends it out onto the straights — which is exactly
+     the real banking profile. */
+  var bankGain = def.bankGain || 14;
+  var bankMax = def.bankMax || 0.046;
   var bankRaw = new Float32Array(this.n);
-  for (i = 0; i < this.n; i++) bankRaw[i] = clamp(-this.curv[i] * 14, -0.046, 0.046);
+  /* SIGN — derive it, do not guess, because two of the three terms are
+     counter-intuitive:
+
+       lat = up X fwd. With three.js's frame (fwd = -Z, +X right, +Y up) that
+       cross product is -X, so LATERAL OFFSET IS POSITIVE TO THE CAR'S LEFT,
+       not its right. Every comment here used to claim the opposite.
+
+       curv = atan2(f0.z*f1.x - f0.x*f1.z, ...) is positive when yaw increases,
+       which swings fwd from +Z toward +X — a LEFT turn.
+
+     So curv > 0 puts the inside of the corner at POSITIVE offset, and since
+     pointAt() sets height to `off * tan(bank)`, lifting the OUTSIDE (negative
+     off) needs tan(bank) < 0. Bank therefore opposes curvature.
+
+     Getting this backwards banks every corner off-camber. It hides at
+     Silverstone's 2.6 degrees and is unmissable at Indy's 9.2. */
+  for (i = 0; i < this.n; i++) bankRaw[i] = clamp(-this.curv[i] * bankGain, -bankMax, bankMax);
   this.bank = smoothLoop(bankRaw, 11, 2);
 
   this.buildRacingLine();
@@ -2144,9 +2574,12 @@ Track.prototype.mapCorners = function (controlPts) {
   this.corners = [];
   this.cornerLabel = new Array(n);
 
-  for (c = 0; c < CORNER_NAMES.length; c++) {
-    var name = CORNER_NAMES[c][0];
-    var cp = controlPts[CORNER_NAMES[c][1]];
+  /* From the active circuit, not the module-level Silverstone list. */
+  var names = (this.def && this.def.corners) || CORNER_NAMES;
+  for (c = 0; c < names.length; c++) {
+    var name = names[c][0];
+    var cp = controlPts[names[c][1]];
+    if (!cp) continue;                    /* index past the end of this circuit */
     var best = 0, bestD = Infinity;
     for (i = 0; i < n; i++) {
       var dx = this.p[i].x - cp.x, dz = this.p[i].z - cp.z;
@@ -2188,17 +2621,46 @@ Track.prototype.frame = function (x, z, hint, out) {
   var dx = x - p.x, dz = z - p.z;
   var along = dx * f.x + dz * f.z;
   var lateral = dx * l.x + dz * l.z;
-  /* refine to the neighbouring segment when we've run past this sample */
-  if (along > this.ds) { i = (i + 1) % n; p = this.p[i]; f = this.fwd[i]; l = this.lat[i]; dx = x - p.x; dz = z - p.z; along = dx * f.x + dz * f.z; lateral = dx * l.x + dz * l.z; }
-  else if (along < -this.ds) { i = (i - 1 + n) % n; p = this.p[i]; f = this.fwd[i]; l = this.lat[i]; dx = x - p.x; dz = z - p.z; along = dx * f.x + dz * f.z; lateral = dx * l.x + dz * l.z; }
+  /* THE REAL LENGTH OF THIS SEGMENT, not the average.
 
-  var t = clamp(along / this.ds, 0, 1);
+     `ds` is length/n, but the spline is sampled at uniform PARAMETER rather
+     than uniform arc length, so segments vary — at Brands they run 3.09 m to
+     5.43 m against a 4.34 m average, nearly 30% either way. Normalising the
+     interpolation by `ds` therefore makes t reach 1 before the next sample on
+     a short segment, and never reach it on a long one, so the height flat-
+     lines and then snaps at every boundary.
+
+     Flat circuits hide this completely: with every p.y at zero the lerp has
+     nothing to get wrong. Brands climbs up to 0.626 m per segment and it
+     showed up as the car shaking — 0.111 m RMS of pure frame-to-frame jitter
+     in the car's vertical position, against a predicted 0.11 m worst case. */
+  var seg = this.cum[i + 1] - this.cum[i];
+  /* Step back to the segment we are actually ON.
+
+     nearestIndex returns the nearest sample POINT, which flips to i+1 at the
+     MIDPOINT of a segment — but everything below treats i as the segment
+     START. So for the second half of every segment the nearest sample is
+     ahead of the car, `along` comes out NEGATIVE, and t clamps to 0: the
+     height stops interpolating and snaps to that sample's value.
+
+     The old guard was `along < -seg`, which can never fire, because
+     nearestIndex has already guaranteed |along| <= seg/2. The result was a
+     jump of half a segment's climb at every single sample crossing — 0.4 m at
+     Brands, once every five frames at racing speed. That is the shaking.
+
+     `along < 0` is the correct test: it puts the car back on the segment
+     whose start it has passed, so along lands in [0, seg] and t sweeps the
+     full 0..1 continuously. */
+  if (along > seg) { i = (i + 1) % n; p = this.p[i]; f = this.fwd[i]; l = this.lat[i]; dx = x - p.x; dz = z - p.z; along = dx * f.x + dz * f.z; lateral = dx * l.x + dz * l.z; seg = this.cum[i + 1] - this.cum[i]; }
+  else if (along < 0) { i = (i - 1 + n) % n; p = this.p[i]; f = this.fwd[i]; l = this.lat[i]; dx = x - p.x; dz = z - p.z; along = dx * f.x + dz * f.z; lateral = dx * l.x + dz * l.z; seg = this.cum[i + 1] - this.cum[i]; }
+
+  var t = clamp(along / seg, 0, 1);
   var nextY = this.p[(i + 1) % n].y;
   var y = lerp(p.y, nextY, t) + lateral * dtan(this.bank[i]);
 
   out.i = i;
   out.lateral = lateral;
-  out.s = this.cum[i] + clamp(along, 0, this.ds);
+  out.s = this.cum[i] + clamp(along, 0, seg);
   out.y = y;
   out.fwd = f;
   out.lat = l;
@@ -2208,10 +2670,8 @@ Track.prototype.frame = function (x, z, hint, out) {
 Track.prototype.heightAt = function (x, z, hint) {
   var tmp = TMP_FRAME_B;
   this.frame(x, z, hint, tmp);
-  var off = Math.abs(tmp.lateral);
-  var h = tmp.y;
-  if (off > HALF_W) h -= Math.min((off - HALF_W) * 0.05, 0.5);   /* runoff/grass dips away */
-  return h;
+  /* same drop the mesh uses, so the car rides the surface you can see */
+  return tmp.y - runoffDrop(tmp.lateral);
 };
 
 Track.prototype.pointAt = function (i, off, out) {
@@ -2323,21 +2783,26 @@ function buildTrackMeshes(track, scene) {
 
   var group = new THREE.Group();
 
-  group.add(new THREE.Mesh(road.geometry(), new THREE.MeshLambertMaterial({
-    map: texFromCanvas(makeAsphaltTex(), 1, 1), vertexColors: true  })));
-  group.add(new THREE.Mesh(runoff.geometry(), new THREE.MeshLambertMaterial({
-    map: texFromCanvas(makeRunoffTex(), 1, 1), vertexColors: true  })));
-  group.add(new THREE.Mesh(grass.geometry(), new THREE.MeshLambertMaterial({
-    map: texFromCanvas(makeGrassTex(), 6, 1), vertexColors: true  })));
-  group.add(new THREE.Mesh(kerb.geometry(), new THREE.MeshLambertMaterial({
-    map: texFromCanvas(makeKerbTex(), 1, 1, true), vertexColors: true  })));
-  group.add(new THREE.Mesh(wall.geometry(), new THREE.MeshLambertMaterial({
-    map: texFromCanvas(makeWallTex(), 1, 1), vertexColors: true  })));
-  var lineMesh = new THREE.Mesh(line.geometry(), new THREE.MeshLambertMaterial({
-    vertexColors: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+  group.add(new THREE.Mesh(road.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeAsphaltTex(), 1, 1), vertexColors: true, roughness: 0.92, metalness: 0.0 })));
+  group.add(new THREE.Mesh(runoff.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeRunoffTex(), 1, 1), vertexColors: true, roughness: 0.95, metalness: 0.0 })));
+  group.add(new THREE.Mesh(grass.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeGrassTex(), 6, 1), vertexColors: true, roughness: 1.0, metalness: 0.0 })));
+  group.add(new THREE.Mesh(kerb.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeKerbTex(), 1, 1, true), vertexColors: true, roughness: 0.72, metalness: 0.0 })));
+  group.add(new THREE.Mesh(wall.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeWallTex(), 1, 1), vertexColors: true, roughness: 0.55, metalness: 0.35 })));
+  var lineMesh = new THREE.Mesh(line.geometry(), new THREE.MeshStandardMaterial({
+    vertexColors: true, roughness: 0.85, metalness: 0.0,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
   }));
   group.add(lineMesh);
 
+  /* receiveShadow is PER MESH — setting it on the Group does nothing, three.js
+     never walks the tree for it. The road, kerbs, runoff and grass all take
+     shadows; none of them casts one. */
+  group.traverse(function (o) { if (o.isMesh) o.receiveShadow = true; });
   scene.add(group);
   return group;
 }
@@ -2349,9 +2814,31 @@ function edge(track, i, off) {
   return vec(p.x + l.x * off, p.y + off * dtan(track.bank[i]), p.z + l.z * off);
 }
 
+/* The runoff sits below the racing surface, so dropping a wheel off the road
+   is felt as well as seen.
+
+   THIS MUST BE APPLIED TO THE MESH AND TO heightAt ALIKE. It used to live only
+   in heightAt, so the car drove along a surface up to half a metre below the
+   one on screen — which reads exactly as sinking into the gravel. */
+function runoffDrop(off) {
+  var a = Math.abs(off);
+  return a > HALF_W ? Math.min((a - HALF_W) * 0.05, 0.5) : 0;
+}
+
+/* Ground height at a lateral offset from sample i.
+
+   Anything standing beside the circuit must be placed with this rather than
+   with p.y. p.y is the height on the CENTRELINE, and on a banked circuit the
+   verge is nowhere near it: at Indy's 9.2 degrees the apron where the corner
+   boards stand is 3.5 m above the centreline, so a board pinned to p.y is
+   buried up to its lettering and its legs never surface. */
+function groundY(track, i, off) {
+  return track.p[i].y + off * dtan(track.bank[i]) - runoffDrop(off);
+}
+
 function edgeY(track, i, off, dy) {
   var p = track.p[i], l = track.lat[i];
-  return vec(p.x + l.x * off, p.y + off * dtan(track.bank[i]) + dy, p.z + l.z * off);
+  return vec(p.x + l.x * off, groundY(track, i, off) + dy, p.z + l.z * off);
 }
 
 function pushStrip(rb, track, i, i2, offA, offB, dy, v0, v1, color) {
@@ -2365,12 +2852,99 @@ function pushWall(rb, track, i, i2, off, h, vAcc) {
   var base0 = edgeY(track, i, off, -0.05), base1 = edgeY(track, i2, off, -0.05);
   var top0 = edgeY(track, i, off, h), top1 = edgeY(track, i2, off, h);
   var u0 = vAcc / 12, u1 = (vAcc + track.ds) / 12;
-  if (inward > 0) rb.quad(base0, base1, top1, top0, [[u0, 1], [u1, 1], [u1, 0], [u0, 0]], WHITE_C);
-  else rb.quad(base1, base0, top0, top1, [[u1, 1], [u0, 1], [u0, 0], [u1, 0]], WHITE_C);
+  /* WINDING. quad(a,b,c,d) winds a->b->c, so its normal is (b-a) x (c-a).
+     Both faces here span fwd*ds and up*h, which makes the normal +/-lat and
+     nothing else — the side of the track the wall sits on does not enter into
+     it, only the vertex order does. These two branches were swapped, so BOTH
+     barriers faced away from the circuit and were culled by the FrontSide
+     material: solid to drive into, invisible to look at. Only the 0.35 m cap
+     strip below, which winds to +up, was ever drawn. */
+  if (inward > 0) rb.quad(base1, base0, top0, top1, [[u1, 1], [u0, 1], [u0, 0], [u1, 0]], WHITE_C);
+  else rb.quad(base0, base1, top1, top0, [[u0, 1], [u1, 1], [u1, 0], [u0, 0]], WHITE_C);
   /* capping strip so the wall reads as solid from a chase camera */
   var capIn0 = edgeY(track, i, off + inward * 0.35, h), capIn1 = edgeY(track, i2, off + inward * 0.35, h);
   if (inward > 0) rb.quad(top0, top1, capIn1, capIn0, [[u0, 0], [u1, 0], [u1, 0.2], [u0, 0.2]], WHITE_C);
   else rb.quad(capIn0, capIn1, top1, top0, [[u0, 0.2], [u1, 0.2], [u1, 0], [u0, 0]], WHITE_C);
+}
+
+/* A speedway is not dotted with grandstands, it is enclosed by them, so a
+   circuit can ask for `standRing` and get unbroken terracing round the whole
+   lap on BOTH sides — the outside wall and the infield.
+
+   Built as one closed strip per side rather than a stand mesh every few
+   metres: at Indy that is roughly 160 objects collapsed into four, which
+   matters because every one of them would otherwise be its own draw call.
+
+   The rake matches the individual stands — the face climbs away from the
+   circuit so its normal points up and inward, toward the racing. */
+function buildStandRing(scene, track, crowdMat) {
+  var n = track.n;
+  var STEP = 4;                     /* one quad per 4 samples is ample here */
+  var Y0 = 1.4, Y1 = 15.0;
+  /* The two sides are NOT symmetrical. Perimeter terracing crowds the wall,
+     but infield terracing at the same offset sits square in the driver's eye
+     line all the way round — it has to go back across the apron, which is
+     also where it really is. lat is the car's LEFT and this oval runs
+     anti-clockwise, so side +1 is the infield.
+
+     The perimeter figure also has to clear the corner boards, which stand at
+     WALL_HALF + 3.6. At WALL_HALF + 6 the terracing rose barely two metres
+     behind them, so a dark board landed against the stand's dark base and
+     stopped reading. WALL_HALF + 14 leaves ten metres of grass behind every
+     board, which is also roughly where the apron, wall and fence put the
+     first row on a real speedway.
+
+     Both figures must also stay inside the grass skirt, which only reaches
+     WALL_HALF + VERGE (46). Past that there is no ground mesh at all, so a
+     ring placed further out stands on nothing — the infield bank at + 52 was
+     hanging over the void with groundY extrapolating the banking 8 m below
+     the centreline. Outer spans 14 to 37 with its roof, infield 22 to 45. */
+  var OFFSETS = { '1': WALL_HALF + 22, '-1': WALL_HALF + 14 };
+  /* 44 m per tile, matching PlaneGeometry(44, ...) on the single stands, so
+     the crowd is the same density everywhere on the circuit. */
+  var TILE = 44;
+  var roofMat = new THREE.MeshStandardMaterial({ color: COL.papaya, side: THREE.DoubleSide, roughness: 0.48, metalness: 0.15 });
+
+  for (var side = 1; side >= -1; side -= 2) {
+    var near = OFFSETS[String(side)], far = near + 19;
+    var strips = [
+      { pos: [], uv: [], idx: [], near: near, far: far, y0: Y0, y1: Y1, mat: crowdMat },
+      { pos: [], uv: [], idx: [], near: far - 1, far: far + 4, y0: Y1 + 0.9, y1: Y1 + 1.4, mat: roofMat }
+    ];
+    var run = 0, cols = 0;
+
+    /* k runs to n inclusive so the last quad closes back onto sample 0 */
+    for (var k = 0; k <= n; k += STEP) {
+      var i = k % n;
+      var p = track.p[i], l = track.lat[i];
+      if (k > 0) run += track.ds * STEP;
+      var u = run / TILE;
+      for (var t = 0; t < 2; t++) {
+        var st = strips[t];
+        st.pos.push(p.x + l.x * side * st.near, groundY(track, i, side * st.near) + st.y0, p.z + l.z * side * st.near);
+        st.pos.push(p.x + l.x * side * st.far, groundY(track, i, side * st.far) + st.y1, p.z + l.z * side * st.far);
+        st.uv.push(u, 0, u, 1);
+      }
+      cols++;
+    }
+
+    for (var c = 0; c < cols - 1; c++) {
+      var a = c * 2;
+      for (var s2 = 0; s2 < 2; s2++) {
+        strips[s2].idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+      }
+    }
+
+    for (var g = 0; g < 2; g++) {
+      var sg = strips[g];
+      var geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(sg.pos, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(sg.uv, 2));
+      geo.setIndex(sg.idx);
+      geo.computeVertexNormals();
+      scene.add(new THREE.Mesh(geo, sg.mat));
+    }
+  }
 }
 
 /* =========================================================================
@@ -2383,13 +2957,13 @@ function buildStartGantry(track, scene) {
   var mid = track.p[idx], lat = track.lat[idx], fwd = track.fwd[idx];
   var yaw = datan2(fwd.x, fwd.z);
 
-  var darkMat = new THREE.MeshLambertMaterial({ color: 0x24252c });
-  var papMat = new THREE.MeshLambertMaterial({ color: COL.papaya });
+  var darkMat = new THREE.MeshStandardMaterial({ color: srgb(0x24252c), roughness: 0.52, metalness: 0.45 });
+  var papMat = new THREE.MeshStandardMaterial({ color: COL.papaya, roughness: 0.45, metalness: 0.2 });
 
   var pillarGeo = new THREE.BoxGeometry(1.1, 8.4, 1.1);
   for (var s = -1; s <= 1; s += 2) {
     var pillar = new THREE.Mesh(pillarGeo, darkMat);
-    pillar.position.set(mid.x + lat.x * s * (WALL_HALF + 1.2), mid.y + 4.2, mid.z + lat.z * s * (WALL_HALF + 1.2));
+    pillar.position.set(mid.x + lat.x * s * (WALL_HALF + 1.2), groundY(track, idx, s * (WALL_HALF + 1.2)) + 4.2, mid.z + lat.z * s * (WALL_HALF + 1.2));
     g.add(pillar);
   }
 
@@ -2412,7 +2986,7 @@ function buildStartGantry(track, scene) {
   for (var i = 0; i < 5; i++) {
     var t = (i - 2) * 3.2;
     var m = new THREE.Mesh(offGeo, new THREE.MeshBasicMaterial({ color: 0x2a1a18, fog: false }));
-    m.position.set(mid.x + lat.x * t, mid.y + 7.2, mid.z + lat.z * t);
+    m.position.set(mid.x + lat.x * t, groundY(track, idx, t) + 7.2, mid.z + lat.z * t);
     m.rotation.y = yaw + Math.PI / 2;
     g.add(m);
     lights.push(m);
@@ -2421,9 +2995,15 @@ function buildStartGantry(track, scene) {
   /* start line */
   var lineTex = texFromCanvas(makeStartLineTex(), 8, 1, true);
   var startLine = new THREE.Mesh(new THREE.PlaneGeometry(HALF_W * 2, 2.2),
-    new THREE.MeshLambertMaterial({ map: lineTex, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+    new THREE.MeshStandardMaterial({ map: lineTex, roughness: 0.8, metalness: 0.0, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
   startLine.rotation.x = -Math.PI / 2;
-  startLine.rotation.z = -yaw;
+  /* +yaw, not -yaw. Laid flat by rotation.x = -PI/2 under the default XYZ
+     order, a NEGATIVE z mirrors the heading instead of rotating it, so the
+     span only lands across the road at cardinal headings. Every circuit here
+     happens to start near one, which hid it — Silverstone was out by 1.4
+     degrees on a straight 0.7 degrees off axis, exactly the 2x that a
+     reflection gives. */
+  startLine.rotation.z = yaw;
   startLine.position.set(mid.x, mid.y + 0.02, mid.z);
   g.add(startLine);
 
@@ -2438,14 +3018,19 @@ function buildScenery(track, scene) {
 
   /* grandstands and pit buildings clustered around the start line */
   var crowdTex = texFromCanvas(makeCrowdTex(), 3, 1);
-  var standMat = new THREE.MeshLambertMaterial({ color: 0x33353f });
-  var crowdMat = new THREE.MeshLambertMaterial({ map: crowdTex, side: THREE.DoubleSide });
-  var roofMat = new THREE.MeshLambertMaterial({ color: COL.papaya });
-  var pitMat = new THREE.MeshLambertMaterial({ map: texFromCanvas(makePitwallTex(), 4, 1, true) });
+  var standMat = new THREE.MeshStandardMaterial({ color: srgb(0x33353f), roughness: 0.82, metalness: 0.1 });
+  var crowdMat = new THREE.MeshStandardMaterial({ map: crowdTex, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0 });
+  var roofMat = new THREE.MeshStandardMaterial({ color: COL.papaya, roughness: 0.45, metalness: 0.2 });
+  var pitMat = new THREE.MeshStandardMaterial({ map: texFromCanvas(makePitwallTex(), 4, 1, true), roughness: 0.7, metalness: 0.0 });
 
   /* Stands stand back far enough to frame the straight instead of walling it
-     in, and the terracing is dark so the crowd is what actually reads. */
-  for (var s = 0; s < 5; s++) {
+     in, and the terracing is dark so the crowd is what actually reads.
+
+     A `standRing` circuit skips these entirely — the ring already covers the
+     start line, and leaving both in would bury five stands inside it. */
+  var ringed = !!track.def.standRing;
+  if (ringed) buildStandRing(scene, track, crowdMat);
+  for (var s = 0; !ringed && s < 5; s++) {
     var idx = (track.startIndex - 12 + s * 9 + n) % n;
     var side = s % 2 === 0 ? 1 : -1;
     var p = track.p[idx], l = track.lat[idx], f = track.fwd[idx];
@@ -2454,28 +3039,38 @@ function buildScenery(track, scene) {
     var facing = yaw + (side > 0 ? -Math.PI / 2 : Math.PI / 2);
 
     var base = new THREE.Mesh(new THREE.BoxGeometry(46, 8, 15), standMat);
-    base.position.set(p.x + l.x * side * dist, p.y + 3.2, p.z + l.z * side * dist);
-    base.rotation.y = yaw;
+    base.position.set(p.x + l.x * side * dist, groundY(track, idx, side * dist) + 3.2, p.z + l.z * side * dist);
+    /* -PI/2 turns the 46 m span ALONG the track. BoxGeometry puts that span
+       on local X, and rotation.y = yaw alone sends local X to lat — across
+       the road — so the shell sat crosswise under a crowd panel that runs
+       lengthwise, protruding 22 m from each end of a 15 m deep box. */
+    base.rotation.y = yaw - Math.PI / 2;
     scene.add(base);
 
     var cd = dist - 8.2;
     var crowd = new THREE.Mesh(new THREE.PlaneGeometry(44, 10.5), crowdMat);
-    crowd.position.set(p.x + l.x * side * cd, p.y + 5.4, p.z + l.z * side * cd);
+    crowd.position.set(p.x + l.x * side * cd, groundY(track, idx, side * cd) + 5.4, p.z + l.z * side * cd);
     crowd.rotation.order = 'YXZ';
     crowd.rotation.y = facing;
-    crowd.rotation.x = 0.42;
+    /* NEGATIVE. With order YXZ the world normal is
+       (cos x * sin y, -sin x, cos x * cos y), so a POSITIVE rotation.x drives
+       the normal's y below zero — the seating face tilts down and leans in
+       over the track, which reads as a stand built back-to-front. A real rake
+       climbs away from the circuit: back rows higher and further out, normal
+       pointing up and inward. */
+    crowd.rotation.x = -0.42;
     scene.add(crowd);
 
     var roof = new THREE.Mesh(new THREE.BoxGeometry(48, 0.7, 17), roofMat);
-    roof.position.set(p.x + l.x * side * (dist + 1.5), p.y + 11.2, p.z + l.z * side * (dist + 1.5));
-    roof.rotation.y = yaw;
+    roof.position.set(p.x + l.x * side * (dist + 1.5), groundY(track, idx, side * (dist + 1.5)) + 11.2, p.z + l.z * side * (dist + 1.5));
+    roof.rotation.y = yaw - Math.PI / 2;   /* same 90 degrees as the base */
     scene.add(roof);
 
     for (var pil = -1; pil <= 1; pil += 2) {
       var post = new THREE.Mesh(new THREE.BoxGeometry(1, 12, 1), standMat);
       post.position.set(
         p.x + l.x * side * (dist + 7) + f.x * pil * 21,
-        p.y + 5.6,
+        groundY(track, idx, side * (dist + 7)) + 5.6,
         p.z + l.z * side * (dist + 7) + f.z * pil * 21
       );
       scene.add(post);
@@ -2487,7 +3082,7 @@ function buildScenery(track, scene) {
     var pi = (track.startIndex - 20 + i * 4 + n) % n;
     var pp = track.p[pi], pl = track.lat[pi], pf = track.fwd[pi];
     var board = new THREE.Mesh(new THREE.BoxGeometry(11, 2.0, 0.4), pitMat);
-    board.position.set(pp.x + pl.x * (WALL_HALF + 2.6), pp.y + 1.6, pp.z + pl.z * (WALL_HALF + 2.6));
+    board.position.set(pp.x + pl.x * (WALL_HALF + 2.6), groundY(track, pi, WALL_HALF + 2.6) + 1.6, pp.z + pl.z * (WALL_HALF + 2.6));
     /* -PI/2 runs the board along the track and turns its lettered face inward */
     board.rotation.y = datan2(pf.x, pf.z) - Math.PI / 2;
     scene.add(board);
@@ -2500,12 +3095,12 @@ function buildScenery(track, scene) {
     var si = (corner.index - 24 + n) % n;
     var sp = track.p[si], sl = track.lat[si], sf = track.fwd[si];
     var sideS = track.curv[corner.index] > 0 ? -1 : 1;   /* outside of the bend */
-    var signMat = new THREE.MeshLambertMaterial({
+    var signMat = new THREE.MeshStandardMaterial({
       map: texFromCanvas(makeSignTex(corner.name, '#1b1c22', '#ff8000', '#ff8000'), 1, 1, true),
-      side: THREE.DoubleSide
+      side: THREE.DoubleSide, roughness: 0.7, metalness: 0.0
     });
     var sign = new THREE.Mesh(new THREE.PlaneGeometry(11, 2.75), signMat);
-    sign.position.set(sp.x + sl.x * sideS * (WALL_HALF + 3.6), sp.y + 2.9, sp.z + sl.z * sideS * (WALL_HALF + 3.6));
+    sign.position.set(sp.x + sl.x * sideS * (WALL_HALF + 3.6), groundY(track, si, sideS * (WALL_HALF + 3.6)) + 2.9, sp.z + sl.z * sideS * (WALL_HALF + 3.6));
     /* +PI so the lettered FRONT face turns back up the road to meet the
        driver. Facing it down-track shows the mirrored reverse. */
     sign.rotation.y = datan2(sf.x, sf.z) + Math.PI;
@@ -2515,7 +3110,7 @@ function buildScenery(track, scene) {
       var legMesh = new THREE.Mesh(new THREE.BoxGeometry(0.35, 3.0, 0.35), standMat);
       legMesh.position.set(
         sp.x + sl.x * sideS * (WALL_HALF + 3.6) + sf.x * leg * 4.6,
-        sp.y + 1.5,
+        groundY(track, si, sideS * (WALL_HALF + 3.6)) + 1.5,
         sp.z + sl.z * sideS * (WALL_HALF + 3.6) + sf.z * leg * 4.6
       );
       scene.add(legMesh);
@@ -2524,19 +3119,54 @@ function buildScenery(track, scene) {
 
   /* crossed-quad treeline */
   var treeTex = texFromCanvas(makeTreeTex(), 1, 1, true);
-  var treeMat = new THREE.MeshLambertMaterial({
-    map: treeTex, transparent: false, alphaTest: 0.5, side: THREE.DoubleSide
+  var treeMat = new THREE.MeshStandardMaterial({
+    map: treeTex, transparent: false, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0
   });
   var treeBuf = new RibbonBuilder();
+  var treeProbe = { i: 0, lateral: 0, s: 0, y: 0, fwd: null, lat: null };
   var placed = 0;
   for (i = 0; i < n; i += 2) {
     for (var side2 = -1; side2 <= 1; side2 += 2) {
       if (rnd() > 0.55) continue;
-      var d = WALL_HALF + 20 + rnd() * 90;
+      /* A ringed circuit is walled in by terracing from WALL_HALF + 14 out to
+         + 45, and the old + 20 grew a wood straight up through the middle of
+         the crowd. Two things keep them out of it now.
+
+         Nothing on the infield side: side2 +1 is inside the oval (lat is the
+         car's LEFT and this runs anti-clockwise), and anything planted there
+         is hidden behind the infield bank anyway.
+
+         And the margin has to cover more than the trunk. Each tree is jittered
+         up to 7 m in x AND z — worst case ~9.9 m projected onto lat — and its
+         crossed quads span up to 5.6 m either side of the trunk. So the first
+         trunk goes 15.5 m further out than the last row of seats, not flush
+         against it. */
+      if (track.def.standRing && side2 > 0) continue;
+      var d = WALL_HALF + (track.def.standRing ? 56 : 20) + rnd() * 90;
       var tp = track.p[i], tl = track.lat[i];
       var x = tp.x + tl.x * side2 * d + (rnd() - 0.5) * 14;
       var z = tp.z + tl.z * side2 * d + (rnd() - 0.5) * 14;
-      var y = tp.y - 0.6;
+
+      /* Re-frame against the WHOLE circuit, not the sample we scattered from.
+         hint = null forces nearestIndex to do its global sweep instead of
+         searching +/-8 samples around i. A lap that folds back on itself puts
+         one stretch of road within scattering range of another — Brands brings
+         Druids back alongside the climb to Graham Hill — so a tree measured
+         30 m clear of sample i can be sitting on the racing line somewhere
+         else entirely. Drop anything that lands inside the barriers. */
+      track.frame(x, z, null, treeProbe);
+      if (Math.abs(treeProbe.lateral) < WALL_HALF + 6) continue;
+
+      /* Height from where the tree ACTUALLY is, not from the sample it was
+         scattered off. On a flat circuit those agree; on Brands, with 34 m
+         between Paddock Hill and Druids, the old centreline height left whole
+         stands of trees hanging in the air.
+
+         The bank term is clamped at the grass edge because beyond WALL_HALF +
+         VERGE there is no ground mesh to follow, and extrapolating the camber
+         out to 120 m would lift them off the ground all over again. */
+      var vergeEdge = WALL_HALF + VERGE;
+      var y = groundY(track, treeProbe.i, clamp(treeProbe.lateral, -vergeEdge, vergeEdge)) - 0.6;
       var hgt = 9 + rnd() * 9;
       var wdt = hgt * 0.62;
       pushCrossQuad(treeBuf, x, y, z, wdt, hgt, rnd() * TAU);
@@ -2574,8 +3204,12 @@ function pushCrossQuad(rb, x, y, z, w, h, rot) {
     var p2 = vec(x + dx, y + h, z + dz);
     var p3 = vec(x - dx, y + h, z - dz);
     var nrm = vec(-dz, 0, dx).normalize();
-    rb.tri(p0, p1, p2, nrm, [0, 1], [1, 1], [1, 0], WHITE_C);
-    rb.tri(p0, p2, p3, nrm, [0, 1], [1, 0], [0, 0], WHITE_C);
+    /* V RUNS UP. p0/p1 are the base of the quad and p2/p3 the top, so the base
+       takes v=0 and the top v=1. These were the other way round, which with
+       Three's default flipY planted every tree canopy-first in the ground and
+       left the trunk waving in the air. */
+    rb.tri(p0, p1, p2, nrm, [0, 0], [1, 0], [1, 1], WHITE_C);
+    rb.tri(p0, p2, p3, nrm, [0, 0], [1, 1], [0, 1], WHITE_C);
   }
 }
 
@@ -2622,7 +3256,7 @@ function part(geo, color, p, r, s) {
   g.applyMatrix4(m);
   var count = g.attributes.position.count;
   var arr = new Float32Array(count * 3);
-  var c = new THREE.Color(color);
+  var c = new THREE.Color(color).convertSRGBToLinear();
   for (var i = 0; i < count; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
   g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
   if (g.attributes.uv) g.deleteAttribute('uv');
@@ -2648,13 +3282,33 @@ function mergeParts(list) {
   return out;
 }
 
+/* INDEX 0 IS THE PLAYER'S AND NOBODY ELSE'S. Papaya is the car you are
+   looking for on a 33-car grid, so buildGrid hands index 0 to the player and
+   draws the AI from 1 upward. Assigning by `i % LIVERIES.length` put a papaya
+   car in six of Indy's 33 slots and made the player's own car unfindable.
+
+   The rest exist in enough number that a full Indy field does not read as the
+   same six cars repeated: 15 AI liveries over 32 opponents is roughly two of
+   each, which is what a real grid looks like anyway. None of them is anywhere
+   near papaya — no yellow-orange, no bronze — so nothing else can be mistaken
+   for the car you are driving. */
 var LIVERIES = [
-  { name: 'MCL 64', body: 0xff8000, trim: 0x1b1c22, accent: 0x4fe3e0, helmet: 0xf2f2f4, num: '4' },
+  { name: 'MCL 64', body: 0xff8000, body2: 0x23262e, trim: 0x1b1c22, accent: 0x4fe3e0, helmet: 0xf2f2f4, num: '4' },
   { name: 'ARGENT', body: 0xb9bec7, trim: 0x22242c, accent: 0x39d17a, helmet: 0x2c2f3a, num: '17' },
   { name: 'ROSSO', body: 0xd2352f, trim: 0x1c1417, accent: 0xf2d16b, helmet: 0xf2d16b, num: '9' },
-  { name: 'AZUL', body: 0x2b56c4, trim: 0x141a2c, accent: 0xf25c2a, helmet: 0xe8e8ea, num: '22' },
+  { name: 'AZUL', body: 0x2b56c4, trim: 0x141a2c, accent: 0x4fe3e0, helmet: 0xe8e8ea, num: '22' },
   { name: 'VERDE', body: 0x1f7a54, trim: 0x11251d, accent: 0xd8e84a, helmet: 0xd8e84a, num: '55' },
-  { name: 'VIOLA', body: 0x6b3fb0, trim: 0x1a1426, accent: 0xff8ad1, helmet: 0xffffff, num: '31' }
+  { name: 'VIOLA', body: 0x6b3fb0, trim: 0x1a1426, accent: 0xff8ad1, helmet: 0xffffff, num: '31' },
+  { name: 'NERO', body: 0x2b2f36, trim: 0x121417, accent: 0x4fe3e0, helmet: 0xe8e8ea, num: '3' },
+  { name: 'GIALLO', body: 0xeddb3a, trim: 0x1e1c12, accent: 0x2b2f36, helmet: 0x2b2f36, num: '12' },
+  { name: 'CIELO', body: 0x5bc8f5, trim: 0x14232c, accent: 0xffffff, helmet: 0x14232c, num: '27' },
+  { name: 'ROSA', body: 0xe0559a, trim: 0x2a1420, accent: 0xf2f2f4, helmet: 0xf2f2f4, num: '7' },
+  { name: 'TEAL', body: 0x128f8b, trim: 0x0c2422, accent: 0xd8e84a, helmet: 0xe8e8ea, num: '44' },
+  { name: 'SABBIA', body: 0xcdb894, trim: 0x241f16, accent: 0x7a1f2b, helmet: 0x241f16, num: '18' },
+  { name: 'GRANATO', body: 0x7a1f2b, trim: 0x1a0d10, accent: 0xcdb894, helmet: 0xcdb894, num: '5' },
+  { name: 'INDACO', body: 0x35358f, trim: 0x121230, accent: 0x9bd642, helmet: 0xe8e8ea, num: '63' },
+  { name: 'LIME', body: 0x9bd642, trim: 0x18220c, accent: 0x2b2f36, helmet: 0x2b2f36, num: '81' },
+  { name: 'ARDESIA', body: 0x5b6572, trim: 0x191d22, accent: 0xff8ad1, helmet: 0xe8e8ea, num: '10' }
 ];
 
 var _shadowTex = null;
@@ -2677,6 +3331,12 @@ function shadowTexture() {
    of the car forward of centre; +Z is the nose. */
 function buildCarMesh(livery) {
   var body = livery.body, trim = livery.trim, accent = livery.accent;
+  /* Secondary body colour for the sidepods and engine cover. Modern cars are
+     two-tone — the MCL38 runs papaya over the nose, monocoque and rear wing
+     with the flanks and deck in anthracite — and a car painted one flat colour
+     end to end reads as a toy next to it. Optional, and defaults to `body`, so
+     a livery that does not want the split is unchanged. */
+  var body2 = (livery.body2 == null) ? body : livery.body2;
   var parts = [];
   var RX = Math.PI / 2;          /* stand a cylinder up along Z */
 
@@ -2686,22 +3346,26 @@ function buildCarMesh(livery) {
     [0, 0.15, -1.25], [RX, 0, 0], [1.55, 1, 0.16]));
 
   /* Monocoque: a wide, shallow tub — the car is far flatter than it is tall */
-  parts.push(part(new THREE.CylinderGeometry(0.30, 0.40, 2.55, 8), body,
+  parts.push(part(new THREE.CylinderGeometry(0.30, 0.40, 2.55, 8), body2,
     [0, 0.34, 0.62], [RX, 0, 0], [1.08, 1, 0.58]));
   /* shoulder line in anthracite, as on the real livery */
   parts.push(part(new THREE.CylinderGeometry(0.31, 0.38, 1.15, 8), trim,
     [0, 0.42, 0.30], [RX, 0, 0], [1.10, 1, 0.44]));
 
-  /* Nose: broad at the bulkhead, tapering to a blunt tip rather than a spike */
-  parts.push(part(new THREE.CylinderGeometry(0.17, 0.30, 1.72, 8), body,
-    [0, 0.33, 2.12], [RX, 0, 0], [1.0, 1, 0.62]));
-  parts.push(part(new THREE.CylinderGeometry(0.145, 0.17, 0.34, 8), body,
-    [0, 0.32, 3.13], [RX, 0, 0], [1.0, 1, 0.70]));
+  /* NOSE. A long low blade that DROPS toward the wing, not a fat tube carried
+     out at chassis height. This is the single biggest thing dating the
+     silhouette: on a modern car the nose tip sits barely above the front wing,
+     and the whole assembly is far longer and thinner than it looks in photos.
+     The slight -X rotation is the droop. */
+  parts.push(part(new THREE.CylinderGeometry(0.15, 0.27, 1.60, 8), body,
+    [0, 0.305, 1.98], [RX - 0.05, 0, 0], [0.90, 1, 0.52]));
+  parts.push(part(new THREE.CylinderGeometry(0.075, 0.15, 1.15, 8), body,
+    [0, 0.205, 3.02], [RX - 0.06, 0, 0], [0.82, 1, 0.48]));
 
   /* Sidepods: wide and low at the inlet, undercut into the coke-bottle */
   for (var s = -1; s <= 1; s += 2) {
-    parts.push(part(new THREE.CylinderGeometry(0.16, 0.40, 2.35, 8), body,
-      [s * 0.58, 0.33, -0.55], [RX, 0, 0], [1.34, 1, 0.60]));
+    parts.push(part(new THREE.CylinderGeometry(0.13, 0.36, 2.55, 8), body2,
+      [s * 0.60, 0.295, -0.55], [RX, 0, 0], [1.32, 1, 0.50]));
     /* dark inlet mouth */
     parts.push(part(new THREE.CylinderGeometry(0.30, 0.30, 0.22, 8), trim,
       [s * 0.60, 0.34, 0.58], [RX, 0, 0], [1.30, 1, 0.60]));
@@ -2709,41 +3373,78 @@ function buildCarMesh(livery) {
     parts.push(part(new THREE.CylinderGeometry(0.12, 0.30, 1.55, 8), accent,
       [s * 0.775, 0.30, -0.30], [RX, 0, 0], [0.26, 1, 0.34]));
     /* floor edge winglet */
-    parts.push(part(new THREE.BoxGeometry(0.06, 0.14, 1.30), trim, [s * 0.82, 0.19, 0.30]));
+    parts.push(part(new THREE.BoxGeometry(0.06, 0.14, 1.30), body, [s * 0.82, 0.19, 0.30]));
   }
 
   /* Airbox and engine cover, tapering into the gearbox */
   parts.push(part(new THREE.CylinderGeometry(0.21, 0.27, 0.54, 8), trim,
     [0, 0.78, -0.34], [RX, 0, 0], [1, 1, 0.86]));
-  parts.push(part(new THREE.CylinderGeometry(0.09, 0.30, 2.45, 8), body,
+  parts.push(part(new THREE.CylinderGeometry(0.09, 0.30, 2.45, 8), body2,
     [0, 0.50, -1.55], [RX, 0, 0], [0.94, 1, 0.66]));
   /* shark-fin spine */
-  parts.push(part(new THREE.BoxGeometry(0.04, 0.26, 1.40), trim, [0, 0.74, -1.70]));
+  /* teal down the spine: the reference carries it as a line, and painting
+     the whole airbox with it turned the car's shoulder into a slab. */
+  parts.push(part(new THREE.BoxGeometry(0.045, 0.26, 1.40), accent, [0, 0.74, -1.70]));
 
   /* Halo — a real hoop, not three sticks */
-  parts.push(part(new THREE.TorusGeometry(0.40, 0.035, 4, 14, Math.PI), trim,
-    [0, 0.80, 0.72], [0.30, 0, 0]));
-  parts.push(part(new THREE.CylinderGeometry(0.035, 0.045, 0.34, 6), trim, [0, 0.86, 1.06], [0.22, 0, 0]));
+  /* A halo is a ring lying nearly FLAT around the cockpit, wider than it is
+     tall, with a single strut dropping from its front point to the chassis.
+     Built as a half-torus in the XY plane it came out a vertical semicircle —
+     a rainbow archway standing over the car, which is not the shape at all
+     and reads as badly wrong from inside. Full ring, laid into the XZ plane
+     by RX and stretched fore-and-aft, tilted a little nose-down so the front
+     sits where the strut can meet it. */
+  /* TEARDROP, not an oval. The real halo is a rear arc around the driver's
+     shoulders with two blades sweeping FORWARD and inward to a single point
+     ahead of the cockpit, where the strut drops to the chassis. An even ring
+     reads as a hoop dropped over the car; the pinch at the front is the whole
+     silhouette. Raised to clear the helmet crown at 0.96.
 
-  /* Driver */
-  parts.push(part(new THREE.SphereGeometry(0.185, 8, 6), livery.helmet, [0, 0.775, 0.28]));
-  parts.push(part(new THREE.BoxGeometry(0.27, 0.085, 0.05), trim, [0, 0.79, 0.45]));
+     [RX, 0, PI] lays the half-torus flat AND spins it 180 in its own plane, so
+     the arc is the REAR half — without the PI it wraps the front, where the
+     blades need to be. */
+  parts.push(part(new THREE.TorusGeometry(0.40, 0.042, 4, 12, Math.PI), trim,
+    [0, 0.985, 0.44], [RX, 0, Math.PI]));
+  for (var hb = -1; hb <= 1; hb += 2) {
+    parts.push(part(new THREE.BoxGeometry(0.055, 0.048, 0.72), trim,
+      [hb * 0.20, 0.992, 0.735], [0, -hb * 0.604, 0]));
+  }
+  /* The strut is a blade, not a rod — from the driver's seat it is the single
+     heaviest thing in frame, splitting the road ahead in two. */
+  parts.push(part(new THREE.BoxGeometry(0.075, 0.58, 0.05), trim, [0, 0.71, 1.07], [-0.13, 0, 0]));
 
-  /* Front wing: three stacked elements, thin vertical endplates */
-  parts.push(part(new THREE.BoxGeometry(1.98, 0.035, 0.50), trim, [0, 0.105, 3.34]));
-  parts.push(part(new THREE.BoxGeometry(1.84, 0.035, 0.32), body, [0, 0.165, 3.22]));
-  parts.push(part(new THREE.BoxGeometry(1.66, 0.035, 0.24), trim, [0, 0.215, 3.13]));
+  /* COCKPIT COAMING — the raised rim around the opening, in body colour.
+     From outside it is a detail; from the driver's eye it is the frame the
+     entire view sits in, the bright band running across the lower third and
+     up both sides. Without it the helmet camera looks like sitting on a plank
+     rather than down inside a tub. Oval: 0.40 across, 0.60 fore-and-aft. */
+  parts.push(part(new THREE.TorusGeometry(0.40, 0.040, 4, 14), body,
+    [0, 0.565, 0.46], [RX, 0, 0], [1.0, 1.45, 1.0]));
+
+  /* Driver's head is built SEPARATELY, below — the helmet camera sits inside
+     it, and a head merged into the chassis could not be hidden for that one
+     car without hiding the whole bodywork with it. */
+
+  /* FRONT WING. Wider than the car, sitting almost ON the ground, with tall
+     endplates that turn the air around the tyre. The old one was a stack of
+     narrow slats floating at axle height, which is what a 1990s wing looked
+     like and reads as a toy under a modern nose. */
+  parts.push(part(new THREE.BoxGeometry(2.06, 0.032, 0.66), body2, [0, 0.072, 3.42]));
+  parts.push(part(new THREE.BoxGeometry(1.96, 0.032, 0.44), body,  [0, 0.132, 3.26]));
+  parts.push(part(new THREE.BoxGeometry(1.82, 0.032, 0.30), body2, [0, 0.192, 3.14]));
   for (var e = -1; e <= 1; e += 2) {
-    parts.push(part(new THREE.BoxGeometry(0.05, 0.30, 0.62), body, [e * 0.98, 0.21, 3.30]));
-    parts.push(part(new THREE.BoxGeometry(0.05, 0.13, 0.26), accent, [e * 0.985, 0.40, 3.38]));
+    parts.push(part(new THREE.BoxGeometry(0.045, 0.44, 0.86), body, [e * 1.02, 0.235, 3.34]));
+    parts.push(part(new THREE.BoxGeometry(0.05, 0.16, 0.30), accent, [e * 1.03, 0.50, 3.46]));
   }
 
   /* Rear wing on swan-neck supports */
-  parts.push(part(new THREE.BoxGeometry(1.02, 0.04, 0.42), trim, [0, 1.02, -2.52]));
-  parts.push(part(new THREE.BoxGeometry(1.02, 0.035, 0.24), body, [0, 0.90, -2.40]));
+  /* REAR WING. Tall, well above the tyre, on deep endplates. The old one sat
+     barely proud of the engine cover and vanished behind the rear wheels. */
+  parts.push(part(new THREE.BoxGeometry(1.08, 0.045, 0.50), body, [0, 1.12, -2.60]));
+  parts.push(part(new THREE.BoxGeometry(1.08, 0.035, 0.28), body2, [0, 0.96, -2.46]));
   for (var q = -1; q <= 1; q += 2) {
-    parts.push(part(new THREE.BoxGeometry(0.045, 0.44, 0.66), body, [q * 0.51, 0.86, -2.48]));
-    parts.push(part(new THREE.BoxGeometry(0.05, 0.30, 0.06), trim, [q * 0.22, 0.88, -2.36], [0.35, 0, 0]));
+    parts.push(part(new THREE.BoxGeometry(0.05, 0.70, 0.88), body, [q * 0.54, 0.80, -2.54]));
+    parts.push(part(new THREE.BoxGeometry(0.05, 0.34, 0.06), trim, [q * 0.24, 0.96, -2.42], [0.35, 0, 0]));
   }
   /* beam wing + diffuser */
   parts.push(part(new THREE.BoxGeometry(0.94, 0.035, 0.22), trim, [0, 0.48, -2.50]));
@@ -2757,10 +3458,14 @@ function buildCarMesh(livery) {
   }
 
   var bodyGeo = mergeParts(parts);
-  var bodyMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  /* Car paint: glossy and slightly metallic, so the environment map reads
+     across the bodywork the way clearcoat does. This is the material that
+     carries the whole "modern" look — flat shading on a car reads as plastic. */
+  var bodyMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.30, metalness: 0.45, envMapIntensity: 1.15 });
 
   var group = new THREE.Group();
   var chassis = new THREE.Mesh(bodyGeo, bodyMat);
+  chassis.castShadow = true;
   group.add(chassis);
 
   /* Wheels: 14-sided so they read as round, with a covered rim face */
@@ -2769,15 +3474,51 @@ function buildCarMesh(livery) {
     part(new THREE.CylinderGeometry(0.235, 0.235, 0.42, 12), trim, [0, 0, 0], [0, 0, Math.PI / 2]),
     part(new THREE.CylinderGeometry(0.20, 0.20, 0.44, 12), livery.body, [0, 0, 0], [0, 0, Math.PI / 2])
   ]);
-  var wheelMat = new THREE.MeshLambertMaterial({ vertexColors: true });
+  var wheelMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.88, metalness: 0.0 });
   var wheels = [];
   var spots = [[0.86, 0.36, 1.78], [-0.86, 0.36, 1.78], [0.90, 0.36, -1.72], [-0.90, 0.36, -1.72]];
   for (var i = 0; i < 4; i++) {
     var w = new THREE.Mesh(wheelGeo, wheelMat);
+    w.castShadow = true;
     w.position.set(spots[i][0], spots[i][1], spots[i][2]);
     group.add(w);
     wheels.push(w);
   }
+
+  /* Driver's head — its own mesh so the helmet camera can switch it off for
+     the car you are sitting in, and only that car. */
+  var head = new THREE.Mesh(mergeParts([
+    part(new THREE.SphereGeometry(0.185, 8, 6), livery.helmet, [0, 0.775, 0.28]),
+    part(new THREE.BoxGeometry(0.27, 0.085, 0.05), trim, [0, 0.79, 0.45])
+  ]), bodyMat);
+  group.add(head);
+
+  /* Steering wheel — the thing that sells a driver's-eye view, and the only
+     part of the car that answers your hands. Separate because it turns.
+     Sits below and forward of the eye line, as the real one does. */
+  var steerWheel = new THREE.Mesh(mergeParts([
+    /* squared-off rim, flattened top and bottom like a modern F1 wheel */
+    part(new THREE.TorusGeometry(0.175, 0.026, 4, 12), 0x14151a, [0, 0, 0], [0, 0, 0], [1, 0.82, 1]),
+    /* face, with a lit strip standing in for the display */
+    part(new THREE.BoxGeometry(0.24, 0.135, 0.022), trim, [0, 0, -0.012]),
+    part(new THREE.BoxGeometry(0.165, 0.038, 0.008), accent, [0, 0.036, -0.028]),
+    /* grips */
+    part(new THREE.BoxGeometry(0.05, 0.12, 0.055), 0x14151a, [-0.185, -0.015, -0.018]),
+    part(new THREE.BoxGeometry(0.05, 0.12, 0.055), 0x14151a, [0.185, -0.015, -0.018])
+  ]), bodyMat);
+  /* High and close, as a real F1 wheel sits — chest height, not lap height.
+     Any lower and the monocoque swallows it from the driver's eye. */
+  steerWheel.position.set(0, 0.620, 0.66);
+  /* POSITIVE. The face the driver sees is the mesh's -Z side, and a negative
+     rake swings that face down and away — measured 44.2 degrees off the eye
+     line, so you looked at the rim edge-on from above. At +0.42 it is 3.9
+     degrees off, i.e. aimed at the driver, which is what the comment always
+     claimed and what a real raked wheel does.
+
+     The spin axis stays mostly +Z through this, so the rim still reads
+     clockwise-for-right from behind and the steering direction is unaffected. */
+  steerWheel.rotation.x = 0.42;
+  group.add(steerWheel);
 
   /* fake contact shadow */
   var shadow = new THREE.Mesh(
@@ -2786,7 +3527,7 @@ function buildCarMesh(livery) {
   );
   shadow.rotation.x = -Math.PI / 2;
 
-  return { group: group, wheels: wheels, shadow: shadow, chassis: chassis };
+  return { group: group, wheels: wheels, shadow: shadow, chassis: chassis, head: head, steerWheel: steerWheel };
 }
 
 /* --- physics ------------------------------------------------------------ */
@@ -2807,6 +3548,8 @@ function Vehicle(track, livery, isPlayer) {
   var built = buildCarMesh(livery);
   this.group = built.group;
   this.wheels = built.wheels;
+  this.head = built.head;
+  this.steerWheel = built.steerWheel;
   this.shadow = built.shadow;
 
   this.pos = new THREE.Vector3();
@@ -2853,6 +3596,21 @@ Vehicle.prototype.placeAt = function (index, lateral) {
   this.sync(0);
 };
 
+/* Visual basis: same as forward/right but built from the interpolated yaw, so
+   anything that follows the car (the camera) tracks what is drawn rather than
+   the 60Hz physics state it was drawn from. */
+Vehicle.prototype.visForward = function (out) {
+  var y = (this.vyaw === undefined) ? this.yaw : this.vyaw;
+  return out.set(dsin(y), 0, dcos(y));
+};
+Vehicle.prototype.visRight = function (out) {
+  var y = (this.vyaw === undefined) ? this.yaw : this.vyaw;
+  return out.set(dcos(y), 0, -dsin(y));
+};
+Vehicle.prototype.visX = function () { return this.vx === undefined ? this.pos.x : this.vx; };
+Vehicle.prototype.visY = function () { return this.vy === undefined ? this.pos.y : this.vy; };
+Vehicle.prototype.visZ = function () { return this.vz === undefined ? this.pos.z : this.vz; };
+
 Vehicle.prototype.forward = function (out) { return out.set(dsin(this.yaw), 0, dcos(this.yaw)); };
 Vehicle.prototype.right = function (out) { return out.set(dcos(this.yaw), 0, -dsin(this.yaw)); };
 
@@ -2860,6 +3618,17 @@ var _f3 = new THREE.Vector3(), _r3 = new THREE.Vector3(), _tv = new THREE.Vector
 
 Vehicle.prototype.step = function (dt, input, raceLive) {
   var t = this.track;
+
+  /* Snapshot for render interpolation. Physics advances in fixed 60Hz steps
+     but frames are drawn whenever the display asks, so without a previous
+     state to blend from the car only moves on the frames a step happened to
+     land on — while the camera, damped on real frame time, keeps gliding.
+     Against the world that reads as mild stutter; on the chase car, which sits
+     still in frame, it reads as the car twitching. */
+  this.prevX = this.pos.x;
+  this.prevZ = this.pos.z;
+  this.prevYaw = this.yaw;
+
   var f = t.frame(this.pos.x, this.pos.z, this.frameIdx, this.f);
   this.frameIdx = f.i;
 
@@ -2965,37 +3734,83 @@ Vehicle.prototype.updateProgress = function (s) {
   this.progress = this.lapsDone * len + s;
 };
 
-Vehicle.prototype.sync = function (dt) {
+/* alpha is how far the current frame sits between the last physics step and
+   the next, so the visible car moves smoothly at whatever rate the display
+   runs. The PHYSICS position is never touched — only what is drawn. */
+Vehicle.prototype.sync = function (dt, alpha) {
   var t = this.track;
   var g = this.group;
 
-  var fx = dsin(this.yaw), fz = dcos(this.yaw);
-  var rx = dcos(this.yaw), rz = -dsin(this.yaw);
+  var a = (alpha === undefined) ? 1 : clamp(alpha, 0, 1);
+  if (this.prevX === undefined) { this.prevX = this.pos.x; this.prevZ = this.pos.z; this.prevYaw = this.yaw; }
 
-  var hC = t.heightAt(this.pos.x, this.pos.z, this.frameIdx);
-  var hF = t.heightAt(this.pos.x + fx * 2.2, this.pos.z + fz * 2.2, this.frameIdx);
-  var hB = t.heightAt(this.pos.x - fx * 2.2, this.pos.z - fz * 2.2, this.frameIdx);
-  var hR = t.heightAt(this.pos.x + rx * 1.5, this.pos.z + rz * 1.5, this.frameIdx);
-  var hL = t.heightAt(this.pos.x - rx * 1.5, this.pos.z - rz * 1.5, this.frameIdx);
+  var vx = lerp(this.prevX, this.pos.x, a);
+  var vz = lerp(this.prevZ, this.pos.z, a);
+  /* through the shortest arc, or the car spins the wrong way past +/-PI */
+  var vyaw = this.prevYaw + angleDelta(this.prevYaw, this.yaw) * a;
 
+  this.vx = vx; this.vz = vz; this.vyaw = vyaw;
+
+  var fx = dsin(vyaw), fz = dcos(vyaw);
+  var rx = dcos(vyaw), rz = -dsin(vyaw);
+
+  var hC = t.heightAt(vx, vz, this.frameIdx);
+  var hF = t.heightAt(vx + fx * 2.2, vz + fz * 2.2, this.frameIdx);
+  var hB = t.heightAt(vx - fx * 2.2, vz - fz * 2.2, this.frameIdx);
+  /* (rx, rz) is (cos yaw, -sin yaw), which is up X fwd — the car's LEFT, not
+     its right (see the sign derivation in 20-track.js). These two were named
+     the wrong way round, which silently negated the whole terrain-roll term. */
+  var hL = t.heightAt(vx + rx * 1.5, vz + rz * 1.5, this.frameIdx);
+  var hR = t.heightAt(vx - rx * 1.5, vz - rz * 1.5, this.frameIdx);
+
+  this.vy = hC;
   this.pos.y = hC;
   var pitch = datan2(hF - hB, 4.4);
-  var roll = datan2(hR - hL, 3.0);
+  var roll = datan2(hL - hR, 3.0);
 
-  /* Body roll leans away from the turn centre. Local +X is the car's +lat
-     side, so a positive yaw rate lifts it. */
+  /* SIGNS. Both roll terms hinge on one fact that is easy to get backwards:
+     rotation.z lifts the car's local +X, and with rotation.y = yaw that axis
+     maps to (cos yaw, 0, -sin yaw) — which is `lat`, the car's LEFT. So
+
+         POSITIVE rotation.z LIFTS THE CAR'S LEFT SIDE.
+
+     Terrain: the road's left edge sits at hL, so matching the camber means
+     rolling by exactly atan2(hL - hR, track). Get this backwards and the car
+     rolls the wrong way by twice the bank angle, which on Indy's 9.2 degrees
+     buries one whole side of the chassis under the road surface.
+
+     Body lean is separate, and opposes nothing here: weight goes to the
+     OUTSIDE of a corner, so a left turn (positive yaw rate, since increasing
+     yaw swings forward from +Z toward +X) presses the RIGHT side down and
+     therefore lifts the left. Same sign as yawRate.
+
+     Pitch is the odd one out: rotation.x positive drops the NOSE, so climbing
+     needs -pitch. */
   var lean = clamp(this.yawRate * 0.062, -0.11, 0.11);
   var k = dt > 0 ? 1 - Math.exp(-10 * dt) : 1;
   this.pitch = lerp(this.pitch, -pitch, k);
-  this.roll = lerp(this.roll, -roll + lean, k);
+  this.roll = lerp(this.roll, roll + lean, k);
 
-  g.position.set(this.pos.x, this.pos.y + 0.02, this.pos.z);
+  g.position.set(vx, this.vy + 0.02, vz);
   g.rotation.set(0, 0, 0);
   g.rotation.order = 'YXZ';
-  g.rotation.y = this.yaw;
+  g.rotation.y = vyaw;
   g.rotation.x = this.pitch;
   g.rotation.z = this.roll;
 
+  /* About 1.5 turns lock to lock, against the front wheels' 0.42 rad — the
+     rim moves far more than the tyres, which is what makes it readable. */
+  /* NOT negated, unlike the road wheels below — the two axes are handed
+     differently and it is only a coincidence that they look alike.
+
+     The road wheels steer about Y, where a positive angle points them at the
+     car's LEFT (local +X is the left), so turning right needs -steerVis.
+
+     The rim spins about Z, whose axis points FORWARD, away from the driver.
+     Seen from behind it — which is the only place anyone ever sees it from —
+     a positive rotation reads CLOCKWISE, which is a right turn. Negating it
+     turned the wheel the opposite way to the car. */
+  if (this.steerWheel) this.steerWheel.rotation.z = this.steerVis * 2.4;
   this.wheels[0].rotation.set(0, -this.steerVis * 0.42, 0);
   this.wheels[1].rotation.set(0, -this.steerVis * 0.42, 0);
   for (var i = 0; i < 4; i++) {
@@ -3004,8 +3819,12 @@ Vehicle.prototype.sync = function (dt) {
     else w.rotation.x = this.wheelSpin;
   }
 
-  this.shadow.position.set(this.pos.x, this.pos.y + 0.05, this.pos.z);
-  this.shadow.rotation.set(-Math.PI / 2, 0, -this.yaw);
+  this.shadow.position.set(vx, this.vy + 0.05, vz);
+  /* +vyaw. Same reflection trap as the start line: with rotation.x = -PI/2
+     and the default XYZ order, negating z mirrors rather than rotates, and
+     the 6.1 m long axis swings up to 90 degrees out — measured 80.2 degrees
+     off at a 0.7 rad heading, laying the shadow across the car. */
+  this.shadow.rotation.set(-Math.PI / 2, 0, vyaw);
 };
 
 Vehicle.prototype.speedKph = function () { return Math.max(0, this.vFwd) * 3.6; };
@@ -3843,6 +4662,9 @@ Cloud.prototype.leaderboard = function (trackVersion, limit) {
    MCL-64  —  renderer, HUD, race director, input, main loop
    ========================================================================= */
 
+/* Fallback only. The live figure is this.track.laps — a circuit sets its own
+   distance, so a 4 km oval is not forced to the same lap count as a 5.5 km
+   road course. Read it via this.laps(). */
 var TOTAL_LAPS = 3;
 var GRID_SIZE = 6;
 var STEP = 1 / 60;
@@ -3860,6 +4682,7 @@ var POST_FRAG = [
   'uniform sampler2D tDiffuse;',
   'uniform vec2 uRes;',
   'uniform float uFade;',
+  'uniform float uRetro;',      /* 1 = console, 0 = modern */
   'varying vec2 vUv;',
   /* recursive 4x4 Bayer, built arithmetically — GLSL ES 1.0 will not let us
      dynamically index a const array */
@@ -3871,12 +4694,22 @@ var POST_FRAG = [
   '}',
   'void main(){',
   '  vec3 c = texture2D(tDiffuse, vUv).rgb;',
-  '  vec2 px = floor(vUv * uRes);',
-  '  float d = bayer4(px) - 0.5;',
-  '  c += d * (1.0/52.0);',
-  '  c = floor(c * 31.0 + 0.5) / 31.0;',   /* 5 bits per channel, as the hardware had */
+  '  if (uRetro > 0.5) {',
+  /* the console path: dither into a 5-bit-per-channel palette */
+  '    vec2 px = floor(vUv * uRes);',
+  '    float d = bayer4(px) - 0.5;',
+  '    c += d * (1.0/52.0);',
+  '    c = floor(c * 31.0 + 0.5) / 31.0;',
+  '  } else {',
+  /* modern: the frame is already tone mapped by the renderer, so this is
+     only a gentle grade — a little saturation and contrast, no quantise
+     and no dither. */
+  '    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));',
+  '    c = mix(vec3(l), c, 1.16);',
+  '    c = clamp((c - 0.5) * 1.07 + 0.5, 0.0, 1.0);',
+  '  }',
   '  vec2 q = (vUv - 0.5) * 2.0;',
-  '  float vig = 1.0 - dot(q,q) * 0.13;',
+  '  float vig = 1.0 - dot(q,q) * mix(0.06, 0.13, uRetro);',
   '  gl_FragColor = vec4(c * vig * uFade, 1.0);',
   '}'
 ].join('\n');
@@ -3891,6 +4724,9 @@ function Game(host) {
   this.countdown = 0;
   this.lights = 0;
   this.camMode = 0;
+  this.headYaw = 0;        /* damped look-into-the-corner offset, onboard only */
+  this.camPitch = 0;       /* low-passed attitude for the onboard mounts */
+  this.camRoll = 0;
   this.paused = false;
   this.shake = 0;
   this.finishHold = 0;
@@ -3913,6 +4749,7 @@ function Game(host) {
   this.stick = null;                 /* on-screen analog thumbstick */
   this.tilt = new TiltSensor();      /* accelerometer steering */
   this.settings = this.loadSettings();
+  this.camMode = this.settings.camMode;
   this.settingsResume = false;
 
   this.buildRenderer();
@@ -3934,11 +4771,21 @@ Game.prototype.buildRenderer = function () {
   });
   this.renderer.setPixelRatio(1);
   this.renderer.setClearColor(SKY_HAZE, 1);
+  this.renderer.shadowMap.enabled = true;
+  this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   this.rt = new THREE.WebGLRenderTarget(320, 240, {
     minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
     format: THREE.RGBAFormat, depthBuffer: true, stencilBuffer: false
   });
+  /* COLOUR MANAGEMENT. The scene renders INTO this target, and r128 applies
+     the target's own texture encoding rather than renderer.outputEncoding when
+     the destination is a render target. Without this the frame stays linear
+     all the way to the screen — survivable with Lambert, which the palette was
+     hand-tuned around, but pitch black once physically-based shading and ACES
+     tone mapping are in front of it. The post pass then samples already
+     encoded values and writes them through untouched, which is correct. */
+  this.rt.texture.encoding = THREE.sRGBEncoding;
 
   this.postScene = new THREE.Scene();
   this.postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
@@ -3946,13 +4793,67 @@ Game.prototype.buildRenderer = function () {
     uniforms: {
       tDiffuse: { value: this.rt.texture },
       uRes: { value: new THREE.Vector2(320, 240) },
-      uFade: { value: 1 }
+      uFade: { value: 1 },
+      uRetro: { value: 1 }
     },
     vertexShader: POST_VERT,
     fragmentShader: POST_FRAG,
     depthTest: false, depthWrite: false
   });
   this.postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.postMat));
+};
+
+/* ENVIRONMENT MAP.
+
+   A Standard material with nothing to reflect is just a Lambert with extra
+   maths — car paint comes out looking like matte plastic. This is the single
+   biggest contributor to the modern look after the material swap itself.
+
+   Generated procedurally from a sky dome with a bright sun disc and a ground
+   half, then prefiltered by PMREMGenerator into the roughness mip chain. Done
+   this way because the artifact CSP blocks every external host, so an HDR file
+   could never be fetched — and a 2 KB shader beats a 4 MB download regardless. */
+Game.prototype.buildEnvironment = function (scene) {
+  try {
+    /* Painted as an EQUIRECTANGULAR canvas rather than rendered from a shader
+       dome. The dome version prefiltered to solid black — and because a
+       Standard material takes its whole indirect term from the environment,
+       a black one does not soften the scene, it extinguishes it. A canvas goes
+       through PMREMGenerator's well-worn equirect path instead, and its
+       contents can be inspected, which a shader baked inside PMREM cannot. */
+    var cv = makeCanvas(256, 128), ctx = cv.getContext('2d');
+    var g = ctx.createLinearGradient(0, 0, 0, 128);
+    g.addColorStop(0.00, '#6f9ede');    /* zenith */
+    g.addColorStop(0.42, '#c4d3e8');
+    g.addColorStop(0.50, '#d8d2c4');    /* haze band at the horizon */
+    g.addColorStop(0.58, '#8d8578');
+    g.addColorStop(1.00, '#3f3c37');    /* ground bounce */
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 256, 128);
+
+    /* A sun disc, which is what actually puts a moving highlight along the
+       bodywork. Placed to match the directional light's bearing. */
+    var sg = ctx.createRadialGradient(74, 34, 1, 74, 34, 26);
+    sg.addColorStop(0, 'rgba(255,252,242,1)');
+    sg.addColorStop(0.25, 'rgba(255,238,206,0.85)');
+    sg.addColorStop(1, 'rgba(255,238,206,0)');
+    ctx.fillStyle = sg;
+    ctx.fillRect(48, 8, 52, 52);
+
+    var tex = new THREE.CanvasTexture(cv);
+    tex.mapping = THREE.EquirectangularReflectionMapping;
+    tex.encoding = THREE.sRGBEncoding;
+
+    var pmrem = new THREE.PMREMGenerator(this.renderer);
+    pmrem.compileEquirectangularShader();
+    var rt = pmrem.fromEquirectangular(tex);
+    scene.environment = rt.texture;
+    pmrem.dispose();
+    tex.dispose();
+  } catch (e) {
+    /* No environment is a flatter look, never a broken one. */
+    scene.environment = null;
+  }
 };
 
 Game.prototype.buildWorld = function () {
@@ -3965,12 +4866,37 @@ Game.prototype.buildWorld = function () {
 
   var hemi = new THREE.HemisphereLight(0xe6efff, 0x6a6244, 1.05);
   scene.add(hemi);
-  var sun = new THREE.DirectionalLight(0xfff2e2, 0.95);
+  var sun = this.sun = new THREE.DirectionalLight(0xfff2e2, 1.35);
   sun.position.set(-320, 420, 210);
   scene.add(sun);
-  scene.add(new THREE.AmbientLight(0x4d566a, 0.5));
+  scene.add(sun.target);
+  scene.add(new THREE.AmbientLight(0x4d566a, 0.4));
 
-  this.track = new Track();
+  /* SHADOWS. A tight ortho box that FOLLOWS THE CAR rather than one big enough
+     to cover the circuit: Silverstone is 1.8 km across, and a shadow map
+     stretched over that has metre-wide texels and casts nothing you would
+     recognise. 70 m around the player at 2048 gives roughly 3 cm per texel. */
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  var sc = sun.shadow.camera;
+  sc.left = -70; sc.right = 70; sc.top = 70; sc.bottom = -70;
+  sc.near = 1; sc.far = 900;
+  /* Normal bias rather than a big constant bias: constant bias on a surface
+     this shallow detaches the shadow from the tyre and it floats. */
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 0.035;
+  /* REQUIRED. Editing left/right/top/bottom does not rebuild the projection,
+     so without this the shadow camera keeps its default +/-5 box, the entire
+     circuit falls outside the frustum, and every surface samples as occluded —
+     the whole world renders black. */
+  sc.updateProjectionMatrix();
+
+  this.buildEnvironment(scene);
+
+  this.track = new Track(trackById(this.settings.trackId));
+  /* Each circuit brings its own score; absent or unknown falls back to the
+     original theme, so a new circuit needs no music work to ship. */
+  this.audio.setMusicTheme(this.track.def.music);
   buildTrackMeshes(this.track, scene);
   this.gantry = buildStartGantry(this.track, scene);
   this.scenery = buildScenery(this.track, scene);
@@ -3986,11 +4912,41 @@ Game.prototype.buildWorld = function () {
   this.mapBounds = { minX: minX, maxX: maxX, minZ: minZ, maxZ: maxZ };
 };
 
+/* Field size is per circuit — GRID_SIZE is only the fallback. */
+Game.prototype.gridSize = function () {
+  return (this.track && this.track.def && this.track.def.grid) || GRID_SIZE;
+};
+
+/* Which car sits in each grid slot, front to back.
+   order[slot] = car index, and car 0 is the player.
+
+   The six-car circuits keep their original hand-listed order AND their
+   player-starts-last rule. Times are already posted against silverstone-v1
+   "under race conditions", so moving the player up the order — or even just
+   reshuffling which AI lines up where, since their pace varies by index —
+   would quietly make old and new times incomparable.
+
+   A circuit that declares its own `grid` gets a generated order instead, and
+   may ask for `playerStart: 'mid'`. On a 33-car Indy field, starting last is
+   not a bit of fun to drive out of; it is a different race entirely. */
+Game.prototype.gridOrder = function (n) {
+  var def = (this.track && this.track.def) || {};
+  if (!def.grid && n === 6) return [1, 4, 2, 5, 3, 0];
+  var slot = def.playerStart === 'mid' ? Math.floor(n / 2) : n - 1;
+  var order = [];
+  for (var s = 0, car = 1; s < n; s++) order.push(s === slot ? 0 : car++);
+  return order;
+};
+
 Game.prototype.buildGrid = function () {
   this.cars = [];
   this.ais = [];
-  for (var i = 0; i < GRID_SIZE; i++) {
-    var livery = LIVERIES[i % LIVERIES.length];
+  for (var i = 0; i < this.gridSize(); i++) {
+    /* Papaya is reserved for the player — see the note on LIVERIES. The AI
+       cycles the rest, never index 0, so exactly one orange car takes the
+       grid however large the field is. */
+    var livery = (i === 0) ? LIVERIES[0]
+      : LIVERIES[1 + ((i - 1) % Math.max(1, LIVERIES.length - 1))];
     var v = new Vehicle(this.track, livery, i === 0);
     this.scene.add(v.group);
     this.scene.add(v.shadow);
@@ -4009,11 +4965,14 @@ Game.prototype.buildGrid = function () {
 
 Game.prototype.resetRace = function (toTitle) {
   var t = this.track, n = t.n;
-  /* staggered 3x2 grid, tucked in behind the line */
-  var order = [1, 4, 2, 5, 3, 0];   /* player starts last — something to do */
+  /* Grid tucked in behind the line: two abreast on a road circuit, three on
+     the oval. Generated rather than hand-listed so it scales to any field. */
+  var cols = (t.def && t.def.gridCols) || 2;
+  var colPitch = cols >= 3 ? 3.4 : 6.2;      /* keeps 2-wide at the old +/-3.1 */
+  var order = this.gridOrder(this.cars.length);
   for (var i = 0; i < this.cars.length; i++) {
     var v = this.cars[i];
-    var idx, side;
+    var idx;
     if (toTitle) {
       /* attract demo: strung out around the circuit and already at speed */
       idx = (t.startIndex + 40 + i * 47) % n;
@@ -4021,10 +4980,10 @@ Game.prototype.resetRace = function (toTitle) {
       v.vFwd = 46;
     } else {
       var slot = order.indexOf(i);
-      var row = Math.floor(slot / 2);
-      side = (slot % 2 === 0) ? -1 : 1;
+      var row = Math.floor(slot / cols);
+      var col = slot % cols;
       idx = (t.startIndex - 5 - row * 3 + n) % n;
-      v.placeAt(idx, side * 3.1);
+      v.placeAt(idx, (col - (cols - 1) / 2) * colPitch);
     }
 
     v.lapsDone = 0; v.started = false; v.finished = false;
@@ -4102,8 +5061,7 @@ Game.prototype.bindInput = function () {
       self.audio.wake();
       if (self.state !== STATE.TITLE) self.beginRace();
     } else if (code === 'KeyC') {
-      self.camMode = (self.camMode + 1) % 2;
-      self.flash(self.camMode === 0 ? 'CHASE CAM' : 'COCKPIT CAM');
+      self.cycleCam();
     } else if (code === 'KeyM') {
       self.toggleMute();
     } else if (code === 'KeyN') {
@@ -4182,8 +5140,7 @@ Game.prototype.bindInput = function () {
   if (camPad) {
     camPad.addEventListener('click', function (e) {
       e.preventDefault();
-      self.camMode = (self.camMode + 1) % 2;
-      self.flash(self.camMode === 0 ? 'CHASE CAM' : 'COCKPIT CAM');
+      self.cycleCam();
     });
   }
 
@@ -4219,6 +5176,18 @@ Game.prototype.bindInput = function () {
   var a2hsOverlay = document.getElementById('a2hs');
   if (a2hsOverlay) a2hsOverlay.addEventListener('click', function (e) {
     if (e.target === a2hsOverlay) self.closeA2HS();
+  });
+
+  this.buildTrackList();
+
+  var qualitySet = document.getElementById('set-quality');
+  if (qualitySet) qualitySet.addEventListener('click', function (e) {
+    e.preventDefault();
+    self.settings.quality = self.settings.quality === 'modern' ? 'retro' : 'modern';
+    self.applyQuality();
+    self.applySettings();
+    self.saveSettings();
+    self.flash(self.settings.quality === 'modern' ? 'MODERN GRAPHICS' : 'RETRO 240p');
   });
 
   var autoFsSet = document.getElementById('set-autofs');
@@ -4471,6 +5440,20 @@ Game.prototype.bindInput = function () {
     self.saveSettings();
   });
 
+  var enVol = document.getElementById('set-envol');
+  if (enVol) enVol.addEventListener('input', function () {
+    self.settings.engineVol = clamp(parseInt(enVol.value, 10), 0, 10);
+    self.applySettings();
+    self.saveSettings();
+  });
+
+  var musVol = document.getElementById('set-musvol');
+  if (musVol) musVol.addEventListener('input', function () {
+    self.settings.musicVol = clamp(parseInt(musVol.value, 10), 0, 10);
+    self.applySettings();
+    self.saveSettings();
+  });
+
   var throttleSet = document.getElementById('set-throttle');
   if (throttleSet) throttleSet.addEventListener('click', function (e) {
     e.preventDefault();
@@ -4512,6 +5495,7 @@ Game.prototype.bindInput = function () {
 
   /* Everything above is wired and the stick exists, so push the loaded
      settings through to the tilt sensor, the stick and both UIs at once. */
+  this.applyQuality();
   this.applySettings();
 
   var musicBtn = document.getElementById('btn-music');
@@ -4520,23 +5504,51 @@ Game.prototype.bindInput = function () {
   if (restartBtn) restartBtn.addEventListener('click', function () { self.audio.wake(); self.beginRace(); });
 
   this.glCanvas.addEventListener('pointerdown', function () { self.audio.wake(); self.host.focus(); });
+
+  /* ONE-SHOT GLOBAL UNLOCK. A browser will not start audio until it has seen
+     a real user gesture, and picking a circuit RELOADS the page — so whatever
+     gesture opened the picker is spent by the time the new document boots.
+
+     Only the specific controls above were wired to wake(), so after a circuit
+     change the score stayed silent until you happened to press one of them.
+     That is exactly why turning MUSIC off and on again appeared to fix it:
+     that button calls wake() before it touches the mute, so the toggle was
+     never the point — the wake was.
+
+     Capture phase so nothing can swallow it first, and `once` so it costs a
+     single dispatch. wake() is idempotent, so the three firing independently
+     is harmless. */
+  var unlock = function () { self.audio.wake(); };
+  ['pointerdown', 'touchstart', 'keydown'].forEach(function (ev) {
+    document.addEventListener(ev, unlock, { capture: true, once: true });
+  });
+};
+
+/* Four modes now, and the choice STICKS. Picking a circuit reloads the page,
+   so without persisting this you were dropped back to the chase camera every
+   time you changed track. */
+Game.prototype.cycleCam = function () {
+  this.camMode = (this.camMode + 1) % CAM_LABELS.length;
+  this.settings.camMode = this.camMode;
+  this.saveSettings();
+  this.flash(CAM_LABELS[this.camMode]);
 };
 
 Game.prototype.toggleMute = function () {
   this.audio.init();
-  this.audio.setEngineMuted(!this.audio.engineMuted);
-  var b = document.getElementById('btn-sound');
-  if (b) b.textContent = this.audio.engineMuted ? 'ENGINE OFF' : 'ENGINE ON';
-  this.flash(this.audio.engineMuted ? 'ENGINE OFF' : 'ENGINE ON');
+  this.settings.engineOn = !this.settings.engineOn;
+  this.applySettings();          /* pushes the mute and relabels the button */
+  this.saveSettings();
+  this.flash(this.settings.engineOn ? 'ENGINE ON' : 'ENGINE OFF');
 };
 
 Game.prototype.toggleMusic = function () {
   this.audio.init();
   this.audio.initMusic();
-  this.audio.musicMuted = !this.audio.musicMuted;
-  var b = document.getElementById('btn-music');
-  if (b) b.textContent = this.audio.musicMuted ? 'MUSIC OFF' : 'MUSIC ON';
-  this.flash(this.audio.musicMuted ? 'MUSIC OFF' : 'MUSIC ON');
+  this.settings.musicOn = !this.settings.musicOn;
+  this.applySettings();          /* pushes the mute and relabels the button */
+  this.saveSettings();
+  this.flash(this.settings.musicOn ? 'MUSIC ON' : 'MUSIC OFF');
 };
 
 Game.prototype.flash = function (msg) {
@@ -4560,13 +5572,33 @@ Game.prototype.resize = function () {
   var cw = Math.max(160, this.host.clientWidth | 0);
   var ch = Math.max(120, this.host.clientHeight | 0);
 
-  /* The 3D runs in a small framebuffer and is stretched up with bilinear
-     filtering. That softness is the point: an N64 fed a CRT, so its image
-     blended rather than showing hard pixel edges. Nearest-neighbour here
-     would read as 2D pixel art, which is the wrong console entirely. */
-  var scale3d = clamp(ch / 384, 1, 3.4);
-  var gw = clamp(Math.round(cw / scale3d), 240, 900);
-  var gh = clamp(Math.round(ch / scale3d), 180, 620);
+  var gw, gh;
+  if (this.settings && this.settings.quality === 'modern') {
+    /* Render ABOVE the display size and let the downscale do the smoothing.
+       Supersampling rather than MSAA because it needs no WebGL2 path and no
+       version-specific render-target API, and it anti-aliases the alpha-tested
+       foliage too, which MSAA would leave jagged. Capped on total pixels so a
+       4K monitor does not ask for a 33-megapixel buffer. */
+    var dpr = clamp(window.devicePixelRatio || 1, 1, 2);
+    var ss = 1.35 * dpr;
+    gw = Math.round(cw * ss);
+    gh = Math.round(ch * ss);
+    var maxPx = 5200000;
+    if (gw * gh > maxPx) {
+      var k = Math.sqrt(maxPx / (gw * gh));
+      gw = Math.round(gw * k); gh = Math.round(gh * k);
+    }
+    gw = clamp(gw, 320, 3800);
+    gh = clamp(gh, 240, 2400);
+  } else {
+    /* The 3D runs in a small framebuffer and is stretched up with bilinear
+       filtering. That softness is the point: an N64 fed a CRT, so its image
+       blended rather than showing hard pixel edges. Nearest-neighbour here
+       would read as 2D pixel art, which is the wrong console entirely. */
+    var scale3d = clamp(ch / 384, 1, 3.4);
+    gw = clamp(Math.round(cw / scale3d), 240, 900);
+    gh = clamp(Math.round(ch / scale3d), 180, 620);
+  }
 
   this.gw = gw; this.gh = gh;
   this.renderer.setSize(gw, gh, false);
@@ -4702,8 +5734,20 @@ Game.prototype.loadSettings = function () {
     steerTilt: false,
     tiltInvert: false,
     steerSens: 6,
+    engineVol: 10,
+    musicVol: 10,
+    /* The on/off state of each bus, kept here rather than only on the audio
+       object — see applySettings. Engine off is the deliberate default: the
+       drone is punishing over three laps, the score is not. */
+    musicOn: true,
+    engineOn: false,
+    camMode: 0,
     autoThrottle: touchLikely(),
     autoFullscreen: true,
+    /* Retro is the default because it is the point of the thing — modern is
+       there for anyone who wants to see the circuit without the dither. */
+    quality: 'modern',
+    trackId: 'silverstone-v1',
     userConfigured: false
   };
   try {
@@ -4717,10 +5761,23 @@ Game.prototype.loadSettings = function () {
       if (typeof p.autoThrottle === 'boolean') s.autoThrottle = p.autoThrottle;
       if (typeof p.autoFullscreen === 'boolean') s.autoFullscreen = p.autoFullscreen;
       if (typeof p.userConfigured === 'boolean') s.userConfigured = p.userConfigured;
+      if (p.quality === 'retro' || p.quality === 'modern') s.quality = p.quality;
+      /* Validated against the registry: a stale or hand-edited id must fall
+         back to a real circuit rather than crashing the boot. */
+      if (typeof p.trackId === 'string' && trackById(p.trackId).id === p.trackId) {
+        s.trackId = p.trackId;
+      }
       /* tiltSens is the old field name — read it so anyone who already set a
          value keeps it instead of being silently reset to 6 */
       var sv = (typeof p.steerSens === 'number') ? p.steerSens : p.tiltSens;
       if (typeof sv === 'number' && isFinite(sv)) s.steerSens = clamp(Math.round(sv), 1, 10);
+      /* 0 is a legitimate value here — silent — so these check isFinite
+         rather than truthiness, or muting a bus would never persist. */
+      if (typeof p.camMode === 'number' && CAM_LABELS[p.camMode]) s.camMode = p.camMode | 0;
+      if (typeof p.musicOn === 'boolean') s.musicOn = p.musicOn;
+      if (typeof p.engineOn === 'boolean') s.engineOn = p.engineOn;
+      if (typeof p.engineVol === 'number' && isFinite(p.engineVol)) s.engineVol = clamp(Math.round(p.engineVol), 0, 10);
+      if (typeof p.musicVol === 'number' && isFinite(p.musicVol)) s.musicVol = clamp(Math.round(p.musicVol), 0, 10);
     }
   } catch (e) { /* blocked storage or corrupt JSON — defaults are fine */ }
   return s;
@@ -4761,11 +5818,37 @@ Game.prototype.syncSettingsUi = function () {
   put('set-invert', s.tiltInvert ? 'ON' : 'OFF');
   put('set-throttle', s.autoThrottle ? 'AUTO' : 'MANUAL');
   put('set-autofs', s.autoFullscreen ? 'AUTO' : 'MANUAL');
+  this.syncTrackList();
+
+  put('set-quality', s.quality === 'modern' ? 'MODERN' : 'RETRO 240p');
+  var qh = document.getElementById('set-quality-hint');
+  if (qh) {
+    qh.textContent = s.quality === 'modern'
+      ? 'Modern: supersampled, tone mapped, no dither. Costs more GPU.'
+      : 'Retro: 240p with a 5-bit dither, as the hardware did it.';
+  }
 
   /* No point offering an automatic fullscreen the platform will refuse. */
   var fsRow = document.getElementById('row-autofs');
   if (fsRow) fsRow.classList.toggle('is-disabled', !fullscreenSupported() || isStandalone());
   put('set-sens-num', String(s.steerSens));
+  put('set-envol-num', String(s.engineVol));
+  put('set-musvol-num', String(s.musicVol));
+
+  var ev = document.getElementById('set-envol');
+  if (ev && ev.value !== String(s.engineVol)) ev.value = String(s.engineVol);
+  var mv = document.getElementById('set-musvol');
+  if (mv && mv.value !== String(s.musicVol)) mv.value = String(s.musicVol);
+  this.audio.setLevels(s.engineVol / 10, s.musicVol / 10);
+  /* The mutes live in settings so they survive a reload — and a reload is not
+     rare, since choosing a circuit performs one. Turning the music off and
+     then switching track used to turn it straight back on. */
+  this.audio.musicMuted = !s.musicOn;
+  this.audio.setEngineMuted(!s.engineOn);
+  var mb = document.getElementById('btn-music');
+  if (mb) mb.textContent = s.musicOn ? 'MUSIC ON' : 'MUSIC OFF';
+  var sb = document.getElementById('btn-sound');
+  if (sb) sb.textContent = s.engineOn ? 'ENGINE ON' : 'ENGINE OFF';
 
   var slider = document.getElementById('set-sens');
   if (slider && slider.value !== String(s.steerSens)) slider.value = String(s.steerSens);
@@ -4871,7 +5954,15 @@ Game.prototype.closeA2HS = function () {
 /* Identifies which physics + circuit a time was set on. Any change that
    alters lap times must bump this, or old and new runs end up ranked against
    each other as if they were comparable. */
-var TRACK_VERSION = 'silverstone-v1';
+/* Which circuit a time was set on. Read from the live track rather than
+   hard-coded, so scores land on the right board when the circuit changes. */
+Game.prototype.laps = function () {
+  return (this.track && this.track.laps) || TOTAL_LAPS;
+};
+
+Game.prototype.trackVersion = function () {
+  return (this.track && this.track.id) || 'silverstone-v1';
+};
 
 /* Bump when anything changes lap times: physics, the deterministic math, the
    track, or the AI. Traces recorded under an older SIM_VERSION cannot be
@@ -4948,7 +6039,7 @@ Game.prototype.submitRace = function () {
   /* Held until it actually lands, so a race driven while signed out can still
      be posted the moment you sign in — without having to drive it again. */
   this.pendingResult = {
-    trackVersion: TRACK_VERSION,
+    trackVersion: this.trackVersion(),
     simVersion: SIM_VERSION,
     raceMs: p.finishTime,
     bestLapMs: p.bestLap || p.finishTime,
@@ -5005,7 +6096,12 @@ Game.prototype.openBoard = function () {
   if (!el || !el.hidden) return;
   this.boardResume = (this.state === STATE.RACING || this.state === STATE.COUNTDOWN) && !this.paused;
   if (this.boardResume) this.paused = true;
+  /* Always open on the circuit you are actually driving. */
+  this.boardTrackId = this.trackVersion();
   el.hidden = false;
+  /* AFTER unhiding — the rail measures 0 wide while the panel is display:none,
+     so scrolling the current card into view has nothing to compute against. */
+  this.syncTrackRail('board-track-list', this.boardTrackId);
   this.loadBoard();
 };
 
@@ -5024,15 +6120,23 @@ Game.prototype.loadBoard = function () {
   if (status) status.textContent = 'Loading…';
 
   /* Ten are visible; the rest are there to scroll to. */
-  this.cloud.leaderboard(TRACK_VERSION, 50).then(function (list) {
+  var tv = this.boardTrackId || this.trackVersion();
+  var def = trackById(tv) || (this.track && this.track.def);
+  var label = (def && def.name) || tv;
+  var conditions = def ? (def.laps + ' laps · ' + (def.grid || GRID_SIZE) + ' cars') : 'full grid';
+
+  this.cloud.leaderboard(tv, 50).then(function (list) {
     rows.textContent = '';
     if (!list.length) {
       if (status) {
-        status.textContent = 'No times posted yet. Race conditions, 3 laps, full grid — first one on the board sets the target.';
+        /* Was hardcoded to "3 laps", which was simply wrong on a 5-lap oval
+           and a 4-lap Brands. Read it off the circuit. */
+        status.textContent = 'No times posted at ' + label + ' yet. Race conditions, ' +
+          conditions + ' — first one on the board sets the target.';
       }
       return;
     }
-    if (status) status.textContent = TRACK_VERSION + ' · 3 laps · full grid';
+    if (status) status.textContent = label + ' · ' + conditions;
 
     var head = document.createElement('div');
     head.className = 'brow brow-head';
@@ -5075,6 +6179,10 @@ Game.prototype.openSettings = function () {
   if (this.settingsResume) this.paused = true;
   this.syncSettingsUi();
   el.hidden = false;
+  /* AFTER unhiding. syncSettingsUi runs while the panel is still display:none,
+     where the circuit rail measures 0 wide, so centring the current card there
+     computes against nothing and leaves the rail parked at the far left. */
+  this.syncTrackList();
   var c = document.getElementById('set-close');
   if (c) c.focus();
 };
@@ -5241,12 +6349,12 @@ Game.prototype.checkLap = function (v) {
       v.lapStart = this.raceTime;
       v.lapsDone++;
       v.sectorIdx = 0;
-      if (v.lapsDone >= TOTAL_LAPS) {
+      if (v.lapsDone >= this.laps()) {
         v.finished = true;
         v.finishTime = this.raceTime;
         if (v.isPlayer) { this.flash('FINISH'); this.audio.blip(880, 0.5, 'square', 0.28); }
       } else if (v.isPlayer) {
-        if (v.lapsDone === TOTAL_LAPS - 1) this.flash('FINAL LAP');
+        if (v.lapsDone === this.laps() - 1) this.flash('FINAL LAP');
         else this.flash('LAP ' + (v.lapsDone + 1));
         this.audio.blip(560, 0.2, 'square', 0.2);
       }
@@ -5293,62 +6401,241 @@ Game.prototype.updatePositions = function () {
 /* --- camera ------------------------------------------------------------- */
 
 var _cf = new THREE.Vector3(), _cr = new THREE.Vector3(), _ideal = new THREE.Vector3(), _look = new THREE.Vector3();
+var _camQ = new THREE.Quaternion(), _spinQ = new THREE.Quaternion();
+var _localOff = new THREE.Vector3(), _camEuler = new THREE.Euler(), _camEuler2 = new THREE.Euler();
+
+var CAM_LABELS = ['CHASE CAM', 'T-CAM', 'HELMET CAM', 'GYRO CAM'];
+
+/* THE ONBOARD CAMERAS.
+
+   Both are bolted to the car and inherit its FULL orientation, roll included.
+   That is the whole difference. The chase camera is aimed with lookAt against
+   world up, and lookAt cannot express roll at all — which is why the old
+   cockpit view stayed rigidly level while the car leaned underneath it, and
+   why it read as a floating window rather than a place you are sitting.
+
+   Offsets are in the car's own frame, where +Z is the nose (see buildCarMesh).
+   For reference, the model puts the driver's helmet at [0, 0.775, 0.28] with a
+   0.185 radius, the halo hoop at z 0.72 and the mirrors at z 0.74.
+
+     T-CAM    above the airbox and just behind the head, the television
+              onboard shot: you see the halo, the nose and both front wheels
+              working. Wider, calmer, no head movement — it is a fixed mount.
+
+     HELMET   the driver's eye, set just forward of the helmet shell so we are
+              outside it rather than inside the geometry. Narrower view, and
+              the head LEADS THE CAR INTO THE CORNER, which is the thing that
+              makes an onboard feel driven rather than filmed.
+
+     GYRO     same eye point, but GYRO-STABILISED: the horizon is held level
+              and the car rolls underneath it. Roll is cancelled outright,
+              pitch only mostly, so kerbs and crests still register instead of
+              the whole image going dead.
+
+   T-CAM and GYRO share a framing taken from the real broadcast shot: set back
+   and up BEHIND the helmet and tilted down, so the car fills the lower part of
+   the frame — halo, both mirrors, both front wheels working, the nose running
+   away ahead — with the road in the upper third. Sitting it just above the
+   airbox, as a first pass did, crops all of that away and looks like nothing.
+
+   stabRoll/stabPitch are 0 for a hard mount and 1 for fully stabilised.
+   `tilt` is a fixed downward angle in radians on top of the car's own pitch. */
+var ONBOARD_CAMS = {
+  1: { off: [0, 1.34, -0.95], fov: 66, fovGain: 7, lead: 0.00, stabRoll: 0, stabPitch: 0, tilt: 0.16 },
+  /* Sat back at the eye rather than out at the visor, so the halo hoop arcs
+     across the TOP of the frame and you look out under it, the strut runs up
+     the middle, and both mirrors sit just inside the edges. fov is VERTICAL in
+     three.js — 82 gives about 114 horizontal at 16:9, which is the wide,
+     slightly fisheye look of the real driver's-eye shot. */
+    /* PLANTED IN THE HELMET. The head mesh is a 0.185 sphere centred on
+     [0, 0.775, 0.28], so this is the driver's own eye position — which is the
+     point of a visor cam, and it is hidden for exactly this view so there is
+     nothing to see the inside of.
+
+     Two earlier attempts missed it in opposite directions. Pushing back to
+     z -0.08 to get the coaming framing buried the eye INSIDE the airbox, which
+     spans z -0.61 to -0.07, so the view looked out through the engine cover.
+     Pulling forward to z 0.52 put it out at the visor, ahead of the halo, with
+     the wheel filling half the screen. The head is where it belongs.
+
+     Height is 0.87, not the helmet's own 0.775: this model has the head sitting
+     ON the bodywork rather than down in a hole, and the shoulder-line cylinder
+     tops out at exactly 0.80 — an eye at head height is INSIDE the tub and the
+     screen goes black. 0.87 clears that surface while staying in the helmet.
+
+     Tilt is only 0.08: at 0.13 the coaming swept across the middle of the
+     frame and you drove looking at your own bodywork. */
+  2: { off: [0, 0.87, 0.28], fov: 70, fovGain: 6, lead: 0.55, stabRoll: 0, stabPitch: 0, tilt: 0.08, hideHead: true },
+  /* bankIn tilts INTO the corner, against the car's own outward body lean.
+     Killing the car's roll outright (stabRoll 1) and leaving it there is what
+     a real gyro mount does, but it reads badly from the seat: the horizon is
+     nailed down while the cockpit rocks OUTWARD under you, so a left-hander
+     looks like the car falling to the right. Banking in instead is the thing
+     every rider and pilot already expects. */
+  3: { off: [0, 1.34, -0.95], fov: 66, fovGain: 7, lead: 0.28, stabRoll: 1, stabPitch: 0.8, tilt: 0.16, bankIn: 0.34 }
+};
 
 Game.prototype.updateCamera = function (dt, snap) {
   var p = (this.state === STATE.TITLE) ? this.demoCar : this.player;
-  p.forward(_cf); p.right(_cr);
+  p.visForward(_cf); p.visRight(_cr);
 
+  var px = p.visX(), py = p.visY(), pz = p.visZ();
   var speed01 = clamp(p.vFwd / V_MAX, 0, 1);
+  /* The eye sits INSIDE the helmet, so drawing it would fill the screen with
+     the inside of a sphere. Hidden for this car only, and only in that view —
+     the behind-the-head shots want the head very much in frame. */
+  if (p.head) p.head.visible = !(ONBOARD_CAMS[this.camMode] || {}).hideHead || this.state === STATE.TITLE;
+  /* The attract demo always runs the chase camera — an onboard shot of a car
+     nobody is driving is just a moving wall. */
+  var onboard = (this.state !== STATE.TITLE && ONBOARD_CAMS[this.camMode]) ? this.camMode : 0;
 
   if (this.state === STATE.TITLE && this.demoShot !== 0) {
     /* locked-off TV camera: hold the position, track the car */
     this.camPos.copy(this.demoAnchor);
-    _look.set(p.pos.x, p.pos.y + 0.9, p.pos.z);
+    _look.set(px, py + 0.9, pz);
     this.camLook.lerp(_look, snap ? 1 : 1 - Math.exp(-9 * dt));
     this.camera.fov = this.demoShot === 1 ? 34 : 52;
-  } else if (this.camMode === 1 && this.state !== STATE.TITLE) {
-    _ideal.set(p.pos.x + _cf.x * 0.30, p.pos.y + 1.16, p.pos.z + _cf.z * 0.30);
-    _look.set(p.pos.x + _cf.x * 26, p.pos.y + 1.5, p.pos.z + _cf.z * 26);
-    this.camPos.copy(_ideal);
-    this.camLook.copy(_look);
-    this.camera.fov = 70 + speed01 * 12;
+  } else if (onboard) {
+    var cfg = ONBOARD_CAMS[onboard];
+
+    /* Mount point in the CAR's frame, so it swings with the car exactly as a
+       bolted camera would — including being carried sideways as the car rolls
+       on Indy's banking. */
+    _localOff.set(cfg.off[0], cfg.off[1], cfg.off[2]);
+    _localOff.applyQuaternion(p.group.quaternion);
+    /* RIGID. Do NOT damp this toward the mount point in world space.
+
+       The mount is attached to something moving, so a world-space lerp does
+       not smooth it — it produces a LAG PROPORTIONAL TO SPEED. At 216 km/h the
+       car covers a metre per frame, and damping at 25/s leaves the camera
+       settling about two metres behind where it belongs: reversed back through
+       the cockpit and into the engine cover. The faster you go, the deeper it
+       sinks.
+
+       There was never anything here worth damping anyway. The vertical jitter
+       from the road surface measures 0.0025 m RMS. The motion that made the
+       cockpit unwatchable was the rumble shake at +/-0.25 m, which is handled
+       below, and the attitude, which is low-passed just after this. */
+    this.camPos.copy(p.group.position).add(_localOff);
+
+    /* The head leads the car into the corner. yawRate is positive in a LEFT
+       turn and a positive camera yaw looks left, so this needs no negation. */
+    var lead = clamp(p.yawRate * cfg.lead, -0.5, 0.5);
+    this.headYaw = snap ? lead : damp(this.headYaw, lead, 7, dt);
+
+    /* COMPOSED IN THE CAR'S OWN ORDER, not folded into one Euler.
+
+       The obvious version — bake the 180 degree turn into the yaw term and
+       negate pitch and roll to compensate — is wrong, and measurably so: it
+       left the hard-mounted views 8.9 degrees off the car's own up vector and
+       the stabilised one 10.5 degrees off level. Rotations do not commute, and
+       there is no set of Euler angles in one triple that expresses "the car's
+       attitude, then turned around".
+
+       So build it in stages instead. First an attitude in exactly the car's
+       convention, with roll and pitch scaled by however much this mount
+       stabilises. Then turn about that body's OWN up to face forward and lead
+       into the corner. Then tilt down about the camera's OWN right. Each step
+       is applied in the frame the previous one produced, which is what the
+       words actually mean. */
+    /* Roll = whatever of the car's own roll this mount lets through, plus an
+       optional lean INTO the turn. Positive roll lifts the car's LEFT, and a
+       left turn is a positive yaw rate, so leaning into it is NEGATIVE. */
+    var roll = p.roll * (1 - cfg.stabRoll);
+    if (cfg.bankIn) roll -= clamp(p.yawRate * cfg.bankIn, -0.25, 0.25);
+
+    /* Low-pass the ATTITUDE the camera uses. The car's own pitch and roll stay
+       untouched — the chassis should still snap over a kerb — but the view
+       riding on it gets a neck. Without this, clipping the outside of the
+       circuit makes the cockpit unwatchable. */
+    if (snap) { this.camPitch = p.pitch * (1 - cfg.stabPitch); this.camRoll = roll; }
+    else {
+      var kAtt = 1 - Math.exp(-16 * dt);
+      this.camPitch += ((p.pitch * (1 - cfg.stabPitch)) - this.camPitch) * kAtt;
+      this.camRoll += (roll - this.camRoll) * kAtt;
+    }
+    _camEuler.set(this.camPitch, p.vyaw, this.camRoll, 'YXZ');
+    _camQ.setFromEuler(_camEuler);
+
+    _camEuler2.set(0, Math.PI + this.headYaw, 0, 'YXZ');
+    _spinQ.setFromEuler(_camEuler2);
+    _camQ.multiply(_spinQ);
+
+    _camEuler2.set(-cfg.tilt, 0, 0, 'YXZ');
+    _spinQ.setFromEuler(_camEuler2);
+    _camQ.multiply(_spinQ);
+    this.camera.fov = cfg.fov + speed01 * cfg.fovGain;
   } else {
+    this.headYaw = 0;
     var back = 8.0 + speed01 * 1.4;
     var lift = 3.05 + speed01 * 0.5;
     /* trail the slide a little so drifts read from behind */
     var slide = clamp(-p.vLat * 0.10, -2.2, 2.2);
     _ideal.set(
-      p.pos.x - _cf.x * back + _cr.x * slide,
-      p.pos.y + lift,
-      p.pos.z - _cf.z * back + _cr.z * slide
+      px - _cf.x * back + _cr.x * slide,
+      py + lift,
+      pz - _cf.z * back + _cr.z * slide
     );
-    _look.set(p.pos.x + _cf.x * 11, p.pos.y + 1.35, p.pos.z + _cf.z * 11);
+    _look.set(px + _cf.x * 11, py + 1.35, pz + _cf.z * 11);
     if (snap) { this.camPos.copy(_ideal); this.camLook.copy(_look); }
     else {
       var k = 1 - Math.exp(-9 * dt);
       this.camPos.lerp(_ideal, k);
       this.camLook.lerp(_look, 1 - Math.exp(-12 * dt));
     }
-    this.camera.fov = 62 + speed01 * 13 + p.boost * 4;
+    /* Tighter than it was (62 + 13). A wide chase field pushes the car into
+       the distance and flattens any sense of speed — the frame reads as a map
+       of the corner rather than a car being driven through it. */
+    this.camera.fov = 52 + speed01 * 10 + p.boost * 4;
   }
 
-  /* keep the camera out of the dirt */
-  var ground = this.track.heightAt(this.camPos.x, this.camPos.z, p.frameIdx) + 1.1;
-  if (this.camPos.y < ground) this.camPos.y = ground;
+  /* Keep the camera out of the dirt — CHASE ONLY. An onboard mount sits about
+     0.8 m above the car's floor, well under this 1.1 m floor, so applying it
+     would jack the driver's eye up out of the cockpit on every frame. */
+  if (!onboard) {
+    var ground = this.track.heightAt(this.camPos.x, this.camPos.z, p.frameIdx) + 1.1;
+    if (this.camPos.y < ground) this.camPos.y = ground;
+  }
 
   var sx = 0, sy = 0;
   if (!this.reducedMotion) {
     var rumble = (p.onKerb ? 0.16 : 0) + (p.offTrack ? 0.20 : 0);
     this.shake = Math.max(this.shake * Math.exp(-6 * dt), p.hitImpulse * 0.7 + rumble * clamp(p.vFwd / 40, 0, 1));
-    sx = (Math.sin(this.time * 61.3) + Math.sin(this.time * 37.7)) * this.shake * 0.35;
-    sy = (Math.sin(this.time * 47.1) + Math.sin(this.time * 71.3)) * this.shake * 0.35;
+    /* MEASURED: at the chase camera's 0.35 the shake throws the viewpoint
+       +/-0.25 m at about 10 Hz when you run wide onto the rim at speed. Looking
+       AT the car that reads as impact. From inside the helmet it is the entire
+       world lurching a quarter of a metre, ten times a second, and it is
+       genuinely unwatchable. 0.06 keeps it as a vibration you feel rather than
+       a motion you fight — +/-0.04 m. */
+    var shk = onboard ? 0.06 : 0.35;
+    sx = (Math.sin(this.time * 61.3) + Math.sin(this.time * 37.7)) * this.shake * shk;
+    sy = (Math.sin(this.time * 47.1) + Math.sin(this.time * 71.3)) * this.shake * shk;
   }
 
   this.camera.position.set(this.camPos.x + sx, this.camPos.y + sy, this.camPos.z);
-  this.camera.lookAt(this.camLook);
+  /* lookAt would overwrite the roll — it always rebuilds the orientation from
+     world up. Onboard modes therefore set the quaternion themselves. */
+  /* The chase camera's 0.6 m near plane sits BEYOND the cockpit furniture —
+     the steering wheel is 0.36 m from the driver's eye, so at 0.6 it was
+     clipped away entirely and the view looked like sitting on the car rather
+     than in it. Onboard pulls it in; chase keeps the far plane's depth
+     precision. */
+  this.camera.near = onboard ? 0.12 : 0.6;
+  if (onboard) this.camera.quaternion.copy(_camQ);
+  else this.camera.lookAt(this.camLook);
   this.camera.updateProjectionMatrix();
 
   this.sky.position.set(this.camera.position.x, 0, this.camera.position.z);
+
+  /* Walk the shadow box along with the car. The light keeps its DIRECTION —
+     position and target move together — so the sun angle never changes as you
+     drive; only the volume being sampled does. */
+  if (this.sun && this.sun.castShadow) {
+    var sx2 = p.visX(), sz2 = p.visZ();
+    this.sun.target.position.set(sx2, 0, sz2);
+    this.sun.position.set(sx2 - 320, 420, sz2 + 210);
+    this.sun.target.updateMatrixWorld();
+  }
 };
 
 /* --- HUD ---------------------------------------------------------------- */
@@ -5385,18 +6672,18 @@ Game.prototype.drawHUD = function () {
      four pixels apart — narrower than a single stroke of the font at this
      scale — so they read as the one number "1/36/6". The gap between two
      panels is what tells them apart; a wider margin alone would not. */
-  var lap = Math.min(p.lapsDone + 1, TOTAL_LAPS);
+  var lap = Math.min(p.lapsDone + 1, this.laps());
   var boxW = textWidth('0/0', 2) + 6;      /* value width plus 3px each side */
   var boxGap = 5;
 
   this.panel(3, 3, boxW, 25);
   drawText(g, 'LAP', 6, 6, 1, C_PAPAYA, C_SHADOW);
-  drawText(g, lap + '/' + TOTAL_LAPS, 6, 15, 2, C_WHITE, C_SHADOW);
+  drawText(g, lap + '/' + this.laps(), 6, 15, 2, C_WHITE, C_SHADOW);
 
   var posX = 3 + boxW + boxGap;
   this.panel(posX, 3, boxW, 25, C_CYAN);
   drawText(g, 'POS', posX + 3, 6, 1, C_CYAN, C_SHADOW);
-  drawText(g, p.position + '/' + GRID_SIZE, posX + 3, 15, 2, C_WHITE, C_SHADOW);
+  drawText(g, p.position + '/' + this.cars.length, posX + 3, 15, 2, C_WHITE, C_SHADOW);
 
   /* timing tower */
   var tw = 78;
@@ -5595,7 +6882,9 @@ Game.prototype.drawTitle = function () {
   g.fillRect(Math.round(W / 2 - tw / 2) - 6, ty + GLYPH_H * titleScale + 5, tw + 12, 2);
   drawTextCenter(g, 'MCL-64', W / 2, ty, titleScale, '#15161a', null);
 
-  drawTextCenter(g, 'PAPAYA GRAND PRIX   SILVERSTONE', W / 2, ty + GLYPH_H * titleScale + 14, 1, C_CYAN, C_SHADOW);
+  /* Names the circuit you are about to race, not a hard-coded one. */
+  drawTextCenter(g, 'PAPAYA GRAND PRIX   ' + this.track.name + '   ' + this.track.laps + ' LAPS',
+    W / 2, ty + GLYPH_H * titleScale + 14, 1, C_CYAN, C_SHADOW);
 
   /* attract-mode tag, top right */
   drawTextRight(g, 'DEMO', W - 6, 6, 1, pulse > 0.5 ? C_PAPAYA : '#6c5a48', C_SHADOW);
@@ -5629,7 +6918,7 @@ Game.prototype.drawTitle = function () {
   for (var i = 0; i < lines.length; i++) {
     drawTextCenter(g, lines[i], W / 2, ly + i * 9, 1, i === 0 ? C_PAPAYA : '#a9a29b', C_SHADOW);
   }
-  if (!touch) drawText(g, TOTAL_LAPS + ' LAPS   ' + GRID_SIZE + ' CARS', 6, H - 11, 1, '#7d7772', C_SHADOW);
+  if (!touch) drawText(g, this.laps() + ' LAPS   ' + this.cars.length + ' CARS', 6, H - 11, 1, '#7d7772', C_SHADOW);
 };
 
 /* Single place that reflects auth state into the panel, driven by Cloud's
@@ -5693,6 +6982,146 @@ Game.prototype.carName = function (v) {
     return this.cloud.profile.display_name.toUpperCase();
   }
   return v.livery.name;
+};
+
+/* RETRO is the 240p console look; MODERN supersamples, tone maps and drops
+   the 5-bit quantise entirely. */
+/* Switching circuit rebuilds the whole scene — road ribbon, barriers,
+   scenery, grandstands — so it reloads rather than trying to dispose and
+   rebuild in place. The session lives in localStorage, so nothing is lost,
+   and the page is one file that loads in about a second.
+   Unlock rules would go here: filter TRACKS by what the player has earned
+   before picking the next one. */
+/* Renders one row per circuit from the TRACKS registry, so a new entry in
+   20-track.js appears here with no markup and no wiring.
+
+   This replaced a single button that cycled to the next circuit and reloaded.
+   With two circuits that was fine; at three or more you could not see what
+   you were choosing — every look at the next name cost a full page reload,
+   and you had to cycle all the way round to get back. */
+Game.prototype.buildTrackList = function () {
+  var self = this;
+  /* Two rails, same widget, different consequence: picking in SETTINGS loads
+     that circuit, picking in the LEADERBOARD only changes which board you are
+     reading. Nobody should have to load Indianapolis to see its times. */
+  this.buildTrackRail('set-track-list', function (id) { self.selectTrack(id); });
+  this.buildTrackRail('board-track-list', function (id) {
+    self.boardTrackId = id;
+    self.syncTrackRail('board-track-list', id);
+    self.loadBoard();
+  });
+  this.syncTrackList();
+};
+
+Game.prototype.buildTrackRail = function (hostId, onPick) {
+  var host = document.getElementById(hostId);
+  if (!host) return;
+  host.innerHTML = '';
+
+  for (var i = 0; i < TRACKS.length; i++) {
+    (function (def) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tracko';
+      b.setAttribute('role', 'radio');
+      b.dataset.trackId = def.id;
+
+      var name = document.createElement('span');
+      name.className = 'tracko-name';
+      name.textContent = def.name;
+
+      var meta = document.createElement('span');
+      meta.className = 'tracko-meta';
+      meta.textContent = def.laps + ' laps · ' + (def.blurb || 'full grid');
+
+      b.appendChild(name);
+      b.appendChild(meta);
+
+      b.addEventListener('click', function (e) {
+        e.preventDefault();
+        onPick(def.id);
+      });
+      host.appendChild(b);
+    })(TRACKS[i]);
+  }
+};
+
+/* Marks the current circuit. Called from applySettings too, so the list is
+   right whenever the panel opens rather than only when it is first built. */
+Game.prototype.syncTrackList = function () {
+  this.syncTrackRail('set-track-list', this.settings.trackId || (this.track && this.track.def.id));
+  this.syncTrackRail('board-track-list', this.boardTrackId || this.trackVersion());
+};
+
+Game.prototype.syncTrackRail = function (hostId, current) {
+  var host = document.getElementById(hostId);
+  if (!host) return;
+  var rows = host.children, sel = null;
+  for (var i = 0; i < rows.length; i++) {
+    var on = rows[i].dataset.trackId === current;
+    rows[i].setAttribute('aria-checked', on ? 'true' : 'false');
+    rows[i].tabIndex = on ? 0 : -1;
+    if (on) sel = rows[i];
+  }
+
+  /* Centre the current circuit in the rail. Deliberately NOT
+     scrollIntoView(): that walks every scrollable ancestor, so it would drag
+     the settings panel — and on some browsers the page behind it — rather
+     than just sliding this one strip. Setting scrollLeft moves the rail and
+     nothing else. */
+  /* Bring the selected card flush to the left edge. The browser clamps this
+     at the end of the rail, which lands the last card flush RIGHT — either
+     way it is fully visible, which matters more than being centred, and it
+     lines up exactly with a scroll-snap-align:start snap point so the snap
+     does not drag it somewhere else afterwards. */
+  /* Measured against the RAIL, via rects. offsetLeft resolves against the
+     nearest positioned ancestor, which here is the settings panel rather than
+     this strip, so using it scrolls by the wrong origin and the card lands
+     anywhere. The rect delta is what actually has to be taken up. */
+  if (sel) {
+    host.scrollLeft += sel.getBoundingClientRect().left - host.getBoundingClientRect().left;
+  }
+};
+
+Game.prototype.selectTrack = function (id) {
+  if (id === this.settings.trackId) return;          /* already on it */
+  var def = null;
+  for (var i = 0; i < TRACKS.length; i++) if (TRACKS[i].id === id) def = TRACKS[i];
+  if (!def) return;
+
+  this.settings.trackId = id;
+  this.saveSettings();
+  this.syncTrackList();
+  this.flash('LOADING ' + def.name);
+  /* let the flash paint before the navigation stalls the frame */
+  setTimeout(function () { location.reload(); }, 220);
+};
+
+Game.prototype.applyQuality = function () {
+  var modern = this.settings.quality === 'modern';
+
+  this.renderer.toneMapping = modern ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
+  this.renderer.toneMappingExposure = modern ? 1.12 : 1.0;
+
+  /* Tone mapping is compiled INTO every material's shader, so changing it
+     after the scene exists does nothing until each one is rebuilt. Without
+     this the toggle appears to do nothing but change the resolution. */
+  this.scene.traverse(function (o) {
+    if (!o.material) return;
+    var m = o.material.length ? o.material : [o.material];
+    for (var i = 0; i < m.length; i++) if (m[i]) m[i].needsUpdate = true;
+  });
+
+  /* Shadows are a modern-only cost, and the fake blob is a retro-only cheat.
+     Running both at once double-darkens under every car. */
+  this.renderer.shadowMap.enabled = modern;
+  if (this.sun) this.sun.castShadow = modern;
+  for (var ci = 0; ci < (this.cars || []).length; ci++) {
+    if (this.cars[ci].shadow) this.cars[ci].shadow.visible = !modern;
+  }
+
+  this.postMat.uniforms.uRetro.value = modern ? 0 : 1;
+  this.resize();
 };
 
 Game.prototype.isTouch = function () {
@@ -5865,7 +7294,12 @@ Game.prototype.updateAudio = function () {
     var guard = 0;
     while (acc >= STEP && guard < 6) { game.tick(STEP); acc -= STEP; guard++; }
     if (acc > STEP * 6) acc = 0;
-    for (var i = 0; i < game.cars.length; i++) game.cars[i].sync(dt);
+    /* Whatever is left in the accumulator is how far this frame sits past the
+       last physics step. Feeding it to sync() is what lets the cars move on
+       frames where no step ran — without it they only advance at 60Hz while
+       the camera glides on every frame, and the chase car twitches. */
+    var alpha = acc / STEP;
+    for (var i = 0; i < game.cars.length; i++) game.cars[i].sync(dt, alpha);
     game.render(dt);
     game.updateAudio();
   }
@@ -5893,6 +7327,9 @@ Game.prototype.updateAudio = function () {
   });
 
   window.MCL64 = game;
+  /* The circuit registry, for the selector UI and for poking at in a console. */
+  game.tracks = TRACKS;
+  game.trackById = trackById;
 })();
 
 })();
