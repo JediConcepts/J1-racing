@@ -1,0 +1,105 @@
+name: Publish to hosting
+
+# Publishing is done by the fleet manager Worker, not by this workflow.
+#
+# WHY: the Worker already holds the WHM/cPanel and Cloudflare credentials, so no
+# hosting secret has to live in GitHub. This job only says "publish commit X to
+# target Y"; the Worker resolves the commit, writes the files, purges the
+# Cloudflare cache, verifies the public URL, and records the run in its jobs
+# table. It also skips any file whose git blob sha is already published, so a
+# push that changes only index.html uploads only index.html.
+#
+# The one secret needed here is FLEET_DEPLOY_TOKEN — the fleet dashboard bearer
+# token. Add it under Settings → Secrets and variables → Actions.
+
+on:
+  push:
+    branches: [main, test]
+  # Manual runs: pick a target, optionally a specific ref, and force a full
+  # re-upload when the server copy was changed outside this pipeline.
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deploy target
+        type: choice
+        options: [mcl64, mcl64-test]
+        default: mcl64
+      ref:
+        description: Commit, branch or tag (blank = the target's own branch)
+        type: string
+        required: false
+      force:
+        description: Re-upload every file even if unchanged
+        type: boolean
+        default: false
+
+# Never let two deploys to the same target overlap: they write the same files.
+# In-progress runs are allowed to finish rather than being cancelled mid-write —
+# a cancelled deploy is exactly the partial state we design against.
+concurrency:
+  group: publish-${{ github.event.inputs.target || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    # main → mcl64 (live), test → mcl64-test (preview)
+    env:
+      FLEET_API: https://webmgmt-fleet.jamie3640.workers.dev/api/deploy
+      TARGET: ${{ github.event.inputs.target || (github.ref_name == 'main' && 'mcl64' || 'mcl64-test') }}
+      DEPLOY_REF: ${{ github.event.inputs.ref || github.sha }}
+      FORCE: ${{ github.event.inputs.force || 'false' }}
+    steps:
+      - name: Publish via fleet manager
+        env:
+          FLEET_DEPLOY_TOKEN: ${{ secrets.FLEET_DEPLOY_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${FLEET_DEPLOY_TOKEN:-}" ]; then
+            echo "::error::FLEET_DEPLOY_TOKEN is not set. Add it under Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+
+          echo "Publishing $DEPLOY_REF to target '$TARGET' (force=$FORCE)"
+
+          # --fail-with-body so an HTTP error still shows the API's message.
+          # The response is written to a file and never echoed raw, so nothing
+          # unexpected in it can end up in the log.
+          http_status=$(curl -sS --max-time 600 \
+            -o response.json -w '%{http_code}' \
+            -X POST "$FLEET_API" \
+            -H "Authorization: Bearer $FLEET_DEPLOY_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d "$(jq -nc --arg t "$TARGET" --arg r "$DEPLOY_REF" --argjson f "$FORCE" \
+                  '{target:$t, ref:$r, force:$f}')" ) || true
+
+          # The Worker answers 200 on a complete deploy and 500 on a partial one,
+          # always with a JSON body describing exactly what was written.
+          ok=$(jq -r '.ok // false' response.json 2>/dev/null || echo false)
+          wrote=$(jq -r '(.files // []) | length' response.json 2>/dev/null || echo 0)
+          skipped=$(jq -r '(.skipped // []) | length' response.json 2>/dev/null || echo 0)
+          bytes=$(jq -r '.totalBytes // 0' response.json 2>/dev/null || echo 0)
+          sha=$(jq -r '.sha // "?"' response.json 2>/dev/null || echo '?')
+          vstatus=$(jq -r '.verify.httpStatus // "n/a"' response.json 2>/dev/null || echo 'n/a')
+          vtitle=$(jq -r '.verify.title // ""' response.json 2>/dev/null || echo '')
+
+          {
+            echo "### Publish to \`$TARGET\`"
+            echo ""
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| commit | \`$sha\` |"
+            echo "| files written | $wrote |"
+            echo "| files skipped (unchanged) | $skipped |"
+            echo "| bytes uploaded | $bytes |"
+            echo "| verify | $vstatus $vtitle |"
+            echo "| HTTP | $http_status |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          jq -r '(.errors // [])[] | "::error::deploy \(.scope): \(.message)"' response.json 2>/dev/null || true
+
+          if [ "$ok" != "true" ]; then
+            echo "::error::deploy did not complete (HTTP $http_status). Files listed above were written; nothing was rolled back."
+            exit 1
+          fi
+          echo "Deploy complete: $wrote written, $skipped unchanged."
