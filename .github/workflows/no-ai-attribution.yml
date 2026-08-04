@@ -1,0 +1,87 @@
+name: no-ai-attribution
+
+# GitHub cannot run .githooks/commit-msg — client-side hooks only ever execute
+# on the machine making the commit, and true pre-receive hooks exist only on
+# GitHub Enterprise Server. So this is the server-side half of the rule: the
+# hook strips the trailer locally, and this catches anything that arrives from
+# a clone where `git config core.hooksPath .githooks` was never run.
+#
+# It CANNOT strip — by the time GitHub sees a commit the message is already
+# written and rewriting it would change every SHA downstream. It fails the
+# check instead, so the fix is an explicit `git rebase --signoff`-style reword
+# by whoever pushed it.
+#
+# NOTE: this only BLOCKS merges once it is made a required status check.
+# Settings -> Branches -> branch protection for `main` -> require this check.
+# Until then it reports, and a red tick is easy to scroll past.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Need history to walk a commit range rather than just the tip.
+          fetch-depth: 0
+
+      - name: Reject AI attribution trailers in new commits
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # ONLY THE NEW COMMITS. 35 commits already in this repository's
+          # history carry the trailer; scanning everything would fail forever
+          # and teach everyone to ignore this check.
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            RANGE="origin/${{ github.base_ref }}..HEAD"
+          else
+            BEFORE="${{ github.event.before }}"
+            # All-zeroes means a new branch, and there is no useful "before".
+            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+              RANGE="HEAD~1..HEAD"
+            else
+              RANGE="$BEFORE..HEAD"
+            fi
+          fi
+
+          echo "Scanning $RANGE"
+          COMMITS=$(git rev-list "$RANGE" 2>/dev/null || echo "")
+          if [ -z "$COMMITS" ]; then
+            echo "No new commits to check."
+            exit 0
+          fi
+
+          FAILED=0
+          for SHA in $COMMITS; do
+            # Anchored to line start so a commit that merely DISCUSSES the
+            # trailer in prose — like the one that introduced this rule — is
+            # not flagged. Only a line that IS a trailer counts.
+            if git log -1 --format='%B' "$SHA" \
+               | grep -qiE '^[[:space:]]*(Co-Authored-By:[[:space:]]*(Claude|.*anthropic)|🤖?[[:space:]]*Generated with[[:space:]]*\[?(Claude|Anthropic))'; then
+              echo "::error::$SHA carries an AI attribution trailer"
+              git log -1 --format='  %s' "$SHA"
+              FAILED=1
+            fi
+          done
+
+          if [ "$FAILED" = "1" ]; then
+            echo ""
+            echo "Commit messages must not carry Co-Authored-By: Claude or a"
+            echo "Generated-with footer. See CLAUDE.md."
+            echo ""
+            echo "Locally this is stripped automatically. If it reached here,"
+            echo "that clone never ran:"
+            echo "    git config core.hooksPath .githooks"
+            echo ""
+            echo "To fix the commits already pushed:"
+            echo "    git rebase -i <base>   # reword the offending messages"
+            echo "    git push --force-with-lease"
+            exit 1
+          fi
+
+          echo "Clean: no attribution trailers in $(echo "$COMMITS" | wc -l | tr -d ' ') commit(s)."

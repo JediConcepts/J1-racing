@@ -1175,6 +1175,18 @@ Game.prototype.syncSettingsUi = function () {
   put('set-envol-num', String(s.engineVol));
   put('set-musvol-num', String(s.musicVol));
 
+  /* Build stamp, injected by build.js at compile time — never edited by hand,
+     because a version somebody has to remember to bump is a version that lies.
+     Absent only if the page was assembled some other way. */
+  var bi = window.MCL64_BUILD;
+  var be = document.getElementById('set-build');
+  if (be) {
+    be.textContent = bi
+      ? (bi.version + ' \u00b7 ' + bi.channel + ' \u00b7 ' + bi.sha + ' \u00b7 ' + bi.at)
+      : 'unversioned build';
+    be.classList.toggle('is-dev', !bi || bi.channel !== 'release');
+  }
+
   var ev = document.getElementById('set-envol');
   if (ev && ev.value !== String(s.engineVol)) ev.value = String(s.engineVol);
   var mv = document.getElementById('set-musvol');
@@ -2586,6 +2598,12 @@ Game.prototype.updateAudio = function () {
    ========================================================================= */
 
 (function boot() {
+  /* One line on the console so a build is identifiable from a devtools
+     screenshot, without anyone opening the settings panel. */
+  if (window.MCL64_BUILD) {
+    var bb = window.MCL64_BUILD;
+    console.log('MCL-64 ' + bb.version + ' (' + bb.channel + ') ' + bb.sha + ' ' + bb.branch + ' ' + bb.at);
+  }
   var host = document.getElementById('screen');
   var fallback = document.getElementById('fallback');
 
