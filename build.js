@@ -286,6 +286,12 @@ if (fragment.indexOf(CLOUD.key) !== -1) problems.push('artifact.html must NOT co
 if (fragment.indexOf(CLOUD.url) !== -1) problems.push('artifact.html must NOT contain the project URL');
 if (standalone.indexOf(CLOUD_ASSIGN) === -1) problems.push('index.html is missing the cloud config');
 if (standalone.indexOf(CLOUD.key) === -1) problems.push('index.html is missing the publishable key');
+/* The deploy verifier asserts on this marker, so a build that silently stopped
+   emitting it would turn every later deploy check into a false failure — or
+   worse, get "fixed" by weakening the check. Fail here instead. */
+if (standalone.indexOf('<meta name="build" content="' + BUILD.version + '"') === -1) {
+  problems.push('index.html is missing its build marker');
+}
 if (problems.length) throw new Error('Build invariant failed:\n  - ' + problems.join('\n  - '));
 
 console.log('\n  invariants OK — fragment stays bare, standalone is a full document');
