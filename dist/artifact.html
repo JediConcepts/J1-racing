@@ -6441,7 +6441,7 @@ var CAM_LABELS = ['CHASE CAM', 'T-CAM', 'HELMET CAM', 'GYRO CAM'];
    stabRoll/stabPitch are 0 for a hard mount and 1 for fully stabilised.
    `tilt` is a fixed downward angle in radians on top of the car's own pitch. */
 var ONBOARD_CAMS = {
-  1: { off: [0, 1.34, -0.95], fov: 78, fovGain: 8, lead: 0.00, stabRoll: 0, stabPitch: 0, tilt: 0.16 },
+  1: { off: [0, 1.34, -0.95], fov: 66, fovGain: 7, lead: 0.00, stabRoll: 0, stabPitch: 0, tilt: 0.16 },
   /* Sat back at the eye rather than out at the visor, so the halo hoop arcs
      across the TOP of the frame and you look out under it, the strut runs up
      the middle, and both mirrors sit just inside the edges. fov is VERTICAL in
@@ -6465,14 +6465,14 @@ var ONBOARD_CAMS = {
 
      Tilt is only 0.08: at 0.13 the coaming swept across the middle of the
      frame and you drove looking at your own bodywork. */
-  2: { off: [0, 0.87, 0.28], fov: 82, fovGain: 6, lead: 0.55, stabRoll: 0, stabPitch: 0, tilt: 0.08, hideHead: true },
+  2: { off: [0, 0.87, 0.28], fov: 70, fovGain: 6, lead: 0.55, stabRoll: 0, stabPitch: 0, tilt: 0.08, hideHead: true },
   /* bankIn tilts INTO the corner, against the car's own outward body lean.
      Killing the car's roll outright (stabRoll 1) and leaving it there is what
      a real gyro mount does, but it reads badly from the seat: the horizon is
      nailed down while the cockpit rocks OUTWARD under you, so a left-hander
      looks like the car falling to the right. Banking in instead is the thing
      every rider and pilot already expects. */
-  3: { off: [0, 1.34, -0.95], fov: 78, fovGain: 8, lead: 0.28, stabRoll: 1, stabPitch: 0.8, tilt: 0.16, bankIn: 0.34 }
+  3: { off: [0, 1.34, -0.95], fov: 66, fovGain: 7, lead: 0.28, stabRoll: 1, stabPitch: 0.8, tilt: 0.16, bankIn: 0.34 }
 };
 
 Game.prototype.updateCamera = function (dt, snap) {
@@ -6503,14 +6503,20 @@ Game.prototype.updateCamera = function (dt, snap) {
        on Indy's banking. */
     _localOff.set(cfg.off[0], cfg.off[1], cfg.off[2]);
     _localOff.applyQuaternion(p.group.quaternion);
-    _ideal.copy(p.group.position).add(_localOff);
-    /* A HELMET IS NOT BOLT-RIGID. Mounted perfectly, every kerb strike and
-       every runoff seam is transmitted straight into the viewer at the full
-       frame rate, which is unwatchable — real onboards have a neck and a
-       damped mount under them. Fast enough (25) that it still feels attached,
-       slow enough to swallow a one-frame jolt. */
-    if (snap) this.camPos.copy(_ideal);
-    else this.camPos.lerp(_ideal, 1 - Math.exp(-25 * dt));
+    /* RIGID. Do NOT damp this toward the mount point in world space.
+
+       The mount is attached to something moving, so a world-space lerp does
+       not smooth it — it produces a LAG PROPORTIONAL TO SPEED. At 216 km/h the
+       car covers a metre per frame, and damping at 25/s leaves the camera
+       settling about two metres behind where it belongs: reversed back through
+       the cockpit and into the engine cover. The faster you go, the deeper it
+       sinks.
+
+       There was never anything here worth damping anyway. The vertical jitter
+       from the road surface measures 0.0025 m RMS. The motion that made the
+       cockpit unwatchable was the rumble shake at +/-0.25 m, which is handled
+       below, and the attitude, which is low-passed just after this. */
+    this.camPos.copy(p.group.position).add(_localOff);
 
     /* The head leads the car into the corner. yawRate is positive in a LEFT
        turn and a positive camera yaw looks left, so this needs no negation. */
@@ -6577,7 +6583,10 @@ Game.prototype.updateCamera = function (dt, snap) {
       this.camPos.lerp(_ideal, k);
       this.camLook.lerp(_look, 1 - Math.exp(-12 * dt));
     }
-    this.camera.fov = 62 + speed01 * 13 + p.boost * 4;
+    /* Tighter than it was (62 + 13). A wide chase field pushes the car into
+       the distance and flattens any sense of speed — the frame reads as a map
+       of the corner rather than a car being driven through it. */
+    this.camera.fov = 52 + speed01 * 10 + p.boost * 4;
   }
 
   /* Keep the camera out of the dirt — CHASE ONLY. An onboard mount sits about
