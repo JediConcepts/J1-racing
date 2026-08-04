@@ -54,6 +54,23 @@ const CLOUD = {
   key: 'sb_publishable_MD1h-WEKI5xqWtLEk_OIOA_T-i77YHW'
 };
 
+/* Where the standalone build is actually served. Open Graph and canonical
+   tags need ABSOLUTE urls — a relative og:image is simply ignored by every
+   scraper, which is the usual reason a shared link shows no preview. */
+const SITE = {
+  url: 'https://jediconcepts.com/mcl64/',
+  image: 'https://jediconcepts.com/mcl64/share.png',
+  imageW: 1200,
+  imageH: 630,
+  name: 'MCL-64 — Papaya Grand Prix',
+  author: 'Jamie Easterman',
+  publisher: 'Jedi Concepts',
+  description:
+    'A Formula 1 racer built the way a 1997 console would have built it: 240p, a ' +
+    'five-bit dither, three laps of a stylised Silverstone against a full grid. ' +
+    'Plays in a browser, on desktop or phone, with a global leaderboard.'
+};
+
 const game = SRC.map(f => '\n/* ===== ' + f + ' ===== */\n' + read(f)).join('\n');
 const wrapped = '(function(){\n"use strict";\n' + game + '\n})();\n';
 
@@ -107,12 +124,57 @@ const HEAD = `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#ff8000" />
 <meta name="color-scheme" content="dark light" />
-<meta name="description" content="MCL-64 — an N64-style Formula 1 racer in papaya, on a stylised Silverstone. Unofficial fan tribute." />
+<meta name="description" content="${SITE.description}" />
+<link rel="canonical" href="${SITE.url}" />
+
+<!-- Open Graph: what a link looks like when pasted into a chat, a post or a
+     message. Without og:image most platforms render a bare grey rectangle. -->
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content="Jedi Concepts" />
+<meta property="og:url" content="${SITE.url}" />
+<meta property="og:title" content="${SITE.name}" />
+<meta property="og:description" content="${SITE.description}" />
+<meta property="og:image" content="${SITE.image}" />
+<meta property="og:image:width" content="${SITE.imageW}" />
+<meta property="og:image:height" content="${SITE.imageH}" />
+<meta property="og:image:alt" content="A papaya Formula 1 car mid-corner on a stylised Silverstone, rendered in a late-1990s console style." />
+<meta property="og:locale" content="en_GB" />
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content="${SITE.name}" />
+<meta name="twitter:description" content="${SITE.description}" />
+<meta name="twitter:image" content="${SITE.image}" />
+
+<meta name="author" content="${SITE.author}" />
+<meta name="robots" content="index, follow, max-image-preview:large" />
 <meta name="mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="apple-mobile-web-app-title" content="MCL-64" />
 <title>${pageTitle}</title>
+
+<!-- Structured data. Tells a search engine this is a playable game rather
+     than an article about one, which is what earns the richer result. -->
+<script type="application/ld+json">
+${JSON.stringify({
+  '@context': 'https://schema.org',
+  '@type': 'VideoGame',
+  name: SITE.name,
+  alternateName: 'MCL-64',
+  url: SITE.url,
+  image: SITE.image,
+  description: SITE.description,
+  genre: ['Racing', 'Simulation', 'Arcade'],
+  gamePlatform: 'Web browser',
+  playMode: 'SinglePlayer',
+  applicationCategory: 'Game',
+  operatingSystem: 'Any (web browser)',
+  inLanguage: 'en-GB',
+  author: { '@type': 'Person', name: SITE.author },
+  publisher: { '@type': 'Organization', name: SITE.publisher },
+  offers: { '@type': 'Offer', price: '0', priceCurrency: 'GBP' }
+}, null, 2)}
+</script>
 ${styleBlock}
 </head>
 <body>

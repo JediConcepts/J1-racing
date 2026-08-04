@@ -51,10 +51,15 @@
   * { box-sizing: border-box; }
 
   html, body {
-    height: 100%;
     margin: 0;
-    overflow: hidden;
-    background: var(--bg);
+    /* The page surface, not the game's. .cabinet sets var(--bg) itself, so the
+       console stays near-black while everything below it is navy. */
+    background: #070747;
+    /* The page scrolls so the written content below the game is reachable —
+       a canvas has no text for a search engine to read, and hiding that
+       content from users to feed crawlers would be cloaking. The game itself
+       still owns a full viewport; you scroll past it to reach the prose. */
+    overflow-x: hidden;
   }
 
   body {
@@ -83,6 +88,9 @@
     justify-content: center;
     overflow: hidden;
     outline: none;
+    /* Stops a thumb drag on the car scrolling the page to the prose below. */
+    touch-action: none;
+    overscroll-behavior: contain;
   }
 
   .stage:focus-visible {
@@ -416,6 +424,60 @@
 
   .a2hs-steps strong { color: var(--papaya); font-weight: 700; }
 
+  /* --- written content below the game ---
+     Real prose for real readers. It also happens to be the only thing a
+     crawler can index, since the game itself is a canvas. */
+
+  /* Deep navy, distinct from the game's near-black bezel so the written part
+     of the page reads as a separate surface rather than dead space below it. */
+  .about {
+    background: #070747;
+    color: #b9b2ab;
+    font-size: 14px;
+    line-height: 1.75;
+  }
+
+  .about > * {
+    max-width: 44rem;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+
+  .about > section:first-child { padding-top: 44px; }
+  .about > footer { padding-bottom: 72px; }
+
+  .about section { margin-bottom: 30px; }
+
+  .about h1 {
+    margin: 0 0 14px;
+    color: var(--papaya);
+    font-size: 20px;
+    letter-spacing: 0.1em;
+    line-height: 1.35;
+  }
+
+  .about h2 {
+    margin: 0 0 8px;
+    color: #ffe6cd;
+    font-size: 14px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  .about p { margin: 0 0 12px; }
+  .about .lede { color: #d8d2cc; font-size: 15px; }
+  .about b { color: #ffe6cd; font-weight: 700; }
+
+  .about footer {
+    margin-top: 36px;
+    padding-top: 18px;
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    color: #7d7772;
+    font-size: 12px;
+  }
+
   /* --- account block inside the settings panel --- */
 
   .acct {
@@ -446,6 +508,54 @@
   }
 
   .sval-wide { min-width: 148px; }
+
+  /* Circuit picker. Stacks under its label rather than sitting beside it,
+     because the roster is open-ended and a row of buttons would not fit a
+     phone once there are more than a couple. */
+  .srow-stack { display: block; }
+  .srow-stack .slabel { display: block; margin-bottom: 8px; }
+
+  /* Horizontal rail rather than a full vertical list. The roster is
+     open-ended, so showing every circuit at once would push the rest of the
+     panel off a phone screen the moment a fourth one lands. Cards are sized
+     so the NEXT one is always part-visible — that sliver is the only cue that
+     there is more to scroll to. */
+  .tracklist {
+    display: flex; flex-direction: row; gap: 8px;
+    overflow-x: auto; overflow-y: hidden;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    padding-bottom: 6px;
+  }
+  .tracklist::-webkit-scrollbar { height: 6px; }
+  .tracklist::-webkit-scrollbar-thumb { background: rgba(255, 128, 0, 0.5); border-radius: 3px; }
+  .tracklist::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.06); border-radius: 3px; }
+
+  .tracko {
+    flex: 0 0 66%; min-width: 150px;
+    /* start, not center: programmatic scrollLeft gets SNAPPED, so if the snap
+       points sat at card centres the browser would silently overrule the
+       position that keeps the selected card fully visible. */
+    scroll-snap-align: start;
+    display: flex; flex-direction: column; gap: 4px;
+    padding: 10px; text-align: left; cursor: pointer;
+    font: inherit; letter-spacing: 0.06em;
+    color: #f0e7dc; background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 4px;
+  }
+  .tracko:hover { background: rgba(255, 128, 0, 0.22); border-color: rgba(255, 128, 0, 0.5); }
+  .tracko:focus-visible { outline: 2px solid var(--papaya); outline-offset: 2px; }
+  /* Ellipsis rather than wrap: a broken circuit name reads as two entries. */
+  .tracko-name { font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tracko-meta { font-size: 0.82em; opacity: 0.62; letter-spacing: 0.04em; }
+  /* The current circuit is marked by more than colour, so it still reads
+     for anyone who cannot separate the papaya from the cream. */
+  .tracko[aria-checked="true"] {
+    background: rgba(255, 128, 0, 0.9); border-color: var(--papaya); color: #14120f;
+  }
+  .tracko[aria-checked="true"] .tracko-meta { opacity: 0.8; }
+  .tracko[aria-checked="true"] .tracko-name::before { content: "\25B6 "; }
 
   .sval-oauth {
     flex: 1;
@@ -800,6 +910,10 @@
     <div class="settings" id="board" hidden>
       <div class="settings-box" role="dialog" aria-modal="true" aria-labelledby="board-title">
         <h2 class="settings-title" id="board-title">GLOBAL LEADERBOARD</h2>
+        <!-- Every circuit keeps its own board, so you need to be able to read
+             one without loading that circuit just to look. Same rail as the
+             settings picker; filled from TRACKS at runtime. -->
+        <div class="tracklist" id="board-track-list" role="radiogroup" aria-label="Leaderboard circuit"></div>
         <p class="shint" id="board-status">Loading&hellip;</p>
         <div id="board-rows"></div>
         <div class="srow srow-actions">
@@ -833,6 +947,15 @@
       <div class="settings-box" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <h2 class="settings-title" id="settings-title">SETTINGS</h2>
 
+        <div class="srow srow-stack">
+          <span class="slabel">CIRCUIT</span>
+          <!-- Filled from the TRACKS registry at runtime, so adding a circuit
+               needs no markup. A list rather than a cycle button: each pick
+               reloads the page, so cycling blind through a growing roster
+               meant a full reload just to read the next name. -->
+          <div class="tracklist" id="set-track-list" role="radiogroup" aria-label="Circuit"></div>
+        </div>
+
         <div class="srow">
           <span class="slabel">STEERING</span>
           <button type="button" class="sval" id="set-steer">JOYSTICK</button>
@@ -852,6 +975,24 @@
 
         <p class="shint" id="set-sens-hint">Shapes the stick around centre and how fast the arrow keys wind on.</p>
 
+        <!-- Separate trims, because the engine and the score want very
+             different levels depending on whether you are wearing headphones.
+             These sit under the ENGINE/MUSIC on-off toggles, not instead of
+             them: turning a bus down and switching it off stay distinct. -->
+        <div class="srow">
+          <span class="slabel">ENGINE VOL</span>
+          <input type="range" class="srange" id="set-envol" min="0" max="10" step="1" value="10"
+                 aria-label="Engine volume, 0 silent to 10 full." />
+          <span class="snum" id="set-envol-num">10</span>
+        </div>
+
+        <div class="srow">
+          <span class="slabel">MUSIC VOL</span>
+          <input type="range" class="srange" id="set-musvol" min="0" max="10" step="1" value="10"
+                 aria-label="Music volume, 0 silent to 10 full." />
+          <span class="snum" id="set-musvol-num">10</span>
+        </div>
+
         <div class="srow">
           <span class="slabel">THROTTLE</span>
           <button type="button" class="sval" id="set-throttle">MANUAL</button>
@@ -861,6 +1002,12 @@
           <span class="slabel">FULLSCREEN</span>
           <button type="button" class="sval" id="set-autofs">AUTO</button>
         </div>
+
+        <div class="srow">
+          <span class="slabel">GRAPHICS</span>
+          <button type="button" class="sval" id="set-quality">RETRO 240p</button>
+        </div>
+        <p class="shint" id="set-quality-hint">Retro: 240p with a 5-bit dither, as the hardware did it.</p>
 
         <p class="shint" id="set-hint">Manual: push forward for gas, pull back to brake.</p>
 
@@ -1011,6 +1158,74 @@
     </p>
   </div>
 </div>
+
+<!-- Written for people who scroll past the game, and incidentally the only
+     thing a search engine can read: a canvas contains no indexable text. -->
+<main class="about">
+  <section>
+    <h1>MCL&#8209;64 &mdash; Papaya Grand Prix</h1>
+    <p class="lede">
+      A Formula 1 racer built the way a 1997 console would have built it: 240p,
+      a five&#8209;bit dither, and no anti&#8209;aliasing anywhere. Three laps of a
+      stylised Silverstone against a full grid, in a browser, with nothing to install.
+    </p>
+  </section>
+
+  <section>
+    <h2>How to play</h2>
+    <p>
+      On a keyboard, steer with the arrows or <b>A</b> and <b>D</b>, and use the
+      throttle and brake with the up and down arrows or <b>W</b> and <b>S</b>.
+      <b>Space</b> is the handbrake, <b>Shift</b> arms DRS on the two detection
+      zones, and <b>C</b> switches between the chase camera and the cockpit.
+    </p>
+    <p>
+      On a phone, put a thumb anywhere on the screen and an analogue stick appears
+      under it &mdash; left and right to steer, push forward for throttle, pull back
+      to brake and then reverse. Steering by tilting the handset is optional, and
+      the throttle can hold itself open so one thumb is enough.
+    </p>
+  </section>
+
+  <section>
+    <h2>The circuit</h2>
+    <p>
+      Five and a half kilometres of stylised Silverstone: Copse, Maggotts, Becketts,
+      Hangar Straight, Stowe, Vale and Club, with the kerbs and the two DRS zones
+      roughly where you would expect them. The grid is six cars and the race is
+      three laps, so a full run takes a little over five minutes.
+    </p>
+  </section>
+
+  <section>
+    <h2>The leaderboard</h2>
+    <p>
+      Race times post to a global board. Signing in is by Google or by a link
+      emailed to you &mdash; there is no password to choose or forget. Your driver
+      name is the only thing shown publicly; email addresses and surnames are held
+      in a separate schema the public API cannot reach at all.
+    </p>
+  </section>
+
+  <section>
+    <h2>How it is built</h2>
+    <p>
+      One HTML file with no dependencies to install, no build step for the player,
+      and no external requests at runtime. The physics is deterministic to the last
+      bit on every browser, which is what makes a submitted lap time verifiable
+      rather than merely plausible: each race records a replay trace that reproduces
+      it exactly.
+    </p>
+  </section>
+
+  <footer>
+    <p>
+      An unofficial fan project by <b>Jamie Easterman</b> of Jedi Concepts. Not
+      endorsed or sponsored by any racing team or their sponsors. All trademarks
+      belong to their respective owners.
+    </p>
+  </footer>
+</main>
 
 <script>/*INJECT_THREE*/</script>
 <script>/*INJECT_CLOUD*/</script>

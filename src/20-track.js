@@ -56,31 +56,247 @@ var CORNER_NAMES = [
   ['VALE', 31], ['CLUB', 32]
 ];
 
-var HALF_W = 7.2;        /* 14.4m racing surface */
-var RUNOFF = 7.0;        /* sealed runoff before the wall */
+/* =====================================================================
+   CIRCUIT REGISTRY
+   Everything a circuit needs is data: control points, corner names, road
+   width and how many laps. Curvature, the racing line, the speed profile,
+   the straights and the DRS zones are all derived from the geometry, so a
+   new circuit is a new entry here and nothing else.
+
+   `id` is what the leaderboard partitions on. Change a circuit's shape and
+   you must bump its id, or old times get ranked against a track that no
+   longer exists.
+   ===================================================================== */
+
+
+/* Indianapolis Motor Speedway. 2.5 miles of rectangle with rounded corners:
+   two 5/8-mile straights, two short chutes, four identical quarter-circle
+   turns banked at 9 degrees 12 minutes. Flat throughout — no elevation.
+
+   The point order is REVERSED relative to how it was authored, so the lap runs
+   anti-clockwise on left-hand turns as the real 500 does. Checked by summing
+   signed curvature over the lap: Silverstone (clockwise in reality) comes to
+   -2pi, so anti-clockwise must come to +2pi. Authored, it matched Silverstone
+   and therefore ran the wrong way. */
+var INDY_CONTROL = [
+  [    0, -357,  0],
+  [ -126, -357,  0],
+  [ -252, -357,  0],
+  [ -377, -357,  0],
+  [ -503, -357,  0],
+  [ -601, -337,  0],
+  [ -684, -282,  0],
+  [ -740, -199,  0],
+  [ -759, -101,  0],
+  [ -759,    0,  0],
+  [ -759,  101,  0],
+  [ -740,  199,  0],
+  [ -684,  282,  0],
+  [ -601,  337,  0],
+  [ -503,  357,  0],
+  [ -377,  357,  0],
+  [ -252,  357,  0],
+  [ -126,  357,  0],
+  [    0,  357,  0],
+  [  126,  357,  0],
+  [  252,  357,  0],
+  [  377,  357,  0],
+  [  503,  357,  0],
+  [  601,  337,  0],
+  [  684,  282,  0],
+  [  740,  199,  0],
+  [  759,  101,  0],
+  [  759,    0,  0],
+  [  759, -101,  0],
+  [  740, -199,  0],
+  [  684, -282,  0],
+  [  601, -337,  0],
+  [  503, -357,  0],
+  [  377, -357,  0],
+  [  252, -357,  0],
+  [  126, -357,  0]
+];
+
+var INDY_CORNERS = [['FRONT STRETCH', 0], ['TURN 1', 6], ['TURN 2', 12], ['BACK STRETCH', 18], ['TURN 3', 24], ['TURN 4', 30]];
+
+
+/* Brands Hatch Grand Prix circuit. 3.9 km, clockwise, and defined by its
+   elevation: 34 m between the low point at the bottom of Paddock Hill and the
+   summit at Druids. The road falls away the instant you cross the line.
+
+   Corrected from the authored geometry in two ways. The point order was
+   mirrored, which inverts chirality and would have made every corner a
+   left-hander. And Druids was a 105 degree direction change across two ~47 m
+   chords, which drove the spline's minimum radius down to 6.1 m — narrower
+   than the road's own half width, so the ribbon and both barriers folded
+   through the centreline. The hairpin is now six points on a 28 m arc. */
+var BRANDS_CONTROL = [
+  [    0,    0, 20],
+  [    2, -124, 19],
+  [   31, -219, 16],
+  [   69, -275,  8],
+  [  130, -314,  0],
+  [  178, -403,  9],
+  [  232, -492, 19],
+  [  275, -569, 28],
+  [  303, -628, 32],
+  [  314, -640, 33],
+  [  330, -644, 34],
+  [  345, -638, 34],
+  [  355, -625, 33],
+  [  356, -609, 32],
+  [  341, -545, 26],
+  [  326, -480, 18],
+  [  310, -420, 11],
+  [  303, -355,  8],
+  [  298, -237,  6],
+  [  295, -130,  5],
+  [  293,  -24,  6],
+  [  290,   53,  8],
+  [  306,  113,  9],
+  [  391,  160,  6],
+  [  492,  207,  3],
+  [  590,  255,  1],
+  [  666,  293,  1],
+  [  728,  347,  2],
+  [  772,  430,  8],
+  [  791,  506, 13],
+  [  791,  577, 14],
+  [  758,  667,  8],
+  [  711,  750,  3],
+  [  661,  809,  4],
+  [  598,  849,  7],
+  [  519,  873,  9],
+  [  436,  885, 10],
+  [  355,  878, 11],
+  [  275,  849, 13],
+  [  199,  809, 15],
+  [  128,  750, 16],
+  [   77,  676, 18],
+  [   45,  591, 19],
+  [   19,  501, 20],
+  [    2,  397, 20],
+  [    0,  243, 20],
+  [    0,  113, 20]
+];
+
+/* [name, index] PAIRS — mapCorners reads names[c][0] and names[c][1], so an
+   array of objects silently yields undefined and every label is dropped. */
+var BRANDS_CORNERS = [
+  ['PADDOCK HILL BEND', 3], ['DRUIDS', 10], ['GRAHAM HILL BEND', 16],
+  ['SURTEES', 22], ['HAWTHORN', 27], ['WESTFIELD', 30], ['DINGLE DELL', 31],
+  ['SHEENE CURVE', 34], ['STIRLINGS', 37], ['CLEARWAYS', 40], ['CLARK CURVE', 43]
+];
+
+var TRACKS = [
+  {
+    id: 'silverstone-v1',
+    name: 'SILVERSTONE',
+    blurb: 'FAST AND OPEN',
+    laps: 3,
+    halfW: 7.2,          /* 14.4m racing surface */
+    runoff: 7.0,         /* sealed runoff before the wall */
+    control: TRACK_CONTROL,
+    corners: CORNER_NAMES
+  },
+  {
+    id: 'indianapolis-v1',
+    name: 'INDIANAPOLIS',
+    blurb: 'BANKED OVAL',
+    laps: 5,
+    halfW: 9,
+    runoff: 9.0,
+    /* The real 9 deg 12 min = 0.1606 rad, kept because it is purely visual.
+       BANKING DOES NOT AFFECT GRIP in this model — `bank` never appears in
+       30-cars.js; it only tilts the road surface geometry, and latCapacity()
+       depends on speed alone. Measured: every value from 0 to 9.2 degrees
+       produces an identical lap, to the hundredth of a second. So there is no
+       point trading away the look for handling that will not change.
+
+       This corner is flat regardless: a 256 m radius at 216 km/h demands
+       14.1 m/s2 and the car has 46, a 3.3x margin. Forcing a lift would need
+       a 78 m radius, which is a short oval rather than Indianapolis. */
+    bankGain: 90,
+    bankMax: 0.1606,
+    /* crowd the whole way round, outside wall and infield both */
+    standRing: true,
+    /* The 500 runs 33 cars in 11 rows of three — the field size and the
+       three-abreast rows are the event's signature, and a six-car grid on a
+       2.5 mile oval looks like an empty car park. */
+    grid: 33,
+    gridCols: 3,
+    playerStart: 'mid',
+    /* faster, flatter, four on the floor — the oval never asks for a lift */
+    music: 'speedway',
+    control: INDY_CONTROL,
+    corners: INDY_CORNERS
+  },
+  {
+    id: 'brands-hatch-v1',
+    name: 'BRANDS HATCH',
+    blurb: 'NARROW AND HILLY',
+    laps: 4,
+    /* the key is halfW — halfWidthM is read by nothing and would have left
+       this narrow circuit at Silverstone's 14.4 m */
+    halfW: 6.0,
+    runoff: 6.0,
+    /* darker and rollier, to match a lap spent going up and down */
+    music: 'downland',
+    control: BRANDS_CONTROL,
+    corners: BRANDS_CORNERS
+  }
+];
+
+function trackById(id) {
+  for (var i = 0; i < TRACKS.length; i++) if (TRACKS[i].id === id) return TRACKS[i];
+  return TRACKS[0];
+}
+
+/* Set from the active circuit when a Track is built. Kept as module globals
+   rather than threaded through every call site because exactly one circuit is
+   ever live at a time, and the physics reads these on the hot path. */
+var HALF_W = 7.2;
+var RUNOFF = 7.0;
 var WALL_HALF = HALF_W + RUNOFF;
 var VERGE = 46;          /* grass skirt */
 var SAMPLES = 900;       /* ~6m per sample over a 5.5km lap */
 
 var COL = {
-  asphalt: new THREE.Color(0x9c9caa),
-  asphaltDark: new THREE.Color(0x8a8a95),
-  runoff: new THREE.Color(0xa8a4ae),
-  grass: new THREE.Color(0x6f9b52),
-  grassDark: new THREE.Color(0x5c8544),
-  papaya: 0xff8000,
-  anthracite: 0x1b1c22,
-  cyan: 0x4fe3e0
+  asphalt: srgb(0x9c9caa),
+  asphaltDark: srgb(0x8a8a95),
+  runoff: srgb(0xa8a4ae),
+  grass: srgb(0x6f9b52),
+  grassDark: srgb(0x5c8544),
+  papaya: srgb(0xff8000),
+  anthracite: srgb(0x1b1c22),
+  cyan: srgb(0x4fe3e0)
 };
 
-function Track() {
+function Track(def) {
   var i;
+  def = def || TRACKS[0];
+  this.def = def;
+  this.id = def.id;
+  this.name = def.name;
+  this.laps = def.laps || 3;
+
+  /* The physics reads these globally, so they must be set before anything
+     below samples the circuit. */
+  HALF_W = def.halfW || 7.2;
+  RUNOFF = def.runoff || 7.0;
+  /* Derived, so it has to be recomputed here too — left at its module-level
+     value it would keep Silverstone's barrier line on a wider circuit, and the
+     walls would sit inside the runoff. */
+  WALL_HALF = HALF_W + RUNOFF;
+
+  var control = def.control;
+
   /* Control rows are [x, z, y] so the array reads like a map; Vector3 wants
      (x, y, z), and y is the height. Swapping these is what sends the circuit
      climbing into the sky. */
   var pts = [];
-  for (i = 0; i < TRACK_CONTROL.length; i++) {
-    pts.push(new THREE.Vector3(TRACK_CONTROL[i][0], TRACK_CONTROL[i][2], TRACK_CONTROL[i][1]));
+  for (i = 0; i < control.length; i++) {
+    pts.push(new THREE.Vector3(control[i][0], control[i][2], control[i][1]));
   }
   /* centripetal parameterisation: the control points are unevenly spaced and
      this is the variant that will not cusp or self-intersect between them */
@@ -118,11 +334,31 @@ function Track() {
   }
   this.curv = smoothLoop(curvRaw, 7, 2);
 
-  /* Banking, capped at ~5.5 degrees. Sign convention used throughout:
-     curv > 0 means the circuit turns toward +lat, so the inside of the
-     corner is at positive lateral offset and the outside must ride higher. */
+  /* Banking follows curvature, capped. A road circuit gets a token 2.6 degrees
+     of camber; a speedway needs its real figure, and because an oval's turns
+     hold constant radius a high gain saturates at the cap through the whole
+     turn and smoothLoop blends it out onto the straights — which is exactly
+     the real banking profile. */
+  var bankGain = def.bankGain || 14;
+  var bankMax = def.bankMax || 0.046;
   var bankRaw = new Float32Array(this.n);
-  for (i = 0; i < this.n; i++) bankRaw[i] = clamp(-this.curv[i] * 14, -0.046, 0.046);
+  /* SIGN — derive it, do not guess, because two of the three terms are
+     counter-intuitive:
+
+       lat = up X fwd. With three.js's frame (fwd = -Z, +X right, +Y up) that
+       cross product is -X, so LATERAL OFFSET IS POSITIVE TO THE CAR'S LEFT,
+       not its right. Every comment here used to claim the opposite.
+
+       curv = atan2(f0.z*f1.x - f0.x*f1.z, ...) is positive when yaw increases,
+       which swings fwd from +Z toward +X — a LEFT turn.
+
+     So curv > 0 puts the inside of the corner at POSITIVE offset, and since
+     pointAt() sets height to `off * tan(bank)`, lifting the OUTSIDE (negative
+     off) needs tan(bank) < 0. Bank therefore opposes curvature.
+
+     Getting this backwards banks every corner off-camber. It hides at
+     Silverstone's 2.6 degrees and is unmissable at Indy's 9.2. */
+  for (i = 0; i < this.n; i++) bankRaw[i] = clamp(-this.curv[i] * bankGain, -bankMax, bankMax);
   this.bank = smoothLoop(bankRaw, 11, 2);
 
   this.buildRacingLine();
@@ -255,9 +491,12 @@ Track.prototype.mapCorners = function (controlPts) {
   this.corners = [];
   this.cornerLabel = new Array(n);
 
-  for (c = 0; c < CORNER_NAMES.length; c++) {
-    var name = CORNER_NAMES[c][0];
-    var cp = controlPts[CORNER_NAMES[c][1]];
+  /* From the active circuit, not the module-level Silverstone list. */
+  var names = (this.def && this.def.corners) || CORNER_NAMES;
+  for (c = 0; c < names.length; c++) {
+    var name = names[c][0];
+    var cp = controlPts[names[c][1]];
+    if (!cp) continue;                    /* index past the end of this circuit */
     var best = 0, bestD = Infinity;
     for (i = 0; i < n; i++) {
       var dx = this.p[i].x - cp.x, dz = this.p[i].z - cp.z;
@@ -299,17 +538,46 @@ Track.prototype.frame = function (x, z, hint, out) {
   var dx = x - p.x, dz = z - p.z;
   var along = dx * f.x + dz * f.z;
   var lateral = dx * l.x + dz * l.z;
-  /* refine to the neighbouring segment when we've run past this sample */
-  if (along > this.ds) { i = (i + 1) % n; p = this.p[i]; f = this.fwd[i]; l = this.lat[i]; dx = x - p.x; dz = z - p.z; along = dx * f.x + dz * f.z; lateral = dx * l.x + dz * l.z; }
-  else if (along < -this.ds) { i = (i - 1 + n) % n; p = this.p[i]; f = this.fwd[i]; l = this.lat[i]; dx = x - p.x; dz = z - p.z; along = dx * f.x + dz * f.z; lateral = dx * l.x + dz * l.z; }
+  /* THE REAL LENGTH OF THIS SEGMENT, not the average.
 
-  var t = clamp(along / this.ds, 0, 1);
+     `ds` is length/n, but the spline is sampled at uniform PARAMETER rather
+     than uniform arc length, so segments vary — at Brands they run 3.09 m to
+     5.43 m against a 4.34 m average, nearly 30% either way. Normalising the
+     interpolation by `ds` therefore makes t reach 1 before the next sample on
+     a short segment, and never reach it on a long one, so the height flat-
+     lines and then snaps at every boundary.
+
+     Flat circuits hide this completely: with every p.y at zero the lerp has
+     nothing to get wrong. Brands climbs up to 0.626 m per segment and it
+     showed up as the car shaking — 0.111 m RMS of pure frame-to-frame jitter
+     in the car's vertical position, against a predicted 0.11 m worst case. */
+  var seg = this.cum[i + 1] - this.cum[i];
+  /* Step back to the segment we are actually ON.
+
+     nearestIndex returns the nearest sample POINT, which flips to i+1 at the
+     MIDPOINT of a segment — but everything below treats i as the segment
+     START. So for the second half of every segment the nearest sample is
+     ahead of the car, `along` comes out NEGATIVE, and t clamps to 0: the
+     height stops interpolating and snaps to that sample's value.
+
+     The old guard was `along < -seg`, which can never fire, because
+     nearestIndex has already guaranteed |along| <= seg/2. The result was a
+     jump of half a segment's climb at every single sample crossing — 0.4 m at
+     Brands, once every five frames at racing speed. That is the shaking.
+
+     `along < 0` is the correct test: it puts the car back on the segment
+     whose start it has passed, so along lands in [0, seg] and t sweeps the
+     full 0..1 continuously. */
+  if (along > seg) { i = (i + 1) % n; p = this.p[i]; f = this.fwd[i]; l = this.lat[i]; dx = x - p.x; dz = z - p.z; along = dx * f.x + dz * f.z; lateral = dx * l.x + dz * l.z; seg = this.cum[i + 1] - this.cum[i]; }
+  else if (along < 0) { i = (i - 1 + n) % n; p = this.p[i]; f = this.fwd[i]; l = this.lat[i]; dx = x - p.x; dz = z - p.z; along = dx * f.x + dz * f.z; lateral = dx * l.x + dz * l.z; seg = this.cum[i + 1] - this.cum[i]; }
+
+  var t = clamp(along / seg, 0, 1);
   var nextY = this.p[(i + 1) % n].y;
   var y = lerp(p.y, nextY, t) + lateral * dtan(this.bank[i]);
 
   out.i = i;
   out.lateral = lateral;
-  out.s = this.cum[i] + clamp(along, 0, this.ds);
+  out.s = this.cum[i] + clamp(along, 0, seg);
   out.y = y;
   out.fwd = f;
   out.lat = l;
@@ -319,10 +587,8 @@ Track.prototype.frame = function (x, z, hint, out) {
 Track.prototype.heightAt = function (x, z, hint) {
   var tmp = TMP_FRAME_B;
   this.frame(x, z, hint, tmp);
-  var off = Math.abs(tmp.lateral);
-  var h = tmp.y;
-  if (off > HALF_W) h -= Math.min((off - HALF_W) * 0.05, 0.5);   /* runoff/grass dips away */
-  return h;
+  /* same drop the mesh uses, so the car rides the surface you can see */
+  return tmp.y - runoffDrop(tmp.lateral);
 };
 
 Track.prototype.pointAt = function (i, off, out) {
@@ -434,21 +700,26 @@ function buildTrackMeshes(track, scene) {
 
   var group = new THREE.Group();
 
-  group.add(new THREE.Mesh(road.geometry(), new THREE.MeshLambertMaterial({
-    map: texFromCanvas(makeAsphaltTex(), 1, 1), vertexColors: true  })));
-  group.add(new THREE.Mesh(runoff.geometry(), new THREE.MeshLambertMaterial({
-    map: texFromCanvas(makeRunoffTex(), 1, 1), vertexColors: true  })));
-  group.add(new THREE.Mesh(grass.geometry(), new THREE.MeshLambertMaterial({
-    map: texFromCanvas(makeGrassTex(), 6, 1), vertexColors: true  })));
-  group.add(new THREE.Mesh(kerb.geometry(), new THREE.MeshLambertMaterial({
-    map: texFromCanvas(makeKerbTex(), 1, 1, true), vertexColors: true  })));
-  group.add(new THREE.Mesh(wall.geometry(), new THREE.MeshLambertMaterial({
-    map: texFromCanvas(makeWallTex(), 1, 1), vertexColors: true  })));
-  var lineMesh = new THREE.Mesh(line.geometry(), new THREE.MeshLambertMaterial({
-    vertexColors: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
+  group.add(new THREE.Mesh(road.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeAsphaltTex(), 1, 1), vertexColors: true, roughness: 0.92, metalness: 0.0 })));
+  group.add(new THREE.Mesh(runoff.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeRunoffTex(), 1, 1), vertexColors: true, roughness: 0.95, metalness: 0.0 })));
+  group.add(new THREE.Mesh(grass.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeGrassTex(), 6, 1), vertexColors: true, roughness: 1.0, metalness: 0.0 })));
+  group.add(new THREE.Mesh(kerb.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeKerbTex(), 1, 1, true), vertexColors: true, roughness: 0.72, metalness: 0.0 })));
+  group.add(new THREE.Mesh(wall.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeWallTex(), 1, 1), vertexColors: true, roughness: 0.55, metalness: 0.35 })));
+  var lineMesh = new THREE.Mesh(line.geometry(), new THREE.MeshStandardMaterial({
+    vertexColors: true, roughness: 0.85, metalness: 0.0,
+    polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
   }));
   group.add(lineMesh);
 
+  /* receiveShadow is PER MESH — setting it on the Group does nothing, three.js
+     never walks the tree for it. The road, kerbs, runoff and grass all take
+     shadows; none of them casts one. */
+  group.traverse(function (o) { if (o.isMesh) o.receiveShadow = true; });
   scene.add(group);
   return group;
 }
@@ -460,9 +731,31 @@ function edge(track, i, off) {
   return vec(p.x + l.x * off, p.y + off * dtan(track.bank[i]), p.z + l.z * off);
 }
 
+/* The runoff sits below the racing surface, so dropping a wheel off the road
+   is felt as well as seen.
+
+   THIS MUST BE APPLIED TO THE MESH AND TO heightAt ALIKE. It used to live only
+   in heightAt, so the car drove along a surface up to half a metre below the
+   one on screen — which reads exactly as sinking into the gravel. */
+function runoffDrop(off) {
+  var a = Math.abs(off);
+  return a > HALF_W ? Math.min((a - HALF_W) * 0.05, 0.5) : 0;
+}
+
+/* Ground height at a lateral offset from sample i.
+
+   Anything standing beside the circuit must be placed with this rather than
+   with p.y. p.y is the height on the CENTRELINE, and on a banked circuit the
+   verge is nowhere near it: at Indy's 9.2 degrees the apron where the corner
+   boards stand is 3.5 m above the centreline, so a board pinned to p.y is
+   buried up to its lettering and its legs never surface. */
+function groundY(track, i, off) {
+  return track.p[i].y + off * dtan(track.bank[i]) - runoffDrop(off);
+}
+
 function edgeY(track, i, off, dy) {
   var p = track.p[i], l = track.lat[i];
-  return vec(p.x + l.x * off, p.y + off * dtan(track.bank[i]) + dy, p.z + l.z * off);
+  return vec(p.x + l.x * off, groundY(track, i, off) + dy, p.z + l.z * off);
 }
 
 function pushStrip(rb, track, i, i2, offA, offB, dy, v0, v1, color) {
@@ -476,12 +769,99 @@ function pushWall(rb, track, i, i2, off, h, vAcc) {
   var base0 = edgeY(track, i, off, -0.05), base1 = edgeY(track, i2, off, -0.05);
   var top0 = edgeY(track, i, off, h), top1 = edgeY(track, i2, off, h);
   var u0 = vAcc / 12, u1 = (vAcc + track.ds) / 12;
-  if (inward > 0) rb.quad(base0, base1, top1, top0, [[u0, 1], [u1, 1], [u1, 0], [u0, 0]], WHITE_C);
-  else rb.quad(base1, base0, top0, top1, [[u1, 1], [u0, 1], [u0, 0], [u1, 0]], WHITE_C);
+  /* WINDING. quad(a,b,c,d) winds a->b->c, so its normal is (b-a) x (c-a).
+     Both faces here span fwd*ds and up*h, which makes the normal +/-lat and
+     nothing else — the side of the track the wall sits on does not enter into
+     it, only the vertex order does. These two branches were swapped, so BOTH
+     barriers faced away from the circuit and were culled by the FrontSide
+     material: solid to drive into, invisible to look at. Only the 0.35 m cap
+     strip below, which winds to +up, was ever drawn. */
+  if (inward > 0) rb.quad(base1, base0, top0, top1, [[u1, 1], [u0, 1], [u0, 0], [u1, 0]], WHITE_C);
+  else rb.quad(base0, base1, top1, top0, [[u0, 1], [u1, 1], [u1, 0], [u0, 0]], WHITE_C);
   /* capping strip so the wall reads as solid from a chase camera */
   var capIn0 = edgeY(track, i, off + inward * 0.35, h), capIn1 = edgeY(track, i2, off + inward * 0.35, h);
   if (inward > 0) rb.quad(top0, top1, capIn1, capIn0, [[u0, 0], [u1, 0], [u1, 0.2], [u0, 0.2]], WHITE_C);
   else rb.quad(capIn0, capIn1, top1, top0, [[u0, 0.2], [u1, 0.2], [u1, 0], [u0, 0]], WHITE_C);
+}
+
+/* A speedway is not dotted with grandstands, it is enclosed by them, so a
+   circuit can ask for `standRing` and get unbroken terracing round the whole
+   lap on BOTH sides — the outside wall and the infield.
+
+   Built as one closed strip per side rather than a stand mesh every few
+   metres: at Indy that is roughly 160 objects collapsed into four, which
+   matters because every one of them would otherwise be its own draw call.
+
+   The rake matches the individual stands — the face climbs away from the
+   circuit so its normal points up and inward, toward the racing. */
+function buildStandRing(scene, track, crowdMat) {
+  var n = track.n;
+  var STEP = 4;                     /* one quad per 4 samples is ample here */
+  var Y0 = 1.4, Y1 = 15.0;
+  /* The two sides are NOT symmetrical. Perimeter terracing crowds the wall,
+     but infield terracing at the same offset sits square in the driver's eye
+     line all the way round — it has to go back across the apron, which is
+     also where it really is. lat is the car's LEFT and this oval runs
+     anti-clockwise, so side +1 is the infield.
+
+     The perimeter figure also has to clear the corner boards, which stand at
+     WALL_HALF + 3.6. At WALL_HALF + 6 the terracing rose barely two metres
+     behind them, so a dark board landed against the stand's dark base and
+     stopped reading. WALL_HALF + 14 leaves ten metres of grass behind every
+     board, which is also roughly where the apron, wall and fence put the
+     first row on a real speedway.
+
+     Both figures must also stay inside the grass skirt, which only reaches
+     WALL_HALF + VERGE (46). Past that there is no ground mesh at all, so a
+     ring placed further out stands on nothing — the infield bank at + 52 was
+     hanging over the void with groundY extrapolating the banking 8 m below
+     the centreline. Outer spans 14 to 37 with its roof, infield 22 to 45. */
+  var OFFSETS = { '1': WALL_HALF + 22, '-1': WALL_HALF + 14 };
+  /* 44 m per tile, matching PlaneGeometry(44, ...) on the single stands, so
+     the crowd is the same density everywhere on the circuit. */
+  var TILE = 44;
+  var roofMat = new THREE.MeshStandardMaterial({ color: COL.papaya, side: THREE.DoubleSide, roughness: 0.48, metalness: 0.15 });
+
+  for (var side = 1; side >= -1; side -= 2) {
+    var near = OFFSETS[String(side)], far = near + 19;
+    var strips = [
+      { pos: [], uv: [], idx: [], near: near, far: far, y0: Y0, y1: Y1, mat: crowdMat },
+      { pos: [], uv: [], idx: [], near: far - 1, far: far + 4, y0: Y1 + 0.9, y1: Y1 + 1.4, mat: roofMat }
+    ];
+    var run = 0, cols = 0;
+
+    /* k runs to n inclusive so the last quad closes back onto sample 0 */
+    for (var k = 0; k <= n; k += STEP) {
+      var i = k % n;
+      var p = track.p[i], l = track.lat[i];
+      if (k > 0) run += track.ds * STEP;
+      var u = run / TILE;
+      for (var t = 0; t < 2; t++) {
+        var st = strips[t];
+        st.pos.push(p.x + l.x * side * st.near, groundY(track, i, side * st.near) + st.y0, p.z + l.z * side * st.near);
+        st.pos.push(p.x + l.x * side * st.far, groundY(track, i, side * st.far) + st.y1, p.z + l.z * side * st.far);
+        st.uv.push(u, 0, u, 1);
+      }
+      cols++;
+    }
+
+    for (var c = 0; c < cols - 1; c++) {
+      var a = c * 2;
+      for (var s2 = 0; s2 < 2; s2++) {
+        strips[s2].idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+      }
+    }
+
+    for (var g = 0; g < 2; g++) {
+      var sg = strips[g];
+      var geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(sg.pos, 3));
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(sg.uv, 2));
+      geo.setIndex(sg.idx);
+      geo.computeVertexNormals();
+      scene.add(new THREE.Mesh(geo, sg.mat));
+    }
+  }
 }
 
 /* =========================================================================
@@ -494,13 +874,13 @@ function buildStartGantry(track, scene) {
   var mid = track.p[idx], lat = track.lat[idx], fwd = track.fwd[idx];
   var yaw = datan2(fwd.x, fwd.z);
 
-  var darkMat = new THREE.MeshLambertMaterial({ color: 0x24252c });
-  var papMat = new THREE.MeshLambertMaterial({ color: COL.papaya });
+  var darkMat = new THREE.MeshStandardMaterial({ color: srgb(0x24252c), roughness: 0.52, metalness: 0.45 });
+  var papMat = new THREE.MeshStandardMaterial({ color: COL.papaya, roughness: 0.45, metalness: 0.2 });
 
   var pillarGeo = new THREE.BoxGeometry(1.1, 8.4, 1.1);
   for (var s = -1; s <= 1; s += 2) {
     var pillar = new THREE.Mesh(pillarGeo, darkMat);
-    pillar.position.set(mid.x + lat.x * s * (WALL_HALF + 1.2), mid.y + 4.2, mid.z + lat.z * s * (WALL_HALF + 1.2));
+    pillar.position.set(mid.x + lat.x * s * (WALL_HALF + 1.2), groundY(track, idx, s * (WALL_HALF + 1.2)) + 4.2, mid.z + lat.z * s * (WALL_HALF + 1.2));
     g.add(pillar);
   }
 
@@ -523,7 +903,7 @@ function buildStartGantry(track, scene) {
   for (var i = 0; i < 5; i++) {
     var t = (i - 2) * 3.2;
     var m = new THREE.Mesh(offGeo, new THREE.MeshBasicMaterial({ color: 0x2a1a18, fog: false }));
-    m.position.set(mid.x + lat.x * t, mid.y + 7.2, mid.z + lat.z * t);
+    m.position.set(mid.x + lat.x * t, groundY(track, idx, t) + 7.2, mid.z + lat.z * t);
     m.rotation.y = yaw + Math.PI / 2;
     g.add(m);
     lights.push(m);
@@ -532,9 +912,15 @@ function buildStartGantry(track, scene) {
   /* start line */
   var lineTex = texFromCanvas(makeStartLineTex(), 8, 1, true);
   var startLine = new THREE.Mesh(new THREE.PlaneGeometry(HALF_W * 2, 2.2),
-    new THREE.MeshLambertMaterial({ map: lineTex, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
+    new THREE.MeshStandardMaterial({ map: lineTex, roughness: 0.8, metalness: 0.0, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4 }));
   startLine.rotation.x = -Math.PI / 2;
-  startLine.rotation.z = -yaw;
+  /* +yaw, not -yaw. Laid flat by rotation.x = -PI/2 under the default XYZ
+     order, a NEGATIVE z mirrors the heading instead of rotating it, so the
+     span only lands across the road at cardinal headings. Every circuit here
+     happens to start near one, which hid it — Silverstone was out by 1.4
+     degrees on a straight 0.7 degrees off axis, exactly the 2x that a
+     reflection gives. */
+  startLine.rotation.z = yaw;
   startLine.position.set(mid.x, mid.y + 0.02, mid.z);
   g.add(startLine);
 
@@ -549,14 +935,19 @@ function buildScenery(track, scene) {
 
   /* grandstands and pit buildings clustered around the start line */
   var crowdTex = texFromCanvas(makeCrowdTex(), 3, 1);
-  var standMat = new THREE.MeshLambertMaterial({ color: 0x33353f });
-  var crowdMat = new THREE.MeshLambertMaterial({ map: crowdTex, side: THREE.DoubleSide });
-  var roofMat = new THREE.MeshLambertMaterial({ color: COL.papaya });
-  var pitMat = new THREE.MeshLambertMaterial({ map: texFromCanvas(makePitwallTex(), 4, 1, true) });
+  var standMat = new THREE.MeshStandardMaterial({ color: srgb(0x33353f), roughness: 0.82, metalness: 0.1 });
+  var crowdMat = new THREE.MeshStandardMaterial({ map: crowdTex, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0 });
+  var roofMat = new THREE.MeshStandardMaterial({ color: COL.papaya, roughness: 0.45, metalness: 0.2 });
+  var pitMat = new THREE.MeshStandardMaterial({ map: texFromCanvas(makePitwallTex(), 4, 1, true), roughness: 0.7, metalness: 0.0 });
 
   /* Stands stand back far enough to frame the straight instead of walling it
-     in, and the terracing is dark so the crowd is what actually reads. */
-  for (var s = 0; s < 5; s++) {
+     in, and the terracing is dark so the crowd is what actually reads.
+
+     A `standRing` circuit skips these entirely — the ring already covers the
+     start line, and leaving both in would bury five stands inside it. */
+  var ringed = !!track.def.standRing;
+  if (ringed) buildStandRing(scene, track, crowdMat);
+  for (var s = 0; !ringed && s < 5; s++) {
     var idx = (track.startIndex - 12 + s * 9 + n) % n;
     var side = s % 2 === 0 ? 1 : -1;
     var p = track.p[idx], l = track.lat[idx], f = track.fwd[idx];
@@ -565,28 +956,38 @@ function buildScenery(track, scene) {
     var facing = yaw + (side > 0 ? -Math.PI / 2 : Math.PI / 2);
 
     var base = new THREE.Mesh(new THREE.BoxGeometry(46, 8, 15), standMat);
-    base.position.set(p.x + l.x * side * dist, p.y + 3.2, p.z + l.z * side * dist);
-    base.rotation.y = yaw;
+    base.position.set(p.x + l.x * side * dist, groundY(track, idx, side * dist) + 3.2, p.z + l.z * side * dist);
+    /* -PI/2 turns the 46 m span ALONG the track. BoxGeometry puts that span
+       on local X, and rotation.y = yaw alone sends local X to lat — across
+       the road — so the shell sat crosswise under a crowd panel that runs
+       lengthwise, protruding 22 m from each end of a 15 m deep box. */
+    base.rotation.y = yaw - Math.PI / 2;
     scene.add(base);
 
     var cd = dist - 8.2;
     var crowd = new THREE.Mesh(new THREE.PlaneGeometry(44, 10.5), crowdMat);
-    crowd.position.set(p.x + l.x * side * cd, p.y + 5.4, p.z + l.z * side * cd);
+    crowd.position.set(p.x + l.x * side * cd, groundY(track, idx, side * cd) + 5.4, p.z + l.z * side * cd);
     crowd.rotation.order = 'YXZ';
     crowd.rotation.y = facing;
-    crowd.rotation.x = 0.42;
+    /* NEGATIVE. With order YXZ the world normal is
+       (cos x * sin y, -sin x, cos x * cos y), so a POSITIVE rotation.x drives
+       the normal's y below zero — the seating face tilts down and leans in
+       over the track, which reads as a stand built back-to-front. A real rake
+       climbs away from the circuit: back rows higher and further out, normal
+       pointing up and inward. */
+    crowd.rotation.x = -0.42;
     scene.add(crowd);
 
     var roof = new THREE.Mesh(new THREE.BoxGeometry(48, 0.7, 17), roofMat);
-    roof.position.set(p.x + l.x * side * (dist + 1.5), p.y + 11.2, p.z + l.z * side * (dist + 1.5));
-    roof.rotation.y = yaw;
+    roof.position.set(p.x + l.x * side * (dist + 1.5), groundY(track, idx, side * (dist + 1.5)) + 11.2, p.z + l.z * side * (dist + 1.5));
+    roof.rotation.y = yaw - Math.PI / 2;   /* same 90 degrees as the base */
     scene.add(roof);
 
     for (var pil = -1; pil <= 1; pil += 2) {
       var post = new THREE.Mesh(new THREE.BoxGeometry(1, 12, 1), standMat);
       post.position.set(
         p.x + l.x * side * (dist + 7) + f.x * pil * 21,
-        p.y + 5.6,
+        groundY(track, idx, side * (dist + 7)) + 5.6,
         p.z + l.z * side * (dist + 7) + f.z * pil * 21
       );
       scene.add(post);
@@ -598,7 +999,7 @@ function buildScenery(track, scene) {
     var pi = (track.startIndex - 20 + i * 4 + n) % n;
     var pp = track.p[pi], pl = track.lat[pi], pf = track.fwd[pi];
     var board = new THREE.Mesh(new THREE.BoxGeometry(11, 2.0, 0.4), pitMat);
-    board.position.set(pp.x + pl.x * (WALL_HALF + 2.6), pp.y + 1.6, pp.z + pl.z * (WALL_HALF + 2.6));
+    board.position.set(pp.x + pl.x * (WALL_HALF + 2.6), groundY(track, pi, WALL_HALF + 2.6) + 1.6, pp.z + pl.z * (WALL_HALF + 2.6));
     /* -PI/2 runs the board along the track and turns its lettered face inward */
     board.rotation.y = datan2(pf.x, pf.z) - Math.PI / 2;
     scene.add(board);
@@ -611,12 +1012,12 @@ function buildScenery(track, scene) {
     var si = (corner.index - 24 + n) % n;
     var sp = track.p[si], sl = track.lat[si], sf = track.fwd[si];
     var sideS = track.curv[corner.index] > 0 ? -1 : 1;   /* outside of the bend */
-    var signMat = new THREE.MeshLambertMaterial({
+    var signMat = new THREE.MeshStandardMaterial({
       map: texFromCanvas(makeSignTex(corner.name, '#1b1c22', '#ff8000', '#ff8000'), 1, 1, true),
-      side: THREE.DoubleSide
+      side: THREE.DoubleSide, roughness: 0.7, metalness: 0.0
     });
     var sign = new THREE.Mesh(new THREE.PlaneGeometry(11, 2.75), signMat);
-    sign.position.set(sp.x + sl.x * sideS * (WALL_HALF + 3.6), sp.y + 2.9, sp.z + sl.z * sideS * (WALL_HALF + 3.6));
+    sign.position.set(sp.x + sl.x * sideS * (WALL_HALF + 3.6), groundY(track, si, sideS * (WALL_HALF + 3.6)) + 2.9, sp.z + sl.z * sideS * (WALL_HALF + 3.6));
     /* +PI so the lettered FRONT face turns back up the road to meet the
        driver. Facing it down-track shows the mirrored reverse. */
     sign.rotation.y = datan2(sf.x, sf.z) + Math.PI;
@@ -626,7 +1027,7 @@ function buildScenery(track, scene) {
       var legMesh = new THREE.Mesh(new THREE.BoxGeometry(0.35, 3.0, 0.35), standMat);
       legMesh.position.set(
         sp.x + sl.x * sideS * (WALL_HALF + 3.6) + sf.x * leg * 4.6,
-        sp.y + 1.5,
+        groundY(track, si, sideS * (WALL_HALF + 3.6)) + 1.5,
         sp.z + sl.z * sideS * (WALL_HALF + 3.6) + sf.z * leg * 4.6
       );
       scene.add(legMesh);
@@ -635,19 +1036,54 @@ function buildScenery(track, scene) {
 
   /* crossed-quad treeline */
   var treeTex = texFromCanvas(makeTreeTex(), 1, 1, true);
-  var treeMat = new THREE.MeshLambertMaterial({
-    map: treeTex, transparent: false, alphaTest: 0.5, side: THREE.DoubleSide
+  var treeMat = new THREE.MeshStandardMaterial({
+    map: treeTex, transparent: false, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0
   });
   var treeBuf = new RibbonBuilder();
+  var treeProbe = { i: 0, lateral: 0, s: 0, y: 0, fwd: null, lat: null };
   var placed = 0;
   for (i = 0; i < n; i += 2) {
     for (var side2 = -1; side2 <= 1; side2 += 2) {
       if (rnd() > 0.55) continue;
-      var d = WALL_HALF + 20 + rnd() * 90;
+      /* A ringed circuit is walled in by terracing from WALL_HALF + 14 out to
+         + 45, and the old + 20 grew a wood straight up through the middle of
+         the crowd. Two things keep them out of it now.
+
+         Nothing on the infield side: side2 +1 is inside the oval (lat is the
+         car's LEFT and this runs anti-clockwise), and anything planted there
+         is hidden behind the infield bank anyway.
+
+         And the margin has to cover more than the trunk. Each tree is jittered
+         up to 7 m in x AND z — worst case ~9.9 m projected onto lat — and its
+         crossed quads span up to 5.6 m either side of the trunk. So the first
+         trunk goes 15.5 m further out than the last row of seats, not flush
+         against it. */
+      if (track.def.standRing && side2 > 0) continue;
+      var d = WALL_HALF + (track.def.standRing ? 56 : 20) + rnd() * 90;
       var tp = track.p[i], tl = track.lat[i];
       var x = tp.x + tl.x * side2 * d + (rnd() - 0.5) * 14;
       var z = tp.z + tl.z * side2 * d + (rnd() - 0.5) * 14;
-      var y = tp.y - 0.6;
+
+      /* Re-frame against the WHOLE circuit, not the sample we scattered from.
+         hint = null forces nearestIndex to do its global sweep instead of
+         searching +/-8 samples around i. A lap that folds back on itself puts
+         one stretch of road within scattering range of another — Brands brings
+         Druids back alongside the climb to Graham Hill — so a tree measured
+         30 m clear of sample i can be sitting on the racing line somewhere
+         else entirely. Drop anything that lands inside the barriers. */
+      track.frame(x, z, null, treeProbe);
+      if (Math.abs(treeProbe.lateral) < WALL_HALF + 6) continue;
+
+      /* Height from where the tree ACTUALLY is, not from the sample it was
+         scattered off. On a flat circuit those agree; on Brands, with 34 m
+         between Paddock Hill and Druids, the old centreline height left whole
+         stands of trees hanging in the air.
+
+         The bank term is clamped at the grass edge because beyond WALL_HALF +
+         VERGE there is no ground mesh to follow, and extrapolating the camber
+         out to 120 m would lift them off the ground all over again. */
+      var vergeEdge = WALL_HALF + VERGE;
+      var y = groundY(track, treeProbe.i, clamp(treeProbe.lateral, -vergeEdge, vergeEdge)) - 0.6;
       var hgt = 9 + rnd() * 9;
       var wdt = hgt * 0.62;
       pushCrossQuad(treeBuf, x, y, z, wdt, hgt, rnd() * TAU);
@@ -685,8 +1121,12 @@ function pushCrossQuad(rb, x, y, z, w, h, rot) {
     var p2 = vec(x + dx, y + h, z + dz);
     var p3 = vec(x - dx, y + h, z - dz);
     var nrm = vec(-dz, 0, dx).normalize();
-    rb.tri(p0, p1, p2, nrm, [0, 1], [1, 1], [1, 0], WHITE_C);
-    rb.tri(p0, p2, p3, nrm, [0, 1], [1, 0], [0, 0], WHITE_C);
+    /* V RUNS UP. p0/p1 are the base of the quad and p2/p3 the top, so the base
+       takes v=0 and the top v=1. These were the other way round, which with
+       Three's default flipY planted every tree canopy-first in the ground and
+       left the trunk waving in the air. */
+    rb.tri(p0, p1, p2, nrm, [0, 0], [1, 0], [1, 1], WHITE_C);
+    rb.tri(p0, p2, p3, nrm, [0, 0], [1, 1], [0, 1], WHITE_C);
   }
 }
 
