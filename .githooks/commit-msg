@@ -1,0 +1,38 @@
+#!/bin/sh
+# Strip AI-attribution trailers from every commit message, mechanically.
+#
+# WHY A HOOK AND NOT AN INSTRUCTION: instructions live in a context window and
+# depend on something remembering to read them. This runs on every commit in
+# this repository — interactive, scripted, amended, rebased, cherry-picked, by
+# any tool or person — and cannot be forgotten because nothing is doing the
+# remembering.
+#
+# STRIPS RATHER THAN REJECTS. A rejecting hook stops work and invites someone to
+# pass --no-verify to get past it, at which point the trailer lands anyway. This
+# quietly removes the lines and lets the commit through, so the failure mode is
+# "it worked and the trailer is gone" rather than "it broke and I bypassed it".
+#
+# Enabled via a tracked hooks directory so it survives a fresh clone:
+#     git config core.hooksPath .githooks
+# That config is per-clone and NOT carried by git itself, so anyone cloning this
+# repo has to run it once. See CLAUDE.md.
+
+MSG="$1"
+[ -f "$MSG" ] || exit 0
+
+# Case-insensitive. Covers the trailer, the marketing footer, and the bare
+# attribution line, plus any blank lines left stranded at the end.
+TMP="$MSG.nostamp"
+sed -E \
+  -e '/^[[:space:]]*Co-Authored-By:[[:space:]]*Claude/Id' \
+  -e '/^[[:space:]]*Co-Authored-By:[[:space:]]*.*(anthropic|noreply@anthropic)/Id' \
+  -e '/^[[:space:]]*🤖?[[:space:]]*Generated with \[?Claude Code/Id' \
+  -e '/^[[:space:]]*Generated with .*(Claude|Anthropic)/Id' \
+  "$MSG" > "$TMP"
+
+# Trim trailing blank lines the deletions may have left behind.
+awk 'BEGIN{n=0} {lines[NR]=$0} END{ last=NR; while (last>0 && lines[last] ~ /^[[:space:]]*$/) last--; for(i=1;i<=last;i++) print lines[i] }' \
+  "$TMP" > "$MSG"
+rm -f "$TMP"
+
+exit 0

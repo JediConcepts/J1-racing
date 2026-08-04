@@ -178,6 +178,17 @@ const HEAD = `<!doctype html>
      itself back out with env(safe-area-inset-*). -->
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#ff8000" />
+<!-- BUILD MARKER. Deliberately a meta tag and not only the window.MCL64_BUILD
+     assignment further down: a deploy check can assert this with a plain GET
+     and a substring match, without executing any JavaScript. Asserting it is
+     what turns "the server accepted the write" into "the new build is actually
+     being served" — a stale cached copy still returns 200 with a valid title,
+     but it cannot carry the version that was just published.
+     STANDALONE ONLY: the artifact fragment has no <head> to put it in. -->
+<meta name="build" content="${BUILD.version}" />
+<meta name="build-sha" content="${BUILD.sha}" />
+<meta name="build-channel" content="${BUILD.channel}" />
+<meta name="build-time" content="${BUILD.at}" />
 <meta name="color-scheme" content="dark light" />
 <meta name="description" content="${SITE.description}" />
 <link rel="canonical" href="${SITE.url}" />
