@@ -65,6 +65,8 @@ function Game(host) {
   this.lights = 0;
   this.camMode = 0;
   this.headYaw = 0;        /* damped look-into-the-corner offset, onboard only */
+  this.camPitch = 0;       /* low-passed attitude for the onboard mounts */
+  this.camRoll = 0;
   this.paused = false;
   this.shake = 0;
   this.finishHold = 0;
@@ -1785,7 +1787,25 @@ var ONBOARD_CAMS = {
      the middle, and both mirrors sit just inside the edges. fov is VERTICAL in
      three.js — 82 gives about 114 horizontal at 16:9, which is the wide,
      slightly fisheye look of the real driver's-eye shot. */
-  2: { off: [0, 0.82, -0.08], fov: 82, fovGain: 6, lead: 0.55, stabRoll: 0, stabPitch: 0, tilt: 0.13, hideHead: true },
+    /* PLANTED IN THE HELMET. The head mesh is a 0.185 sphere centred on
+     [0, 0.775, 0.28], so this is the driver's own eye position — which is the
+     point of a visor cam, and it is hidden for exactly this view so there is
+     nothing to see the inside of.
+
+     Two earlier attempts missed it in opposite directions. Pushing back to
+     z -0.08 to get the coaming framing buried the eye INSIDE the airbox, which
+     spans z -0.61 to -0.07, so the view looked out through the engine cover.
+     Pulling forward to z 0.52 put it out at the visor, ahead of the halo, with
+     the wheel filling half the screen. The head is where it belongs.
+
+     Height is 0.87, not the helmet's own 0.775: this model has the head sitting
+     ON the bodywork rather than down in a hole, and the shoulder-line cylinder
+     tops out at exactly 0.80 — an eye at head height is INSIDE the tub and the
+     screen goes black. 0.87 clears that surface while staying in the helmet.
+
+     Tilt is only 0.08: at 0.13 the coaming swept across the middle of the
+     frame and you drove looking at your own bodywork. */
+  2: { off: [0, 0.87, 0.28], fov: 82, fovGain: 6, lead: 0.55, stabRoll: 0, stabPitch: 0, tilt: 0.08, hideHead: true },
   /* bankIn tilts INTO the corner, against the car's own outward body lean.
      Killing the car's roll outright (stabRoll 1) and leaving it there is what
      a real gyro mount does, but it reads badly from the seat: the horizon is
@@ -1823,7 +1843,14 @@ Game.prototype.updateCamera = function (dt, snap) {
        on Indy's banking. */
     _localOff.set(cfg.off[0], cfg.off[1], cfg.off[2]);
     _localOff.applyQuaternion(p.group.quaternion);
-    this.camPos.copy(p.group.position).add(_localOff);
+    _ideal.copy(p.group.position).add(_localOff);
+    /* A HELMET IS NOT BOLT-RIGID. Mounted perfectly, every kerb strike and
+       every runoff seam is transmitted straight into the viewer at the full
+       frame rate, which is unwatchable — real onboards have a neck and a
+       damped mount under them. Fast enough (25) that it still feels attached,
+       slow enough to swallow a one-frame jolt. */
+    if (snap) this.camPos.copy(_ideal);
+    else this.camPos.lerp(_ideal, 1 - Math.exp(-25 * dt));
 
     /* The head leads the car into the corner. yawRate is positive in a LEFT
        turn and a positive camera yaw looks left, so this needs no negation. */
@@ -1850,7 +1877,18 @@ Game.prototype.updateCamera = function (dt, snap) {
        left turn is a positive yaw rate, so leaning into it is NEGATIVE. */
     var roll = p.roll * (1 - cfg.stabRoll);
     if (cfg.bankIn) roll -= clamp(p.yawRate * cfg.bankIn, -0.25, 0.25);
-    _camEuler.set(p.pitch * (1 - cfg.stabPitch), p.vyaw, roll, 'YXZ');
+
+    /* Low-pass the ATTITUDE the camera uses. The car's own pitch and roll stay
+       untouched — the chassis should still snap over a kerb — but the view
+       riding on it gets a neck. Without this, clipping the outside of the
+       circuit makes the cockpit unwatchable. */
+    if (snap) { this.camPitch = p.pitch * (1 - cfg.stabPitch); this.camRoll = roll; }
+    else {
+      var kAtt = 1 - Math.exp(-16 * dt);
+      this.camPitch += ((p.pitch * (1 - cfg.stabPitch)) - this.camPitch) * kAtt;
+      this.camRoll += (roll - this.camRoll) * kAtt;
+    }
+    _camEuler.set(this.camPitch, p.vyaw, this.camRoll, 'YXZ');
     _camQ.setFromEuler(_camEuler);
 
     _camEuler2.set(0, Math.PI + this.headYaw, 0, 'YXZ');
@@ -1894,8 +1932,15 @@ Game.prototype.updateCamera = function (dt, snap) {
   if (!this.reducedMotion) {
     var rumble = (p.onKerb ? 0.16 : 0) + (p.offTrack ? 0.20 : 0);
     this.shake = Math.max(this.shake * Math.exp(-6 * dt), p.hitImpulse * 0.7 + rumble * clamp(p.vFwd / 40, 0, 1));
-    sx = (Math.sin(this.time * 61.3) + Math.sin(this.time * 37.7)) * this.shake * 0.35;
-    sy = (Math.sin(this.time * 47.1) + Math.sin(this.time * 71.3)) * this.shake * 0.35;
+    /* MEASURED: at the chase camera's 0.35 the shake throws the viewpoint
+       +/-0.25 m at about 10 Hz when you run wide onto the rim at speed. Looking
+       AT the car that reads as impact. From inside the helmet it is the entire
+       world lurching a quarter of a metre, ten times a second, and it is
+       genuinely unwatchable. 0.06 keeps it as a vibration you feel rather than
+       a motion you fight — +/-0.04 m. */
+    var shk = onboard ? 0.06 : 0.35;
+    sx = (Math.sin(this.time * 61.3) + Math.sin(this.time * 37.7)) * this.shake * shk;
+    sy = (Math.sin(this.time * 47.1) + Math.sin(this.time * 71.3)) * this.shake * shk;
   }
 
   this.camera.position.set(this.camPos.x + sx, this.camPos.y + sy, this.camPos.z);

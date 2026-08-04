@@ -163,6 +163,14 @@ function makeCanvas(w, h) {
   return c;
 }
 
+/* Hex literals in this file are sRGB — that is how anyone reads or picks a
+   colour. The renderer now works in linear light, and a value handed over
+   unconverted is interpreted as linear, which lifts every midtone on the way
+   back out: papaya turns into pale apricot and the whole scene washes. This
+   is the other half of colour management, and it applies to material colours
+   and vertex colours exactly as it does to textures. */
+function srgb(hex) { return new THREE.Color(hex).convertSRGBToLinear(); }
+
 function texFromCanvas(cv, repX, repY, nearest) {
   var t = new THREE.CanvasTexture(cv);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;

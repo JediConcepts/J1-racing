@@ -12,7 +12,7 @@ function part(geo, color, p, r, s) {
   g.applyMatrix4(m);
   var count = g.attributes.position.count;
   var arr = new Float32Array(count * 3);
-  var c = new THREE.Color(color);
+  var c = new THREE.Color(color).convertSRGBToLinear();
   for (var i = 0; i < count; i++) { arr[i * 3] = c.r; arr[i * 3 + 1] = c.g; arr[i * 3 + 2] = c.b; }
   g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
   if (g.attributes.uv) g.deleteAttribute('uv');

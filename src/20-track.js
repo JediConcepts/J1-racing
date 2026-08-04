@@ -262,14 +262,14 @@ var VERGE = 46;          /* grass skirt */
 var SAMPLES = 900;       /* ~6m per sample over a 5.5km lap */
 
 var COL = {
-  asphalt: new THREE.Color(0x9c9caa),
-  asphaltDark: new THREE.Color(0x8a8a95),
-  runoff: new THREE.Color(0xa8a4ae),
-  grass: new THREE.Color(0x6f9b52),
-  grassDark: new THREE.Color(0x5c8544),
-  papaya: 0xff8000,
-  anthracite: 0x1b1c22,
-  cyan: 0x4fe3e0
+  asphalt: srgb(0x9c9caa),
+  asphaltDark: srgb(0x8a8a95),
+  runoff: srgb(0xa8a4ae),
+  grass: srgb(0x6f9b52),
+  grassDark: srgb(0x5c8544),
+  papaya: srgb(0xff8000),
+  anthracite: srgb(0x1b1c22),
+  cyan: srgb(0x4fe3e0)
 };
 
 function Track(def) {
@@ -874,7 +874,7 @@ function buildStartGantry(track, scene) {
   var mid = track.p[idx], lat = track.lat[idx], fwd = track.fwd[idx];
   var yaw = datan2(fwd.x, fwd.z);
 
-  var darkMat = new THREE.MeshStandardMaterial({ color: 0x24252c, roughness: 0.52, metalness: 0.45 });
+  var darkMat = new THREE.MeshStandardMaterial({ color: srgb(0x24252c), roughness: 0.52, metalness: 0.45 });
   var papMat = new THREE.MeshStandardMaterial({ color: COL.papaya, roughness: 0.45, metalness: 0.2 });
 
   var pillarGeo = new THREE.BoxGeometry(1.1, 8.4, 1.1);
@@ -935,7 +935,7 @@ function buildScenery(track, scene) {
 
   /* grandstands and pit buildings clustered around the start line */
   var crowdTex = texFromCanvas(makeCrowdTex(), 3, 1);
-  var standMat = new THREE.MeshStandardMaterial({ color: 0x33353f, roughness: 0.82, metalness: 0.1 });
+  var standMat = new THREE.MeshStandardMaterial({ color: srgb(0x33353f), roughness: 0.82, metalness: 0.1 });
   var crowdMat = new THREE.MeshStandardMaterial({ map: crowdTex, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0 });
   var roofMat = new THREE.MeshStandardMaterial({ color: COL.papaya, roughness: 0.45, metalness: 0.2 });
   var pitMat = new THREE.MeshStandardMaterial({ map: texFromCanvas(makePitwallTex(), 4, 1, true), roughness: 0.7, metalness: 0.0 });
