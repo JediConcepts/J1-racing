@@ -72,6 +72,17 @@ v0.37 · dev · 0dd8205* · 2026-08-04 16:32Z
 
 ## Deploying
 
-The site is `https://jediconcepts.com/mcl64/`. Deployment is a manual upload of
-`dist/index.html` — there are no host credentials in this repo, and none should
-be added to it.
+The site is `https://jediconcepts.com/mcl64/`. A push to `main` triggers
+`.github/workflows/deploy.yml`, which does **not** build or upload anything
+itself — it asks the fleet manager Worker to publish a commit. The Worker holds
+the WHM/cPanel and Cloudflare credentials, so no hosting secret lives in this
+repo, and none should be added to it. The only secret GitHub needs is
+`FLEET_DEPLOY_TOKEN`. `main` publishes to `mcl64`, `test` to `mcl64-test`.
+
+### Why `dist/` is committed
+
+Because the Worker publishes **files out of a git commit**. There is no build
+step in the deploy pipeline, so an untracked `dist/index.html` is a deploy that
+silently ships nothing. Committing build output is normally a smell; here it is
+the deploy contract. Run `node build.js` and commit the result in the same
+commit as the source change, or the published page and the source diverge.

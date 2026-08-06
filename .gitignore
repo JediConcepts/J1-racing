@@ -1,6 +1,12 @@
-# Build outputs that are copies of dist/
+# Build outputs that are copies of dist/.
+#
+# NOTE: dist/ itself IS tracked, deliberately — the deploy Worker publishes
+# files out of a git commit, so untracking it would ship nothing. See README.
+# These are the redundant copies: a zip of dist/index.html is a second thing
+# to remember to rebuild, and the only way it can differ is by being stale.
 deploy/index.html
 dist/mcl64.html
+mcl64.zip
 mcl64-deploy.zip
 mcl64-deploy/
 

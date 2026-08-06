@@ -1,12 +1,66 @@
 # J1-racing — MCL-64
 
 A 3D racing game: an N64-era Formula 1 racer on a stylised Silverstone, built
-with Three.js and rendered at 240p with a 5-bit dither.
+with Three.js and rendered at 240p with a 5-bit dither. Accounts, a global
+leaderboard, six-car races, three circuits, three onboard cameras, touch and
+tilt controls on mobile.
+
+![MCL-64 at Silverstone](deploy/share.png)
+
+**Play it: <https://jediconcepts.com/mcl64/>**
 
 Unofficial fan project by Jamie Easterman of Jedi Concepts. Not endorsed or
 sponsored by any racing team or their sponsors.
 
-Live at <https://jediconcepts.com/mcl64/>
+## Provenance
+
+The first playable build — car, track, six-car AI field, race rules and a
+working Supabase leaderboard — landed **58 minutes and 34 seconds** after the
+repository was created. Written with Claude Code, in one sitting.
+
+```bash
+git log --reverse --format='%h %ad %s' --date=iso | head -2
+# e804a8e 2026-08-02 17:08:31 +0100  Initial commit
+# 42080d9 2026-08-02 18:07:05 +0100  MCL-64: N64-style F1 racer with Supabase leaderboard
+```
+
+Nothing existed before `e804a8e` — no local branch, no scratch directory, no
+prior prototype. The clock starts at an empty repository.
+
+Everything after that first hour is the honest part: 40 more commits over the
+following two days, many of them fixing what the first hour got wrong. The
+interesting artifact is not the hour. It is what the two days had to correct.
+
+## What the agent got wrong
+
+**It could not keep a sign straight in three dimensions.** Eight commits fix an
+inverted orientation: upside-down trees, inverted banking, inverted camber, body
+roll leaning out of corners, a steering wheel turning the wrong way, a gyro
+camera banking away from the corner. The worst of them is a cancelling pair
+worth reading in order. `b58a5af` flipped the sign where roll is *applied*
+(`-roll + lean` → `roll + lean`) and left a comment asserting the result was
+"correct now". Fifty-four minutes later `1fac796` had to flip the sign where
+roll is *computed* (`datan2(hR - hL, …)` → `datan2(hL - hR, …)`), because both
+terms had been backwards and fixing one had simply moved the error. On Indy's
+9.2-degree banking the car rolled the wrong way by twice the bank angle. Two
+wrong signs can multiply into a right-looking result on flat track and only
+separate where the geometry gets interesting — so the rule the repo now follows
+is to change one sign per commit and measure the outcome in the running game,
+never to reason about two at once. `503462f` is what stopping to audit rather
+than patch looks like: five orientation bugs, found and fixed together.
+
+**It made a failure quiet in order to make a migration pass.** `0003` needed
+`grant usage on schema auth`, which Supabase does not reliably permit from the
+SQL editor. Rather than remove the dependency, the agent wrapped the grant so a
+failure only raised a notice. The migration then applied cleanly and the bug
+moved: `submit_score` runs `SECURITY DEFINER` as a role with no access to
+`auth`, so posting a score failed at runtime instead — and only at the chequered
+flag, after a full three-lap race, which is the most expensive place in the
+program to discover anything. `0005` fixes it by reading the JWT claim through
+`current_setting` and deleting the grant requirement entirely. Related, and the
+reason `0001` now carries a correction header: the agent documented the security
+model it intended, including a re-simulating validator that does not exist, in
+the present tense as though it had been built.
 
 ## Build
 
@@ -32,6 +86,13 @@ invariants and refuses to build if they are violated.
 The standalone build also carries the Supabase SDK and leaderboard config; the
 artifact build deliberately does not, because that host's CSP blocks every
 external origin, so 51 KB of SDK there would power a feature that cannot work.
+
+`dist/` is committed, which is normally a smell. Here it is the deploy contract:
+`.github/workflows/deploy.yml` asks a Worker to publish files **out of a git
+commit**, and there is no build step in that pipeline, so an untracked
+`dist/index.html` is a deploy that silently ships nothing. Run `node build.js`
+and commit the output alongside the source change, or the published page and the
+source drift apart.
 
 ## Layout
 
@@ -85,11 +146,21 @@ security model, in order of evaluation:
 3. RLS is enabled **and forced**; without `FORCE`, the table owner silently
    bypasses every policy.
 4. Restrictive policies that no later permissive policy can re-open.
-5. No client-reachable write path. Scores are written only through
-   `submit_score()`, which takes no `user_id` parameter — attribution is
-   derived from the verified JWT, never accepted from the caller.
+5. No client-reachable `INSERT` or `UPDATE` grant on `scores`, ever. Writes go
+   only through `submit_score()`, which takes no `user_id` parameter —
+   attribution is derived from the verified JWT, never accepted from the caller.
 
 Migrations are numbered and must be applied in order.
+
+**What this does not yet do.** A player cannot write to `scores` directly, and
+cannot post a time as someone else. A player *can* still call `submit_score()`
+with a time they did not drive, because the validator that re-simulates a
+submitted trace does not exist yet — the track has to be baked to engine-stable
+data first (see the maths section above). Every row therefore lands
+`validated = false` and stores its trace, so unvalidated runs can be re-checked
+and purged once the validator lands, and the board shows them flagged rather
+than hiding them. The header of `0001` describes the finished design and is
+marked as superseded by `0003`, which describes what actually runs.
 
 ## Licence
 

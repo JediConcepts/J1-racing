@@ -4,6 +4,15 @@
 --   * scores writable ONLY by the validator, never by a client
 --   * race results under full race conditions (6-car field, 3 laps)
 --
+-- SUPERSEDED IN PART BY 0003. Read that file before trusting item 5 below.
+--   This header describes the design as intended. 0003 ships what actually
+--   exists: the write path is a SECURITY DEFINER function, not an Edge
+--   Function, and the re-simulating validator does not exist yet — so a
+--   determined player who reads the JS can still submit an invented time.
+--   Every row lands validated = false and stores its trace precisely so
+--   those runs can be re-checked and purged once the validator lands.
+--   Items 1 to 4 are accurate as written.
+--
 -- Shape of the defence, outermost first:
 --   1. PII lives in a schema PostgREST does not expose at all.
 --   2. GRANTs are revoked. These are checked BEFORE RLS and are not
@@ -15,6 +24,7 @@
 --      after the validator has re-simulated the submitted trace, so the
 --      Edge Function writes them with the service role. A player cannot
 --      hand the database a score under any circumstances.
+--      ^ ASPIRATIONAL. See the note above.
 -- =====================================================================
 
 -- ---------------------------------------------------------------------
