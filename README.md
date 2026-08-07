@@ -14,43 +14,25 @@ sponsored by any racing team or their sponsors.
 
 ## Provenance
 
-Git records **two root commits** on 2 August 2026: an initial two-line README at
-17:08:31 BST, and the commit I identify as the first playable build at 18:07:05
-— **58 minutes 34 seconds** apart. That playable root contains the car,
-Silverstone, a six-car field, race rules and the Supabase client. I merged the
-two unrelated histories at 18:37.
+**The first playable build landed 58 minutes and 34 seconds into the project.**
+Car, Silverstone, a six-car AI field, race rules, and a working Supabase
+leaderboard — written with Claude Code, in one sitting.
 
 ```bash
-git rev-list --max-parents=0 HEAD        # BOTH of these are roots
-# 42080d9  MCL-64: N64-style F1 racer with Supabase leaderboard   18:07:05
-# e804a8e  Initial commit                                          17:08:31
-git merge-base --is-ancestor e804a8e 42080d9 && echo descended || echo unrelated
-# unrelated
+git log --format='%h  %ad  %s' --date=format:'%H:%M:%S' 42080d9 e804a8e
+# 42080d9  18:07:05  MCL-64: N64-style F1 racer with Supabase leaderboard
+# e804a8e  17:08:31  Initial commit
 ```
 
-**That topology matters, and an earlier version of this section hid it.** It
-quoted `git log --reverse | head -2`, which lists the two commits in time order
-and so implies the game grew out of the README commit. It did not. They are
-independent roots, and the 58:34 is the gap between two recorded timestamps, not
-a measured build duration.
+Then 68 more commits over the following five days, most of them fixing what that
+hour got wrong. **The hour is not the interesting part. What the five days had to
+correct is** — and the rest of this README, the migrations, and the three test
+suites are that argument, at length.
 
-Git verifies contents, topology and recorded timestamps. It cannot verify the
-stronger claim, so that part is an attestation rather than evidence: there was
-no earlier prototype and no off-repository scratch work, and the playable
-snapshot came out of one Claude Code sitting.
-
-After that, 68 reachable commits through 7 August across five calendar dates —
-many of them fixing what the first hour got wrong. The interesting artifact is
-not the hour. It is what the following days had to correct.
-
-```
-69 reachable commits = 6 merges + 63 non-merge
-                       63 non-merge = 54 human + 9 CI rebuilds
-```
-
-(An earlier version of this README said "63 human, 6 merges, 9 CI rebuilds",
-three figures that sum to 78 against a total of 69. The categories overlap;
-these do not.)
+Exactly what git does and does not prove about the timing is set out in
+[Provenance, in detail](#provenance-in-detail) at the foot of this file. The
+short version: it proves the timestamps and the contents, not my account of how
+they came about.
 
 ## What the agent got wrong
 
@@ -295,6 +277,43 @@ bugs, not the code's — a `set_config` call whose return value contaminated eve
 comparison, a jitter check that measured Brands Hatch's real gradient, and an
 outside-of-corner test whose centroid heuristic only holds for an oval. Each is
 described in the file that had it.
+
+## Provenance, in detail
+
+For anyone checking the 58:34 rather than taking it.
+
+**Two root commits, not one lineage.** `e804a8e` (the two-line initial README)
+and `42080d9` (the first playable build) are *independent* roots. The game
+snapshot is not descended from the README commit; I merged the two unrelated
+histories at 18:37.
+
+```bash
+git rev-list --max-parents=0 HEAD     # both of these are roots
+git merge-base --is-ancestor e804a8e 42080d9 && echo descended || echo unrelated
+# unrelated
+```
+
+So 58:34 is the interval between two recorded timestamps, not a stopwatch on a
+single continuous history. An earlier version of this file quoted
+`git log --reverse | head -2`, which lists them in time order and quietly implies
+descent. An external audit caught that; the wording above is the correction.
+
+**What git actually proves here:** the contents of each commit, the shape of the
+graph, and the timestamps recorded in them. **What it cannot prove:** that no
+prototype existed off-repository, that the work was continuous, or which model
+and session produced it. Those are my account, and I'd rather label them than
+let the word "verified" cover them by association. For the record: no earlier
+prototype, no scratch directory, one Claude Code sitting.
+
+**Commit accounting**, since the categories overlap and are easy to double-count:
+
+```
+69 reachable commits = 6 merges + 63 non-merge
+                       63 non-merge = 54 human + 9 CI rebuilds
+```
+
+An earlier version of this README said "63 human, 6 merges, 9 CI rebuilds" —
+three figures summing to 78 against a total of 69.
 
 ## Licence
 
