@@ -94,7 +94,10 @@ create table public.scores (
   user_id         uuid not null references public.profiles(user_id) on delete cascade,
   race_ms         integer not null constraint race_plausible check (race_ms between 60000 and 1800000),
   best_lap_ms     integer not null constraint lap_plausible  check (best_lap_ms between 20000 and 600000),
-  finish_position smallint not null check (finish_position between 1 and 32),
+  -- 33, not 32: the Indianapolis 500 starts 33 cars. The original 32 silently
+  -- broke 0010, whose Indy seed ends on P33 — see 0014, which widens this on
+  -- databases that already have the narrow version.
+  finish_position smallint not null check (finish_position between 1 and 33),
   track_version   text not null,
   sim_version     text not null,
   validated       boolean not null default false,
