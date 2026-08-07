@@ -26,11 +26,97 @@
 
 DirectoryIndex index.html
 
-# 3. Force HTTPS. WebGL and WebAudio both run over plain http, so this is not
-#    strictly required — but browsers increasingly warn on http, and cPanel's
-#    AutoSSL gives you a certificate for free. Uncomment once SSL is active.
+# 3. Force HTTPS. Cloudflare already answers http://jediconcepts.com/mcl64/
+#    with a 301 to https, verified 2026-08-07, so this block stays commented
+#    out — it would only matter if the origin were ever reached directly.
 # <IfModule mod_rewrite.c>
 #   RewriteEngine On
 #   RewriteCond %{HTTPS} off
 #   RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 # </IfModule>
+
+# =====================================================================
+# 4. Security headers.
+#
+# WHY THESE MATTER MORE HERE THAN ON A TYPICAL PAGE: the Supabase session
+# lives in localStorage, and the auth flow is `implicit`, which returns the
+# access token in the URL fragment (see the long note in src/36-cloud.js on
+# why — mail apps open links in their own browser and PKCE cannot complete
+# there). Both are readable by any script running on this origin. So script
+# execution on this page is equivalent to taking over every signed-in player's
+# account, and the layers below exist to make that harder and less useful.
+#
+# The XSS sinks themselves are clean and were re-checked for this: the only
+# innerHTML in src/ is `host.innerHTML = ''` with a constant literal
+# (40-game.js:2396), display names render through textContent
+# (40-game.js:1507), and the database rejects < > & " / \ at the constraint,
+# the trigger and driver_name_available. These headers are depth behind that,
+# not a replacement for it.
+#
+# VERIFY BEFORE TRUSTING. This file is served by LiteSpeed behind Cloudflare
+# and the header set was confirmed live by the cache-control rule above
+# already taking effect. After deploying, re-check with:
+#   curl -sSI https://jediconcepts.com/mcl64/ | grep -iE 'content-security|strict-transport|x-content-type|referrer|permissions'
+# =====================================================================
+<IfModule mod_headers.c>
+
+  # --- Content Security Policy ---------------------------------------
+  # THE WEAK PART, STATED PLAINLY: script-src carries 'unsafe-inline'. The
+  # build inlines three <script> blocks (three.js, the Supabase SDK + config,
+  # and the game) into a single self-contained document, so there is no
+  # external script URL to allowlist and nothing for 'self' to match. Removing
+  # 'unsafe-inline' needs per-block sha256 hashes emitted by build.js into
+  # this file, which couples the build output to the server config — worth
+  # doing, deliberately not done in the same change as everything else.
+  #
+  # So this CSP does NOT stop script injection. What it does stop is what an
+  # injected script would want to do next:
+  #
+  #   connect-src     the token cannot be POSTed anywhere but Supabase. This is
+  #                   the directive that actually protects the sessions.
+  #   frame-ancestors the sign-in form cannot be framed and clickjacked.
+  #   base-uri        a rewritten <base> cannot repoint relative URLs.
+  #   object-src      no Flash/plugin-shaped bypasses.
+  #   form-action     credentials cannot be posted off-origin.
+  #
+  # blob: appears in script-src and worker-src for the Supabase realtime
+  # client, which builds its heartbeat worker with URL.createObjectURL over an
+  # application/javascript blob. Drop blob: and realtime breaks.
+  #
+  # connect-src names the project host explicitly rather than using a
+  # wildcard. IT MUST TRACK `CLOUD.url` IN build.js — if the project ref ever
+  # changes, the leaderboard goes silent with a console CSP error and no
+  # in-game message, because 36-cloud.js swallows network failures by design.
+  Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' https://goqhiuxpinzltzxbjgug.supabase.co wss://goqhiuxpinzltzxbjgug.supabase.co; worker-src 'self' blob:; media-src 'self' blob:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"
+
+  # If the game ever breaks and the CSP is suspected, swap the directive name
+  # for Content-Security-Policy-Report-Only rather than deleting the line —
+  # violations then appear in the console without blocking anything.
+
+  # --- Transport ------------------------------------------------------
+  # NOTE THE SCOPE. HSTS is a HOST-level instruction: set from this directory
+  # it still applies to all of jediconcepts.com, not just /mcl64/. That is why
+  # includeSubDomains and preload are both absent — either would extend a
+  # hard-to-reverse commitment across sites this repository knows nothing
+  # about. Six months, apex only. Cloudflare already 301s http to https, so
+  # this closes the first-visit downgrade window rather than adding a new rule.
+  Header always set Strict-Transport-Security "max-age=15552000"
+
+  # --- Everything else ------------------------------------------------
+  Header always set X-Content-Type-Options "nosniff"
+  # Legacy companion to frame-ancestors, for browsers that predate CSP2.
+  Header always set X-Frame-Options "DENY"
+  # Tighter than Cloudflare's no-referrer-when-downgrade default: an access
+  # token in the fragment is never sent as a referrer, but the path is, and
+  # cross-origin recipients have no business seeing it.
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+  # Only genuinely unused capabilities are switched off. accelerometer,
+  # gyroscope and fullscreen are deliberately NOT listed — 35-mobile.js uses
+  # deviceorientation for tilt steering and requestFullscreen for the cabinet,
+  # and disabling those breaks the game on a phone.
+  Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=(), midi=(), interest-cohort=()"
+  # allow-popups, not bare same-origin: signInWithOAuth navigates to Google and
+  # the return trip must still reach this document.
+  Header always set Cross-Origin-Opener-Policy "same-origin-allow-popups"
+
+</IfModule>

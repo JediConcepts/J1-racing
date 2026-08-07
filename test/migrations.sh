@@ -154,6 +154,38 @@ is "can still read the board"     "$(q "$AUTHCLAIM select case when count(*)>0 t
 is "name check still works"       "$(q "$AUTHCLAIM select public.driver_name_available('Totally New Name')")" "t"
 is "name check sees taken names"  "$(q "$AUTHCLAIM select public.driver_name_available('José G.')")" "f"
 
+echo; echo "anonymous identities cannot post scores (0015)"
+# The live finding this guards: POST /auth/v1/signup with an empty body returns
+# a JWT carrying role=authenticated and is_anonymous=true, with no email and no
+# mailer round trip. `authenticated` is the role granted EXECUTE on
+# submit_score, so without this guard one script mints unlimited identities and
+# takes every board place. Reproduced against the live project on 2026-08-07.
+anon_claim() { printf "do \$\$ begin perform set_config('request.jwt.claims','{\"sub\":\"%s\",\"is_anonymous\":%s}',false); end \$\$;" "$1" "$2"; }
+# A FULLY VALID payload, tagged so the next assertion can prove no row landed.
+# Rejecting an invalid one would prove nothing about the guard.
+has "anonymous claim rejected"    "$(q "$(anon_claim "$UID1" true) select * from public.submit_score('silverstone-v1','sim-anon',240000,80000,1::smallint)")" "anonymous identities cannot post scores"
+# ... and the same identity with the flag off must still get through, or the
+# guard is just an outage. It reaches a business-logic error, not an auth one.
+has "explicit false still posts"  "$(q "$(anon_claim "$UID1" false) select * from public.submit_score('monaco-v9','sim-2',300000,95000,1::smallint)")" "unknown track_version"
+# Fails OPEN on a missing claim, deliberately: older GoTrue omits is_anonymous
+# and treating absent as anonymous would lock out every real player.
+has "missing claim still posts"   "$(q "$CLAIM select * from public.submit_score('monaco-v9','sim-2',300000,95000,1::smallint)")" "unknown track_version"
+is  "no score written by anon"    "$(q "select count(*) from public.scores where sim_version='sim-anon'")" "0"
+
+echo; echo "display-name collisions are bounded (0015)"
+# Every anonymous user derives 'Driver', and so does every magic-link user who
+# sends no driver_name — so this loop is on the ordinary signup path, not an
+# exotic one. It used to walk 1..999 one query at a time.
+q "insert into auth.users (id,email,raw_user_meta_data)
+   select gen_random_uuid(), 'bulk'||g||'@t.test', '{}'::jsonb from generate_series(1,40) g;" >/dev/null
+is "40 bulk signups all landed"   "$(q "select count(*) from public.profiles p join auth.users u on u.id=p.user_id where u.email like 'bulk%@t.test'")" "40"
+is "names are unique"             "$(q "select count(distinct lower(display_name)) from public.profiles p join auth.users u on u.id=p.user_id where u.email like 'bulk%@t.test'")" "40"
+is "first five stay readable"     "$(q "select count(*) from public.profiles where display_name in ('Driver1','Driver2','Driver3','Driver4','Driver5')")" "5"
+# The point of the fix: past five, it stops counting and jumps to a suffix.
+is "no run-away numbering"        "$(q "select count(*) from public.profiles where display_name ~ '^Driver[0-9]+$' and substring(display_name from 7)::int > 5")" "0"
+is "all still satisfy the check"  "$(q "select count(*) from public.profiles where display_name !~ '^[[:alpha:][:digit:] ''._-]+$'")" "0"
+is "all within length limits"     "$(q "select count(*) from public.profiles where char_length(display_name) not between 2 and 24")" "0"
+
 echo; echo "a player may rename only themselves (0009)"
 UID2="$(q "select user_id from public.profiles where user_id <> '$UID1' limit 1")"
 q "$AUTHCLAIM update public.profiles set display_name='Renamed By Me' where user_id='$UID1'" >/dev/null
