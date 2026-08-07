@@ -39,9 +39,15 @@ the page. No credentials were used, and no service-role key was obtained or soug
 
 ## 2. Summary
 
+> **Update, 2026-08-07, after remediation.** A1 is **closed and re-verified live**
+> — see the box at the end of §3.1. Anonymous sign-ins are off at the project and
+> `0015` is applied. Two follow-ups remain on it: the `prosrc` confirm query, and
+> deleting the audit's leftover user. A2 is merged but **not yet deployed**.
+> A3, A4, A6, A7, A8 are unchanged.
+
 | # | Finding | Severity | Status |
 |---|---|---|---|
-| **A1** | Anonymous sign-ins enabled — free `authenticated` JWTs, board forgeable at zero cost | **High** | Code fix shipped; **dashboard toggle still required** |
+| **A1** | Anonymous sign-ins enabled — free `authenticated` JWTs, board forgeable at zero cost | **High** | **CLOSED** — toggle off + `0015` applied, both re-verified |
 | **A2** | No security headers on the live response (no CSP, HSTS, nosniff, frame-ancestors) | **Medium** | Fixed — `deploy/.htaccess` |
 | **A3** | Deploy chain is the highest-impact target and its controls are unverified | **Medium–High** | **Open — needs owner action** |
 | **A4** | Supabase redirect allow-list unverified, and the auth flow is `implicit` | **Medium** | **Open — needs owner action** |
@@ -51,9 +57,13 @@ the page. No credentials were used, and no service-role key was obtained or soug
 | **A8** | GitHub Actions pinned by tag, not commit SHA | **Low** | **Open** — could not resolve SHAs from here |
 | — | Score forgery generally (no replay validator) | Known | Pre-existing and documented in `0003`; A1 is what made it *free* |
 
-**The single most important line in this document:** A1's primary fix is a
-dashboard toggle, not code. The migration is the second layer. Turning the toggle
-off is the action that actually closes it.
+**The single most important line in this document:** A1's primary fix was a
+dashboard toggle, not code — the migration is only the second layer. That is worth
+remembering rather than filing away, because it means **this finding can be
+reopened from a web console by anyone with project access, without a commit, a
+review, or a CI run.** Nothing in this repository would go red. `0015` exists so
+that if it is reopened the board still does not fall over; re-check
+`/auth/v1/settings` if the leaderboard ever starts behaving oddly.
 
 ---
 
@@ -140,6 +150,43 @@ delete from auth.users where is_anonymous;   -- cascades to profiles and player_
 
 If that first query returns **more than one** row, something other than this audit
 created them — investigate before deleting.
+
+#### Remediation verified — 2026-08-07
+
+**1. The toggle is off.** `/auth/v1/settings` now reports
+`"anonymous_users": false`, and the exact request from the reproduction above is
+refused:
+
+```
+$ curl -sX POST …/auth/v1/signup -H "apikey: <publishable>" -d '{}'
+422 {"error_code":"anonymous_provider_disabled","msg":"Anonymous sign-ins are disabled"}
+```
+
+**2. `0015` is applied.** Its ownership confirm query returns:
+
+| proname | owner | proconfig |
+|---|---|---|
+| `handle_new_user` | `postgres` | `{"search_path=\"\""}` |
+| `submit_score` | `score_writer` | `{"search_path=\"\""}` |
+
+Both are correct. `submit_score` kept `score_writer` through the rewrite — that
+was the specific risk of redefining the function whole, since `create or replace`
+does not re-apply ownership. `handle_new_user` staying on `postgres` is right: it
+is the only thing that writes `private.player_pii`, so it has to be privileged,
+and `create or replace` preserved its existing owner. Both pin `search_path`.
+
+**A NOTE FOR WHOEVER VERIFIES THIS NEXT.** The `0015` guard can no longer be
+exercised end-to-end against production, because there is now no way to obtain an
+anonymous JWT to throw at it — which is the intended outcome, not a gap. Its
+evidence is therefore:
+
+- the `prosrc` confirm query in `0015` returning `rejects_anonymous = t`, and
+- four assertions in `test/migrations.sh` covering reject-on-true, allow-on-false,
+  allow-on-absent, and no-row-written.
+
+Do not conclude the guard is untested because the live probe is unavailable. If
+you need a live test, the only honest way is to re-enable the toggle briefly on a
+**branch database**, never on production.
 
 ---
 
@@ -407,17 +454,25 @@ worse than no check.
 
 ## 6. What to do next, in order
 
-1. **Turn off anonymous sign-ins** in the Supabase dashboard. Everything else here
-   is secondary. (A1)
-2. **Delete the audit's anonymous user** with the SQL in §3.1, after confirming
-   there is exactly one.
-3. **Apply `0015`** to the live project.
-4. **Deploy the headers to `mcl64-test` first**, confirm with the `curl` in §3.2,
+1. ~~**Turn off anonymous sign-ins** in the Supabase dashboard.~~ **DONE** and
+   re-verified — `422 anonymous_provider_disabled`. (A1)
+2. ~~**Apply `0015`** to the live project.~~ **DONE** — ownership and
+   `search_path` confirmed. (A1, A5)
+3. **Run the other `0015` confirm query.** It must return `t`:
+   ```sql
+   select proname, prosrc like '%anonymous identities cannot post scores%' as rejects_anonymous
+     from pg_proc where proname = 'submit_score';
+   ```
+   If it returns `f`, an older definition of `submit_score` is still installed and
+   the second layer is not actually there.
+4. **Delete the audit's anonymous user** with the SQL in §3.1, after confirming
+   there is exactly one. Still outstanding.
+5. **Deploy the headers to `mcl64-test` first**, confirm with the `curl` in §3.2,
    then promote. (A2)
-5. **Check the Supabase redirect allow-list** is pinned and carries no wildcard or
+6. **Check the Supabase redirect allow-list** is pinned and carries no wildcard or
    leftover `localhost`. (A4)
-6. **Check branch protection on `main`** and who can push. (A3)
-7. SHA-pin the actions. (A8)
+7. **Check branch protection on `main`** and who can push. (A3)
+8. SHA-pin the actions. (A8)
 
 Longer term, and out of scope here: the replay validator that `0003` and `0012`
 are both written in anticipation of. Until it exists a signed-in player can still
