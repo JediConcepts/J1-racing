@@ -289,12 +289,43 @@ Cloud.prototype.cancelPending = function () {
 };
 
 /* Server decides. The client mirrors the same rules for instant feedback,
-   but the RPC is the authority and the unique index is the guarantee. */
+   but the RPC is the authority and the unique index is the guarantee.
+
+   MIRRORING MEANS MIRRORING. This test read /^[A-Za-z0-9 '._-]+$/ for as long
+   as the database did, and kept reading it after 0011 widened the constraint,
+   driver_name_available() and handle_new_user() to admit letters in any script.
+   The effect was that José, Мария, 田中 and محمد were rejected HERE, before the
+   RPC that would have accepted them — so 0011 fixed the OAuth path and left the
+   typed path exactly as broken as it found it. Found by an external audit
+   grepping the client against the migration it was supposed to match.
+
+   This class stays identical to display_name_chars in 0001/0011 and to
+   driver_name_available in 0002/0011. Change one, change all three.
+
+   BUILT AT RUNTIME, NOT AS A LITERAL. \p{L} needs the /u flag, which is ES2018,
+   and an unsupported regex LITERAL is a syntax error at parse time — that would
+   not degrade this one check, it would fail the whole bundle and the game would
+   not start at all on an older phone. new RegExp moves the failure to a
+   catchable runtime error.
+
+   The fallback is deliberately PERMISSIVE rather than the old ASCII class,
+   because being stricter than the server is what caused this bug in the first
+   place: it blocks the characters that matter for markup and defers everything
+   else to driver_name_available(), which is the authority anyway. A client that
+   wrongly accepts costs one round trip; a client that wrongly rejects locks
+   someone out of their own name. */
+var NAME_OK;
+try {
+  NAME_OK = new RegExp("^[\\p{L}\\p{N} '._-]+$", 'u');
+} catch (e) {
+  NAME_OK = /^[^<>&"`\/\\;=(){}\[\]|*?$%#@~^+]+$/;
+}
+
 Cloud.prototype.checkDriverName = function (name) {
   name = String(name || '').trim();
   if (name.length < 2) return Promise.resolve({ state: 'short' });
   if (name.length > 24) return Promise.resolve({ state: 'long' });
-  if (!/^[A-Za-z0-9 '._-]+$/.test(name)) return Promise.resolve({ state: 'chars' });
+  if (!NAME_OK.test(name)) return Promise.resolve({ state: 'chars' });
   if (!this.enabled) return Promise.resolve({ state: 'unknown' });
 
   return this.client
@@ -382,7 +413,10 @@ Cloud.prototype.leaderboard = function (trackVersion, limit) {
   if (!this.enabled) return Promise.resolve([]);
   return this.client
     .from('leaderboard')
-    .select('rank,display_name,country_code,race_ms,best_lap_ms,finish_position')
+    /* `validated` is selected so the board can say whether a time has been
+       replay-checked. It never was, which is why the README's claim that
+       unvalidated runs were shown "flagged" was false for as long as it stood. */
+    .select('rank,display_name,country_code,race_ms,best_lap_ms,finish_position,validated')
     .eq('track_version', trackVersion)
     .order('rank', { ascending: true })
     .limit(limit || 20)

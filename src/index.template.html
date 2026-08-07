@@ -681,6 +681,11 @@
   .btime { flex: 0 0 70px; text-align: right; color: #fff; font-variant-numeric: tabular-nums; }
   .blap  { flex: 0 0 66px; text-align: right; color: #8fd8e8; font-variant-numeric: tabular-nums; }
   .brow-me { background: rgba(255, 128, 0, 0.14); }
+  /* States what the board cannot yet prove. Not a per-row flag: with no
+     validator built, every row is unvalidated and fifty asterisks would be
+     noise rather than information. */
+  .brow-note { border-top: 1px solid rgba(255, 255, 255, 0.14); margin-top: 4px; padding-top: 6px; }
+  .bnote { flex: 1; min-width: 0; color: #9aa6ad; font-size: 11px; line-height: 1.4; white-space: normal; }
   .brow-me .bname { color: var(--papaya); font-weight: 700; }
 
   .slink {

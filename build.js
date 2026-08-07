@@ -110,15 +110,46 @@ const template = read('src/index.template.html');
    vendored file to keep its own header through the next update.
 
    Each notice reproduces the version actually bundled, which is what MIT asks
-   for — not whatever upstream says today. See THIRD-PARTY.md. */
+   for — not whatever upstream says today. See THIRD-PARTY.md.
+
+   THE COMPLETE TERMS, not a label. The first version of this emitted
+   "Copyright ... | MIT" and asserted on that, which is not what the licence
+   asks for: MIT requires the copyright notice AND the permission notice to
+   accompany copies or substantial portions. An external audit found the shipped
+   page contained zero occurrences of "Permission is hereby granted" while
+   inlining two MIT libraries in full. A short label is a citation, not a
+   notice. */
+const MIT_TERMS =
+  ' *  Permission is hereby granted, free of charge, to any person obtaining a copy\n'
+  + ' *  of this software and associated documentation files (the "Software"), to deal\n'
+  + ' *  in the Software without restriction, including without limitation the rights\n'
+  + ' *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell\n'
+  + ' *  copies of the Software, and to permit persons to whom the Software is\n'
+  + ' *  furnished to do so, subject to the following conditions:\n'
+  + ' *\n'
+  + ' *  The above copyright notice and this permission notice shall be included in all\n'
+  + ' *  copies or substantial portions of the Software.\n'
+  + ' *\n'
+  + ' *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n'
+  + ' *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n'
+  + ' *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n'
+  + ' *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n'
+  + ' *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\n'
+  + ' *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\n'
+  + ' *  SOFTWARE.\n';
+
 const NOTICE = {
   three:
-    '/*! three.js r131 | Copyright 2010-2021 Three.js Authors | MIT\n'
-    + ' *  https://github.com/mrdoob/three.js */\n',
+    '/*! three.js r131 — https://github.com/mrdoob/three.js\n'
+    + ' *  Copyright 2010-2021 Three.js Authors\n'
+    + ' *  SPDX-License-Identifier: MIT\n'
+    + ' *\n' + MIT_TERMS + ' */\n',
   supabase:
-    '/*! supabase-js 2.110.9 | Copyright (c) 2020 Supabase | MIT\n'
-    + ' *  https://github.com/supabase/supabase-js\n'
-    + ' *  Notice restored here: the minified build ships without one. */\n'
+    '/*! supabase-js 2.110.9 — https://github.com/supabase/supabase-js\n'
+    + ' *  Copyright (c) 2020 Supabase\n'
+    + ' *  SPDX-License-Identifier: MIT\n'
+    + ' *  Reproduced here because the minified build ships with no notice at all.\n'
+    + ' *\n' + MIT_TERMS + ' */\n'
 };
 
 /* Public by design — this key ships in every browser that loads the game.
@@ -321,6 +352,20 @@ if (three.indexOf('Three.js Authors') === -1) {
 if (fragment.indexOf(NOTICE.three) === -1) problems.push('artifact.html is missing the three.js notice');
 if (standalone.indexOf(NOTICE.three) === -1) problems.push('index.html is missing the three.js notice');
 if (standalone.indexOf(NOTICE.supabase) === -1) problems.push('index.html is missing the supabase-js notice');
+/* Assert the PERMISSION text specifically, not just that a notice-shaped string
+   is present. The previous assertions passed happily while the shipped page
+   carried nothing but copyright labels — a check that cannot tell a citation
+   from a licence is worse than none, because it reports compliance. */
+const permCount = (s) => s.split('Permission is hereby granted').length - 1;
+if (permCount(fragment) !== 1) {
+  problems.push('artifact.html must carry exactly one full MIT permission notice (three.js), found ' + permCount(fragment));
+}
+if (permCount(standalone) !== 2) {
+  problems.push('index.html must carry two full MIT permission notices (three.js and supabase-js), found ' + permCount(standalone));
+}
+if (standalone.indexOf('WITHOUT WARRANTY OF ANY KIND') === -1) {
+  problems.push('index.html is missing the MIT warranty disclaimer');
+}
 /* And the fragment must not carry the supabase notice, because it must not carry
    supabase at all — the same swap this file guards everywhere else. */
 if (fragment.indexOf(NOTICE.supabase) !== -1) problems.push('artifact.html must NOT contain the supabase-js notice');

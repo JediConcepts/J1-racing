@@ -29,6 +29,28 @@ Note this is the notice for the **bundled** revision. Upstream now reads
 notice on the copy you actually received, so the 2021 line is the correct one
 to carry until the vendored file is updated.
 
+The permission notice that copyright line refers to, in full:
+
+```
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## supabase-js
 
 - Version: 2.110.9 (`vendor/supabase.js`)
@@ -36,15 +58,37 @@ to carry until the vendored file is updated.
 - Licence: MIT
 
 ```
+MIT License
+
 Copyright (c) 2020 Supabase
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
 ```
 
-This one had to be restored. The minified distribution ships with no licence
-header at all, so before `build.js` emitted the notice above, both the repo and
-the deployed page carried supabase-js with no attribution whatsoever. That was
-a real if minor licence breach, found during a security review of the
-repository, and it is the reason the build now asserts on both notices instead
-of trusting a vendor file to keep its own.
+This one had to be restored twice. The minified distribution ships with no
+licence header at all, so before `build.js` emitted a notice both the repo and
+the deployed page carried supabase-js with no attribution whatsoever — found
+during a security review. The first fix emitted only the copyright line and an
+`MIT` label, which is not what the licence asks for: MIT requires the copyright
+notice **and this permission notice** to accompany copies. An external audit
+caught that the shipped page contained zero occurrences of "Permission is hereby
+granted". The build now emits and asserts the complete terms.
 
 Only the standalone build inlines supabase-js. The Artifact fragment
 deliberately excludes it — that host's CSP blocks every external origin, so the
