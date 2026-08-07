@@ -37,7 +37,12 @@ on:
 # In-progress runs are allowed to finish rather than being cancelled mid-write —
 # a cancelled deploy is exactly the partial state we design against.
 concurrency:
-  group: publish-${{ github.event.inputs.target || github.ref_name }}
+#
+# Keyed on the resolved TARGET, not on the trigger. Keying it on
+# `inputs.target || ref_name` put a push to `test` and a dispatch to
+# `mcl64-test` in different groups, so the two ran concurrently against the
+# same target and both tried to commit dist/.
+  group: publish-${{ github.event.inputs.target || (github.ref_name == 'main' && 'mcl64' || 'mcl64-test') }}
   cancel-in-progress: false
 
 jobs:
@@ -56,9 +61,19 @@ jobs:
   # start workflow runs for pushes made with it. Swap in a PAT and this will
   # recurse.
   build:
-    # An explicit ref is a rollback or a replay of a commit that already exists.
-    # Rebuilding it would rewrite the very thing being restored, so skip.
-    if: github.event.inputs.ref == ''
+    # PUSH ONLY, and this is load-bearing rather than tidiness.
+    #
+    # The version is the commit count, so every rebuild commit changes the next
+    # build's stamp. A job that rebuilds on any trigger therefore always finds
+    # dist/ "changed" — even with identical source — and commits again: one
+    # extra commit per dispatch, for ever. Observed on the test branch, which
+    # collected two rebuild commits from one push plus one dispatch.
+    #
+    # Restricting to push makes it terminate. New source lands, the count moves,
+    # exactly one rebuild follows, and the bot's own push cannot retrigger. A
+    # dispatch republishes what is already committed, which is what a manual
+    # republish or a rollback should do anyway.
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write
