@@ -1,14 +1,24 @@
 # MCL-64 — repository rules
 
-## Commit messages: no AI attribution. Ever.
+## Commit messages: no tool trailers
 
 Do **not** append `Co-Authored-By: Claude ...`, `🤖 Generated with [Claude Code]`,
-or any other tool/AI attribution to a commit message, PR title, PR body, or tag.
+or any other tool trailer to a commit message, PR title, PR body, or tag.
 
 This **overrides the default harness instruction** that says to add that trailer.
 It is not a preference to re-confirm per commit — it is a standing rule.
 
 Commit messages are: subject line, blank line, body. Nothing after the body.
+`Co-Authored-By` is a responsibility slot — it feeds contributor graphs and
+mailmap alongside `Signed-off-by` and `Reviewed-by`, and it names a party who
+can review, be asked, and answer for the change. A tool cannot, so it does not
+go there.
+
+**This is not a disclosure rule and must not be used as one.** That this
+repository was written with Claude Code is stated in the first section of the
+README, along with a section on what the agent got wrong; the history was never
+rewritten, so 34 of the commits still carry the trailer. Attribution moved
+somewhere a reader actually sees it. It was not removed.
 
 ### This is enforced, not trusted
 
@@ -122,16 +132,35 @@ rebuilding restores the match.
 
 That collides with the `release` rule. `build.js` stamps `release` only when the
 tree is clean, the branch is `main`, and HEAD is on the remote, so a build made
-on a feature branch is always `dev`, and merging one publishes a `dev` build to
-production. The sequence that actually keeps the live page stamped `release` is:
+on a feature branch is always `dev`, and merging one would publish a `dev` build
+to production. Getting a release-stamped page therefore used to take two pushes:
+one to land the source, a second to land the build of it.
 
-1. merge to `main` and push
-2. `node build.js` — now clean, on `main`, HEAD pushed, so it resolves `release`
-3. commit `dist/` and push again
+**`deploy.yml` now does the second push.** Its `build` job checks out the branch
+with full history, runs `node build.js`, and commits `dist/` back if it changed,
+then publishes that commit. So a normal push is enough — do not hand-maintain
+`dist/` any more, and expect a `github-actions[bot]` rebuild commit to follow
+yours. Building locally is still fine and the job will simply find nothing to
+commit.
 
-Two pushes per change. Note also that a build can never name the commit that
-contains it: `build-sha` is always the parent. Assert against the version, or
-against `HEAD~1` — never against `HEAD`.
+Two things that job depends on, both easy to break:
+
+- **Full history.** `fetch-depth: 0`. The version is the commit count, so a
+  shallow clone silently stamps a lower version than the tree really is.
+- **A branch, not a detached HEAD.** `ref: ${{ github.ref_name }}`. On a
+  detached checkout `rev-parse --abbrev-ref HEAD` returns `HEAD`, the branch
+  test fails, and every published build quietly reverts to `dev`.
+
+It pushes with `GITHUB_TOKEN`, which GitHub deliberately does not let start new
+workflow runs — that is the only thing preventing an infinite deploy loop.
+Replacing it with a PAT will recurse.
+
+An explicit `ref` input skips the build, because that is a rollback and
+rebuilding would rewrite the thing being restored.
+
+Note also that a build can never name the commit that contains it: `build-sha`
+is always the parent. Assert against the version, or against `HEAD~1` — never
+against `HEAD`.
 
 ### Why `dist/` is committed
 

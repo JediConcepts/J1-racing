@@ -41,13 +41,79 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Rebuild dist/ and commit it before publishing.
+  #
+  # WHY THIS EXISTS: the Worker publishes files out of a git commit — POST
+  # /api/deploy takes {target, ref, force} and nothing else, so there is no way
+  # to hand it a freshly built file. dist/ therefore has to be committed, and
+  # before this job that meant a human remembering to run `node build.js` and
+  # commit the output. Worse, build.js only resolves channel=release on a clean
+  # main whose HEAD is already on the remote, so getting a release-stamped page
+  # took two pushes: one to land the source, another to land the build of it.
+  # This job does that second push, so a normal push is enough again.
+  #
+  # NO LOOP: this pushes with GITHUB_TOKEN, and GitHub deliberately does not
+  # start workflow runs for pushes made with it. Swap in a PAT and this will
+  # recurse.
+  build:
+    # An explicit ref is a rollback or a replay of a commit that already exists.
+    # Rebuilding it would rewrite the very thing being restored, so skip.
+    if: github.event.inputs.ref == ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      sha: ${{ steps.stamp.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history. The version number is the commit count, so a shallow
+          # clone stamps a version lower than the tree actually is.
+          fetch-depth: 0
+          # Check out the branch, not a detached HEAD: build.js resolves
+          # channel=release only when `rev-parse --abbrev-ref HEAD` is 'main'.
+          ref: ${{ github.ref_name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Build
+        run: node build.js
+
+      - name: Commit dist if it changed
+        id: stamp
+        run: |
+          set -euo pipefail
+
+          if git diff --quiet -- dist/; then
+            echo "dist/ already matches the source — nothing to commit."
+            echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add dist
+          git commit -m "Rebuild dist for ${{ github.ref_name }}" \
+                     -m "Built by deploy.yml from ${GITHUB_SHA}. Stamp lines only unless src/ changed in that commit."
+          git push origin "HEAD:${{ github.ref_name }}"
+
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "Committed and pushed $(git rev-parse --short HEAD)."
+
   publish:
+    needs: build
+    # build is skipped for an explicit-ref dispatch; publish must still run.
+    if: always() && (needs.build.result == 'success' || needs.build.result == 'skipped')
     runs-on: ubuntu-latest
     # main → mcl64 (live), test → mcl64-test (preview)
     env:
       FLEET_API: https://webmgmt-fleet.jamie3640.workers.dev/api/deploy
       TARGET: ${{ github.event.inputs.target || (github.ref_name == 'main' && 'mcl64' || 'mcl64-test') }}
-      DEPLOY_REF: ${{ github.event.inputs.ref || github.sha }}
+      # Publish what build actually committed. Falls back to an explicit ref
+      # (rollback), then to the pushed commit (build skipped or made no change).
+      DEPLOY_REF: ${{ needs.build.outputs.sha || github.event.inputs.ref || github.sha }}
       FORCE: ${{ github.event.inputs.force || 'false' }}
     steps:
       - name: Publish via fleet manager
