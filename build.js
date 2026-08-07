@@ -98,6 +98,29 @@ const three = read('vendor/three.min.js');
 const supabase = read('vendor/supabase.js');
 const template = read('src/index.template.html');
 
+/* MIT requires the copyright and permission notice to travel with the code, and
+   dist/index.html inlines both of these libraries, so the built page is a copy
+   that has to carry them.
+
+   three.min.js keeps its own @license header. The minified supabase build does
+   not — it ships with no notice at all, so until this existed both the repo and
+   the deployed page carried supabase-js completely unattributed. That is a
+   licence breach rather than an untidiness, and a silent one, which is why the
+   invariants at the foot of this file assert on both rather than trusting a
+   vendored file to keep its own header through the next update.
+
+   Each notice reproduces the version actually bundled, which is what MIT asks
+   for — not whatever upstream says today. See THIRD-PARTY.md. */
+const NOTICE = {
+  three:
+    '/*! three.js r131 | Copyright 2010-2021 Three.js Authors | MIT\n'
+    + ' *  https://github.com/mrdoob/three.js */\n',
+  supabase:
+    '/*! supabase-js 2.110.9 | Copyright (c) 2020 Supabase | MIT\n'
+    + ' *  https://github.com/supabase/supabase-js\n'
+    + ' *  Notice restored here: the minified build ships without one. */\n'
+};
+
 /* Public by design — this key ships in every browser that loads the game.
    What protects the data is the RLS and the revoked grants in
    supabase/migrations/0001_leaderboard.sql, not this string being secret.
@@ -136,11 +159,12 @@ for (const [label, body] of [['three.min.js', three], ['supabase.js', supabase],
   }
 }
 
-const cloudBlob = supabase + '\nwindow.MCL64_CLOUD = ' + JSON.stringify(CLOUD) + ';\n';
+const cloudBlob = NOTICE.supabase + supabase
+  + '\nwindow.MCL64_CLOUD = ' + JSON.stringify(CLOUD) + ';\n';
 
 function render(cloud) {
   return template
-    .replace('/*INJECT_THREE*/', () => three)
+    .replace('/*INJECT_THREE*/', () => NOTICE.three + three)
     .replace('/*INJECT_CLOUD*/', () => cloud)
     .replace('/*INJECT_GAME*/', () => wrapped);
 }
@@ -286,6 +310,21 @@ if (fragment.indexOf(CLOUD.key) !== -1) problems.push('artifact.html must NOT co
 if (fragment.indexOf(CLOUD.url) !== -1) problems.push('artifact.html must NOT contain the project URL');
 if (standalone.indexOf(CLOUD_ASSIGN) === -1) problems.push('index.html is missing the cloud config');
 if (standalone.indexOf(CLOUD.key) === -1) problems.push('index.html is missing the publishable key');
+/* Licence attribution, asserted rather than assumed. Both bundled libraries are
+   MIT and both builds are copies that have to carry the notice for whatever they
+   inline. The fragment inlines three.js only; the standalone inlines both. A
+   minifier or a vendor bump that quietly drops a header is exactly how a project
+   ends up distributing an unattributed dependency, so fail the build here. */
+if (three.indexOf('Three.js Authors') === -1) {
+  problems.push('vendor/three.min.js has lost its own @license header — check the vendored file');
+}
+if (fragment.indexOf(NOTICE.three) === -1) problems.push('artifact.html is missing the three.js notice');
+if (standalone.indexOf(NOTICE.three) === -1) problems.push('index.html is missing the three.js notice');
+if (standalone.indexOf(NOTICE.supabase) === -1) problems.push('index.html is missing the supabase-js notice');
+/* And the fragment must not carry the supabase notice, because it must not carry
+   supabase at all — the same swap this file guards everywhere else. */
+if (fragment.indexOf(NOTICE.supabase) !== -1) problems.push('artifact.html must NOT contain the supabase-js notice');
+
 /* The deploy verifier asserts on this marker, so a build that silently stopped
    emitting it would turn every later deploy check into a false failure — or
    worse, get "fixed" by weakening the check. Fail here instead. */
