@@ -26,12 +26,14 @@ set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 # --- find a server new enough -----------------------------------------------
-PGBIN=""
-for c in /opt/homebrew/Cellar/postgresql@1[5-9]/*/bin /opt/homebrew/Cellar/postgresql@2*/*/bin \
-         /usr/lib/postgresql/1[5-9]/bin /usr/local/opt/postgresql@1[5-9]/bin; do
+PGBIN=""; PGVER=0
+for c in /opt/homebrew/Cellar/postgresql@*/*/bin /usr/lib/postgresql/*/bin \
+         /usr/local/opt/postgresql@*/bin; do
   [ -x "$c/initdb" ] || continue
-  v="$("$c/initdb" --version | grep -oE '[0-9]+' | head -1)"
-  if [ "${v:-0}" -ge 15 ]; then PGBIN="$c"; break; fi
+  v="$("$c/initdb" --version 2>/dev/null | grep -oE '[0-9]+' | head -1)"
+  # Highest available, not merely the first found: a box with both 14 and 17
+  # installed must not pick 14 just because the glob reaches it sooner.
+  if [ "${v:-0}" -ge 15 ] && [ "${v:-0}" -gt "$PGVER" ]; then PGBIN="$c"; PGVER="$v"; fi
 done
 if [ -z "$PGBIN" ]; then
   echo "FATAL: no PostgreSQL 15+ found. The leaderboard view needs security_invoker."

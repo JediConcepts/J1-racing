@@ -1,0 +1,80 @@
+name: tests
+
+# Three suites, each verifying a claim this repository makes in prose.
+#
+#   maths      the README says the deterministic transcendentals are bit-identical
+#              across V8 and JavaScriptCore. This runs both engines and checks it,
+#              plus the control: that the BUILT-IN functions do disagree. Without
+#              the control the test could pass on two identical engines and prove
+#              nothing.
+#   physics    the sign conventions that eight of the first forty commits got
+#              wrong — banking, camber, body roll, elevation continuity.
+#   migrations all fourteen migrations applied to an empty PostgreSQL, then the
+#              security model asserted: PII unreachable, no client write path,
+#              rename is self-only, the board is data-minimised.
+#
+# Not covered, deliberately: anything that renders. 40-game.js has 98 references
+# to `document`, and a browser harness would cost more than it verifies here.
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# A push that lands while an earlier run is still going makes the earlier one
+# irrelevant — unlike the deploy workflow, cancelling a test run loses nothing.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  maths:
+    name: maths — cross-engine determinism
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # Both engines are the point of this job. Without bun the test reports SKIP
+      # for the two cross-engine assertions and still checks the golden digest —
+      # honest, but only half the claim, so install it rather than accept that.
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - run: node test/fpmath.test.js
+
+  physics:
+    name: physics — sign conventions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node test/physics.test.js
+
+  migrations:
+    name: migrations — schema and security model
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # NEEDS 15 OR LATER: the leaderboard view uses security_invoker, which does
+      # not exist before it. The runner image ships a server, but pin the version
+      # rather than inherit whatever the image happens to carry this month — on 14
+      # the view fails, 0001 and 0003 abort, the seeds fail downstream on a
+      # foreign key, and the whole cascade reads like a defect in the migrations.
+      - name: Install PostgreSQL 17
+        run: |
+          set -euo pipefail
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+            | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-17
+          /usr/lib/postgresql/17/bin/initdb --version
+
+      # The script starts its own cluster on a unix socket, so nothing needs to
+      # be listening beforehand and there is no service container to configure.
+      - run: ./test/migrations.sh
