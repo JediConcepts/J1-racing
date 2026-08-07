@@ -149,6 +149,16 @@ security model, in order of evaluation:
 5. No client-reachable `INSERT` or `UPDATE` grant on `scores`, ever. Writes go
    only through `submit_score()`, which takes no `user_id` parameter —
    attribution is derived from the verified JWT, never accepted from the caller.
+6. Nothing the caller passes selects a board or names a file. `track_version`
+   must exist in `track_versions`, so a player cannot invent a circuit and top
+   a board of one, and `trace_key` is ignored on the way in — it is the
+   validator's to write, never the submitter's.
+
+Display names accept letters in any script — José, Мария, 田中 — and no
+character that matters for HTML injection: `< > & " / \` and the rest are
+stripped before insert and rejected by a `CHECK` constraint after it. The
+constraint is an allowlist, `^[[:alpha:][:digit:] '._-]+$`, deliberately, so
+widening it for one alphabet cannot quietly admit a script tag.
 
 Migrations are numbered and must be applied in order.
 
@@ -157,10 +167,17 @@ cannot post a time as someone else. A player *can* still call `submit_score()`
 with a time they did not drive, because the validator that re-simulates a
 submitted trace does not exist yet — the track has to be baked to engine-stable
 data first (see the maths section above). Every row therefore lands
-`validated = false` and stores its trace, so unvalidated runs can be re-checked
-and purged once the validator lands, and the board shows them flagged rather
-than hiding them. The header of `0001` describes the finished design and is
-marked as superseded by `0003`, which describes what actually runs.
+`validated = false`, so unvalidated runs can be re-checked and purged once the
+validator lands, and the board shows them flagged rather than hiding them. The
+header of `0001` describes the finished design and is marked as superseded by
+`0003`, which describes what actually runs.
+
+When that validator is built, the trace it reads must be located from the
+authenticated user — never from a key the submitter supplied. `submit_score()`
+used to accept one, which would have let a player point an invented time at
+somebody else's honest run and have the validator bless it. `0012` closed that
+by ignoring the parameter; the note matters because the hole reopens the moment
+an upload path is added carelessly.
 
 ## Licence
 

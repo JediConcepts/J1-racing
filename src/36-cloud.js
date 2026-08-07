@@ -343,7 +343,17 @@ Cloud.prototype.setDisplayName = function (name) {
 /* Posts a finished race. There is no user_id parameter by design — the
    function derives it from the verified JWT, so a client cannot attribute a
    time to anyone else. Returns whether it was a personal best and the
-   resulting board position. */
+   resulting board position.
+
+   No trace key either, and that is also deliberate. It used to send
+   r.traceKey, which nothing in this codebase ever assigned — there is no
+   upload path — so the value was always null and the parameter was surface
+   with no purpose. Worse, submit_score stored whatever arrived without
+   checking whose trace it was, which would have let a player point an invented
+   time at somebody else's honest run and have the eventual validator bless it.
+   0012 stops honouring the parameter; scores.trace_key is now the validator's
+   to write and nobody else's. When the upload path is built, the key must be
+   derived server-side from the authenticated user, never sent from here. */
 Cloud.prototype.submitScore = function (r) {
   if (!this.enabled) return Promise.resolve({ ok: false, reason: 'offline' });
   if (!this.user) return Promise.resolve({ ok: false, reason: 'signed-out' });
@@ -353,8 +363,7 @@ Cloud.prototype.submitScore = function (r) {
     p_sim_version: r.simVersion,
     p_race_ms: Math.round(r.raceMs),
     p_best_lap_ms: Math.round(r.bestLapMs),
-    p_finish_position: r.position,
-    p_trace_key: r.traceKey || null
+    p_finish_position: r.position
   }).then(function (res) {
     if (res && res.error) return { ok: false, reason: res.error.message };
     var row = (res && res.data && res.data[0]) || null;
