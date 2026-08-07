@@ -41,8 +41,9 @@ the page. No credentials were used, and no service-role key was obtained or soug
 
 > **Update, 2026-08-07, after remediation.** A1 is **closed and re-verified live**
 > — see the box at the end of §3.1. Anonymous sign-ins are off at the project and
-> `0015` is applied. Two follow-ups remain on it: the `prosrc` confirm query, and
-> deleting the audit's leftover user. A2 is merged but **not yet deployed**.
+> `0015` is applied, and both layers are confirmed in the deployed database. The
+> only follow-up left on it is deleting the audit's leftover user.
+> A2 is merged but **not yet deployed**.
 > A3, A4, A6, A7, A8 are unchanged.
 
 | # | Finding | Severity | Status |
@@ -175,12 +176,23 @@ does not re-apply ownership. `handle_new_user` staying on `postgres` is right: i
 is the only thing that writes `private.player_pii`, so it has to be privileged,
 and `create or replace` preserved its existing owner. Both pin `search_path`.
 
+**3. The guard is in the deployed body.** The other confirm query returns:
+
+| proname | rejects_anonymous |
+|---|---|
+| `submit_score` | `true` |
+
+So the installed function is the `0015` definition, not a surviving older one —
+which matters because `create or replace` would silently leave an earlier body in
+place if the migration had half-applied.
+
 **A NOTE FOR WHOEVER VERIFIES THIS NEXT.** The `0015` guard can no longer be
 exercised end-to-end against production, because there is now no way to obtain an
 anonymous JWT to throw at it — which is the intended outcome, not a gap. Its
 evidence is therefore:
 
-- the `prosrc` confirm query in `0015` returning `rejects_anonymous = t`, and
+- the `prosrc` confirm query in `0015` returning `rejects_anonymous = t` (it
+  did — see point 3 above), and
 - four assertions in `test/migrations.sh` covering reject-on-true, allow-on-false,
   allow-on-absent, and no-row-written.
 
@@ -458,13 +470,8 @@ worse than no check.
    re-verified — `422 anonymous_provider_disabled`. (A1)
 2. ~~**Apply `0015`** to the live project.~~ **DONE** — ownership and
    `search_path` confirmed. (A1, A5)
-3. **Run the other `0015` confirm query.** It must return `t`:
-   ```sql
-   select proname, prosrc like '%anonymous identities cannot post scores%' as rejects_anonymous
-     from pg_proc where proname = 'submit_score';
-   ```
-   If it returns `f`, an older definition of `submit_score` is still installed and
-   the second layer is not actually there.
+3. ~~**Run the other `0015` confirm query.**~~ **DONE** — returned `true`, so the
+   deployed `submit_score` really is the `0015` definition. (A1)
 4. **Delete the audit's anonymous user** with the SQL in §3.1, after confirming
    there is exactly one. Still outstanding.
 5. **Deploy the headers to `mcl64-test` first**, confirm with the `curl` in §3.2,
