@@ -153,6 +153,19 @@ security model, in order of evaluation:
    must exist in `track_versions`, so a player cannot invent a circuit and top
    a board of one, and `trace_key` is ignored on the way in — it is the
    validator's to write, never the submitter's.
+7. A signed-out visitor can read the `leaderboard` view and nothing else. The
+   base tables are not reachable at all: `scores` is revoked from every client
+   role, and `profiles` is revoked from `anon` and scoped to your own row for
+   `authenticated`. The view is the boundary, not a suggestion.
+
+That last one was not always true, and the way it failed is worth keeping. The
+view was written to project nine columns and deliberately not `user_id` — but
+`select` on the base tables was also granted to `anon`, so anyone with the
+publishable key could skip the view and read every player's auth id straight out
+of `scores`. The projection looked like a boundary and was decoration. Fixing it
+needed both halves at once: the view had to stop borrowing the caller's
+privileges (`security_invoker = false`) *before* those privileges could be taken
+away, or revoking them would simply have emptied the public board.
 
 Display names accept letters in any script — José, Мария, 田中 — and no
 character that matters for HTML injection: `< > & " / \` and the rest are
@@ -160,7 +173,20 @@ stripped before insert and rejected by a `CHECK` constraint after it. The
 constraint is an allowlist, `^[[:alpha:][:digit:] '._-]+$`, deliberately, so
 widening it for one alphabet cannot quietly admit a script tag.
 
-Migrations are numbered and must be applied in order.
+Migrations are numbered and must be applied in order. **None of the above is
+asserted on trust** — `./test/migrations.sh` applies all fourteen to a throwaway
+PostgreSQL 15+ cluster and checks every claim in this section, 41 assertions,
+including that `anon` is refused on `profiles`, `scores`, `runs` and
+`player_pii`, that a player can rename only themselves, and that the board still
+returns rows once all of that is locked down. It needs 15 or later: the view uses
+`security_invoker`, which does not exist before it.
+
+That harness paid for itself on its first run by finding that `0010` had never
+applied. Indianapolis starts 33 cars, its seed ended on P33, and
+`finish_position` was constrained to 32 — so the seed aborted and rolled back,
+taking Brands Hatch with it. Two circuits sat at one entry each for days and
+nothing reported it, because a migration that was *run* is not a migration that
+*worked*. `0014` widened the constraint and rewrote the field.
 
 **What this does not yet do.** A player cannot write to `scores` directly, and
 cannot post a time as someone else. A player *can* still call `submit_score()`
