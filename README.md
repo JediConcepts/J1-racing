@@ -181,4 +181,26 @@ an upload path is added carelessly.
 
 ## Licence
 
-No licence granted. All rights reserved.
+The code is **MIT** — see [`LICENSE`](./LICENSE). Take the migrations in
+particular: the row-level security in there is a pattern worth reusing, and it
+is more useful to you than it is to me.
+
+Two things that licence does **not** cover, stated plainly because a copyright
+licence cannot grant either and pretending otherwise would be worse than saying
+nothing:
+
+- **Trade marks.** This is an unofficial fan project. The names, liveries,
+  colour schemes and circuit names it evokes belong to their owners, and nothing
+  here is endorsed by or affiliated with any team, series, circuit or sponsor.
+  MIT covers the code that draws a papaya car; it conveys no right to the livery
+  it is imitating.
+- **The bundled libraries.** three.js and supabase-js are MIT and stay under
+  their own notices, reproduced in [`THIRD-PARTY.md`](./THIRD-PARTY.md).
+  supabase-js ships minified with no licence header at all, so `dist/index.html`
+  carried it unattributed until the build started emitting the notice and
+  asserting it — a small licence breach, found by reviewing this repository
+  before publishing it, and now a build failure rather than a matter of trust.
+
+There is no third-party media to license: every sound is synthesised at runtime
+with Web Audio oscillators rather than sampled, and the only bundled image is a
+screenshot of the game.
