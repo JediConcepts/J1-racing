@@ -107,8 +107,17 @@ jobs:
             exit 0
           fi
 
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # Attribution, not authentication. The push still authenticates as
+          # GITHUB_TOKEN — that is what stops the loop, and it is unaffected by
+          # what goes here. Git does not verify these strings.
+          #
+          # This names the owner of the pipeline rather than the machine that
+          # ran it, because a rebuild commit is a deterministic derivative of
+          # the source commit that triggered it: same input, same output, no
+          # judgement exercised. The party who can answer for it is whoever
+          # landed the source, not the runner.
+          git config user.name 'Jedi Concepts'
+          git config user.email 'jamie@jediconcepts.com'
           git add dist
           git commit -m "Rebuild dist for ${{ github.ref_name }}" \
                      -m "Built by deploy.yml from ${GITHUB_SHA}. Stamp lines only unless src/ changed in that commit."
