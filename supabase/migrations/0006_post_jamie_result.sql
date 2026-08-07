@@ -20,10 +20,16 @@ begin;
 
 alter table public.scores no force row level security;
 
+/* This posts a result for one real account by id, so on any database that is
+   not the live one — a fresh clone, a test harness — that user does not exist
+   and the insert dies on the foreign key. Skip instead of failing: a one-off
+   data migration that cannot be replayed makes the whole chain untestable, and
+   the chain being replayable from empty is what test/migrations.sh depends on. */
 insert into public.scores (
   user_id, race_ms, best_lap_ms, finish_position,
   track_version, sim_version, validated, created_at
-) values (
+)
+select
   '6e34cc00-2ce0-4985-ae1d-45cabefeffdd',
   315533,        -- 5:15.533
   103249,        -- 1:43.249 best lap
@@ -32,6 +38,9 @@ insert into public.scores (
   'sim-2',
   false,         -- not replay-validated; nothing on the board is yet
   now()
+where exists (
+  select 1 from public.profiles
+   where user_id = '6e34cc00-2ce0-4985-ae1d-45cabefeffdd'
 )
 on conflict (user_id, track_version) do update
   set race_ms         = least(scores.race_ms, excluded.race_ms),
