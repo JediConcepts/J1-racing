@@ -129,8 +129,31 @@ KB raw and under 10 KB gzipped) which reproduces the race bit-for-bit. That is
 the basis for server-side validation of submitted lap times. Without engine
 independence a Safari player's run could never be verified by a V8 validator.
 
-Verified bit-identical across V8 (node) and JavaScriptCore (bun) over 190,290
-samples, with the built-in `Math.*` as a control that does diverge.
+Verified bit-identical across V8 (node) and JavaScriptCore (bun) over **144,400
+samples**, with the built-in `Math.*` as a control that does diverge:
+
+```
+                 node (V8)          bun (JavaScriptCore)
+dsin/dcos/...    799de904cbcc58d7 = 799de904cbcc58d7    ← the claim
+Math.sin/cos/... 6887ae715a325b9a ≠ 554d93314274393c    ← the control
+```
+
+```bash
+node test/fpmath.test.js
+```
+
+That figure used to read 190,290, from a measurement whose harness was never
+kept — so the number could not be reproduced, defended, or corrected. It is now
+whatever `test/fpmath.test.js` sweeps, and the sweep is defined in that file:
+24,000 angles across ±8π for `dsin`/`dcos`/`dtan`, 24,000 ratios for `datan`, and
+a 220×220 grid for `datan2`. The digest is committed, so a change in behaviour of
+`05-fpmath.js` fails the test on a single engine — which matters, because such a
+change invalidates every replay trace recorded under the old build and is a
+`SIM_VERSION` bump, not a test edit.
+
+The control is not decoration. Without asserting that the two engines *disagree*
+on the built-ins, the test would pass just as happily on two identical engines
+and prove nothing about engine independence.
 
 Known remaining gap: Three.js's `CatmullRomCurve3` is **not** engine-stable, so
 the track must be baked to data before a headless validator can be trusted.
@@ -204,6 +227,41 @@ used to accept one, which would have let a player point an invented time at
 somebody else's honest run and have the validator bless it. `0012` closed that
 by ignoring the parameter; the note matters because the hole reopens the moment
 an upload path is added carelessly.
+
+## Tests
+
+Three suites, 73 assertions, no dependencies to install beyond a PostgreSQL
+server. Each exists because this README makes a claim in prose, and a claim
+nobody can re-run is not evidence.
+
+```bash
+node test/fpmath.test.js    #  3 — cross-engine determinism, and the control
+node test/physics.test.js   # 29 — sign conventions, geometry, elevation
+./test/migrations.sh        # 41 — 14 migrations applied, security model asserted
+```
+
+All three run in CI on every push ([`test.yml`](./.github/workflows/test.yml)).
+`migrations.sh` needs **PostgreSQL 15 or later** — the leaderboard view uses
+`security_invoker`, which does not exist before it — and refuses to run on 14
+rather than let the resulting failures be misread as defects.
+
+What they do not cover: anything that renders. `40-game.js` has 98 references to
+`document`, and a browser harness would cost more than it verifies. So the car's
+*mesh* leaning correctly is still unverified; the geometry and the roll term
+underneath it are not.
+
+Two of these were written after an audit pointed out that the repository asserted
+things it could not reproduce, and both earned their place immediately.
+`migrations.sh` found that `0010` had never applied and two circuits had been
+sitting at one entry each. `fpmath.test.js` replaced a sample count that had been
+carried in prose from a harness nobody kept.
+
+Worth saying plainly, since the point of all this is that claims should be
+checkable: the first drafts of both files reported failures that were their own
+bugs, not the code's — a `set_config` call whose return value contaminated every
+comparison, a jitter check that measured Brands Hatch's real gradient, and an
+outside-of-corner test whose centroid heuristic only holds for an oval. Each is
+described in the file that had it.
 
 ## Licence
 
