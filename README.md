@@ -14,22 +14,43 @@ sponsored by any racing team or their sponsors.
 
 ## Provenance
 
-The first playable build — car, track, six-car AI field, race rules and a
-working Supabase leaderboard — landed **58 minutes and 34 seconds** after the
-repository was created. Written with Claude Code, in one sitting.
+Git records **two root commits** on 2 August 2026: an initial two-line README at
+17:08:31 BST, and the commit I identify as the first playable build at 18:07:05
+— **58 minutes 34 seconds** apart. That playable root contains the car,
+Silverstone, a six-car field, race rules and the Supabase client. I merged the
+two unrelated histories at 18:37.
 
 ```bash
-git log --reverse --format='%h %ad %s' --date=iso | head -2
-# e804a8e 2026-08-02 17:08:31 +0100  Initial commit
-# 42080d9 2026-08-02 18:07:05 +0100  MCL-64: N64-style F1 racer with Supabase leaderboard
+git rev-list --max-parents=0 HEAD        # BOTH of these are roots
+# 42080d9  MCL-64: N64-style F1 racer with Supabase leaderboard   18:07:05
+# e804a8e  Initial commit                                          17:08:31
+git merge-base --is-ancestor e804a8e 42080d9 && echo descended || echo unrelated
+# unrelated
 ```
 
-Nothing existed before `e804a8e` — no local branch, no scratch directory, no
-prior prototype. The clock starts at an empty repository.
+**That topology matters, and an earlier version of this section hid it.** It
+quoted `git log --reverse | head -2`, which lists the two commits in time order
+and so implies the game grew out of the README commit. It did not. They are
+independent roots, and the 58:34 is the gap between two recorded timestamps, not
+a measured build duration.
 
-Everything after that first hour is the honest part: 40 more commits over the
-following two days, many of them fixing what the first hour got wrong. The
-interesting artifact is not the hour. It is what the two days had to correct.
+Git verifies contents, topology and recorded timestamps. It cannot verify the
+stronger claim, so that part is an attestation rather than evidence: there was
+no earlier prototype and no off-repository scratch work, and the playable
+snapshot came out of one Claude Code sitting.
+
+After that, 68 reachable commits through 7 August across five calendar dates —
+many of them fixing what the first hour got wrong. The interesting artifact is
+not the hour. It is what the following days had to correct.
+
+```
+69 reachable commits = 6 merges + 63 non-merge
+                       63 non-merge = 54 human + 9 CI rebuilds
+```
+
+(An earlier version of this README said "63 human, 6 merges, 9 CI rebuilds",
+three figures that sum to 78 against a total of 69. The categories overlap;
+these do not.)
 
 ## What the agent got wrong
 
@@ -217,9 +238,21 @@ with a time they did not drive, because the validator that re-simulates a
 submitted trace does not exist yet — the track has to be baked to engine-stable
 data first (see the maths section above). Every row therefore lands
 `validated = false`, so unvalidated runs can be re-checked and purged once the
-validator lands, and the board shows them flagged rather than hiding them. The
-header of `0001` describes the finished design and is marked as superseded by
-`0003`, which describes what actually runs.
+validator lands. **The board is not cheat-resistant, and now says so**: it shows
+unvalidated runs rather than hiding them — a board that hides everything until a
+validator exists is indistinguishable from a broken one — and prints a line
+stating that no time on it has been replay-verified.
+
+That line is new, and the reason is worth keeping. This paragraph previously
+claimed the board showed unvalidated runs "flagged". It did not: the client
+never selected `validated` at all, and nothing drew a marker. The claim stood
+until an external audit read it against the code. A per-row flag would still be
+the wrong fix while no validator exists, because every row is unvalidated and
+fifty identical asterisks carry no information — so the board states the
+position once, in one line, driven by the data rather than hard-coded.
+
+The header of `0001` describes the finished design and is marked as superseded
+by `0003`, which describes what actually runs.
 
 When that validator is built, the trace it reads must be located from the
 authenticated user — never from a key the submitter supplied. `submit_score()`

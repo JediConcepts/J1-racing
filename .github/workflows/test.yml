@@ -7,8 +7,10 @@ name: tests
 #              plus the control: that the BUILT-IN functions do disagree. Without
 #              the control the test could pass on two identical engines and prove
 #              nothing.
-#   physics    the sign conventions that eight of the first forty commits got
-#              wrong — banking, camber, body roll, elevation continuity.
+#   physics    the geometry, elevation, banking and roll invariants underlying
+#              the physics-related part of the orientation-fix sequence. Three of
+#              those eight corrective commits are in scope; the rest were camera,
+#              mesh and tree orientation, which nothing here renders.
 #   migrations all fourteen migrations applied to an empty PostgreSQL, then the
 #              security model asserted: PII unreachable, no client write path,
 #              rename is self-only, the board is data-minimised.

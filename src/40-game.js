@@ -1512,6 +1512,31 @@ Game.prototype.loadBoard = function () {
       row.appendChild(self.boardCell('blap', fmtTime(r.best_lap_ms)));
       rows.appendChild(row);
     }
+
+    /* SAY THAT NOTHING IS VERIFIED YET.
+       0003 chose to show unvalidated runs rather than hide them, on the grounds
+       that a board hiding everything until a validator exists is
+       indistinguishable from a broken board. That much was implemented. The
+       README then claimed the rows were shown "flagged", which was never true:
+       the query did not even select `validated`, and nothing here drew a marker.
+       Caught by an external audit reading the claim against the code.
+
+       A per-row flag is the wrong fix while the validator does not exist —
+       every row is unvalidated, so it would be fifty identical asterisks. One
+       line that states the actual position is more honest and less noise. */
+    var unverified = 0;
+    for (var k = 0; k < list.length; k++) if (list[k].validated === false) unverified++;
+    if (unverified) {
+      var note = document.createElement('div');
+      note.className = 'brow brow-note';
+      note.appendChild(self.boardCell(
+        'bnote',
+        unverified === list.length
+          ? 'No time here is replay-verified yet — the validator is not built.'
+          : unverified + ' of these times are not replay-verified yet.'
+      ));
+      rows.appendChild(note);
+    }
   });
 };
 

@@ -17,12 +17,23 @@
  * than the inside — rather than against whatever the code currently returns.
  * An assertion that just records today's output cannot catch a flip.
  *
- * WHAT IT DOES NOT COVER, stated plainly: nothing here renders. Whether the car
- * MESH visibly leans the right way needs the renderer, and 40-game.js has 98
- * references to `document`, so it is out of scope. What is covered is the chain
- * underneath it — track geometry, the banking field, and the exact sampling
- * 30-cars.js does to derive roll. That is where every one of those eight bugs
- * actually lived.
+ * WHAT IT COVERS, precisely: the geometry, elevation, banking and roll
+ * invariants underlying the PHYSICS-RELATED part of that orientation sequence.
+ * Three of the eight corrective commits touch src/30-cars.js and src/20-track.js
+ * and are in scope — b58a5af, 5c407c2, 1fac796.
+ *
+ * WHAT IT DOES NOT COVER: the rest of them. 9ba9a65 is 40-game.js only, a gyro
+ * camera change that was partly a feel decision rather than objectively wrong
+ * physics. 18ad4f5 and a9b737f are steering-wheel mesh. d82b7de is tree
+ * orientation. 503462f spans all three files. Nothing here renders — whether the
+ * car MESH visibly leans the right way needs the renderer, and 40-game.js has 98
+ * references to `document`.
+ *
+ * An earlier version of this comment claimed this suite was the chain "where
+ * every one of those eight bugs actually lived". That was an overstatement, and
+ * an external audit caught it. They are eight corrective commits addressing
+ * orientation mistakes and design decisions, not eight discrete defects in the
+ * physics this file exercises.
  *
  * No DOM and no jsdom: 20-track.js and 30-cars.js reference THREE but never
  * `document` or `window`, so the whole physics chain loads in plain node.
