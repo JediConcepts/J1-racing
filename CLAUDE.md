@@ -155,8 +155,22 @@ It pushes with `GITHUB_TOKEN`, which GitHub deliberately does not let start new
 workflow runs — that is the only thing preventing an infinite deploy loop.
 Replacing it with a PAT will recurse.
 
-An explicit `ref` input skips the build, because that is a rollback and
-rebuilding would rewrite the thing being restored.
+**The build job runs on `push` only**, and that is load-bearing rather than
+tidiness. Because the version is the commit count, every rebuild commit changes
+what the *next* build stamps — so a job that rebuilds on any trigger always
+finds `dist/` different, identical source and all, and commits again. One extra
+commit per dispatch, for ever. The `test` branch collected two rebuild commits
+from one push plus one dispatch before this was restricted. On `push` it
+terminates: source lands, the count moves, one rebuild follows, and the bot's own
+push cannot retrigger.
+
+So a `workflow_dispatch` republishes whatever is already committed and never
+rebuilds. That is what a manual republish or a rollback should do anyway.
+
+The `concurrency` group is keyed on the resolved **target**, not on the trigger.
+Keying it on `inputs.target || ref_name` put a push to `test` and a dispatch to
+`mcl64-test` in different groups, so both ran at once against the same target
+and both tried to commit `dist/`.
 
 Note also that a build can never name the commit that contains it: `build-sha`
 is always the parent. Assert against the version, or against `HEAD~1` — never
