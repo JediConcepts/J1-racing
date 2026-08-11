@@ -188,7 +188,53 @@ var BRANDS_CORNERS = [
   ['SHEENE CURVE', 34], ['STIRLINGS', 37], ['CLEARWAYS', 40], ['CLARK CURVE', 43]
 ];
 
+/* Circuit de Monaco - 3.337km street circuit around Monte Carlo harbour */
+var MONACO_CONTROL = [
+  [  350,   600,   0], /* Pit Straight / Start Finish */
+  [  120,   600,   0],
+  [ -100,   590,   0], /* Turn 1: SAINTE DEVOTE */
+  [ -220,   520,  12], /* Beau Rivage Uphill Climb */
+  [ -340,   410,  24],
+  [ -420,   280,  32], /* Turn 3: MASSENET */
+  [ -450,   120,  35], /* Turn 4: CASINO SQUARE */
+  [ -380,    10,  25],
+  [ -280,   -60,  15], /* Turn 5: MIRABEAU HAUTE */
+  [ -180,  -120,   8], /* Turn 6: FAIRMONT HAIRPIN */
+  [ -240,  -180,   4],
+  [ -210,  -260,   2], /* Turn 7: MIRABEAU BAS */
+  [ -120,  -320,   0], /* Turn 8: PORTIER */
+  [    0,  -350,   0], /* Turn 9: TUNNEL ENTRY */
+  [  200,  -320,   0], /* THE TUNNEL */
+  [  400,  -240,   0],
+  [  520,  -120,   0], /* Turns 10-11: NOUVELLE CHICANE */
+  [  460,    20,   0],
+  [  380,   120,   0], /* Turn 12: TABAC */
+  [  280,   240,   0], /* Turns 13-16: SWIMMING POOL */
+  [  200,   340,   0],
+  [  240,   440,   0],
+  [  310,   490,   0], /* Turn 18: LA RASCASSE */
+  [  380,   540,   0]  /* Turn 19: ANTHONY NOGHES */
+];
+
+var MONACO_CORNERS = [
+  ['SAINTE DEVOTE', 2], ['BEAU RIVAGE', 3], ['MASSENET', 5], ['CASINO SQUARE', 6],
+  ['MIRABEAU', 8], ['FAIRMONT HAIRPIN', 9], ['PORTIER', 12], ['THE TUNNEL', 14],
+  ['NOUVELLE CHICANE', 16], ['TABAC', 18], ['SWIMMING POOL', 19], ['LA RASCASSE', 22],
+  ['ANTHONY NOGHES', 23]
+];
+
 var TRACKS = [
+  {
+    id: 'monaco-gp-v1',
+    name: 'MONACO GRAND PRIX',
+    blurb: 'MONTE CARLO STREETS',
+    laps: 3,
+    halfW: 5.5,          /* Tight street track */
+    runoff: 4.5,         /* Armco barriers right against the track */
+    music: 'monaco',
+    control: MONACO_CONTROL,
+    corners: MONACO_CORNERS
+  },
   {
     id: 'silverstone-v1',
     name: 'SILVERSTONE',
@@ -688,10 +734,16 @@ function buildTrackMeshes(track, scene) {
     pushStrip(runoff, track, i, i2, HALF_W, WALL_HALF, -0.05, v0, v1, COL.runoff);
     pushStrip(runoff, track, i, i2, -WALL_HALF, -HALF_W, -0.05, v0, v1, COL.runoff);
 
-    /* grass skirt */
-    var gShade = (i % 5 === 0) ? COL.grassDark : COL.grass;
-    pushStrip(grass, track, i, i2, WALL_HALF, WALL_HALF + VERGE, -0.55, v0 * 0.35, v1 * 0.35, gShade);
-    pushStrip(grass, track, i, i2, -(WALL_HALF + VERGE), -WALL_HALF, -0.55, v0 * 0.35, v1 * 0.35, gShade);
+    /* grass or city street pavement skirt */
+    if (track.id === 'monaco-gp-v1') {
+      var cityPavement = (i % 2 === 0) ? srgb(0x9a9a9a) : srgb(0x8a8a8a);
+      pushStrip(grass, track, i, i2, WALL_HALF, WALL_HALF + VERGE, -0.55, v0 * 0.35, v1 * 0.35, cityPavement);
+      pushStrip(grass, track, i, i2, -(WALL_HALF + VERGE), -WALL_HALF, -0.55, v0 * 0.35, v1 * 0.35, cityPavement);
+    } else {
+      var gShade = (i % 5 === 0) ? COL.grassDark : COL.grass;
+      pushStrip(grass, track, i, i2, WALL_HALF, WALL_HALF + VERGE, -0.55, v0 * 0.35, v1 * 0.35, gShade);
+      pushStrip(grass, track, i, i2, -(WALL_HALF + VERGE), -WALL_HALF, -0.55, v0 * 0.35, v1 * 0.35, gShade);
+    }
 
     /* barrier walls */
     pushWall(wall, track, i, i2, WALL_HALF, 1.25, vAccum);
@@ -704,8 +756,11 @@ function buildTrackMeshes(track, scene) {
     map: texFromCanvas(makeAsphaltTex(), 1, 1), vertexColors: true, roughness: 0.92, metalness: 0.0 })));
   group.add(new THREE.Mesh(runoff.geometry(), new THREE.MeshStandardMaterial({
     map: texFromCanvas(makeRunoffTex(), 1, 1), vertexColors: true, roughness: 0.95, metalness: 0.0 })));
+  
+  var grassTexCanvas = track.id === 'monaco-gp-v1' ? makeAsphaltTex() : makeGrassTex();
   group.add(new THREE.Mesh(grass.geometry(), new THREE.MeshStandardMaterial({
-    map: texFromCanvas(makeGrassTex(), 6, 1), vertexColors: true, roughness: 1.0, metalness: 0.0 })));
+    map: texFromCanvas(grassTexCanvas, 6, 1), vertexColors: true, roughness: 1.0, metalness: 0.0 })));
+
   group.add(new THREE.Mesh(kerb.geometry(), new THREE.MeshStandardMaterial({
     map: texFromCanvas(makeKerbTex(), 1, 1, true), vertexColors: true, roughness: 0.72, metalness: 0.0 })));
   group.add(new THREE.Mesh(wall.geometry(), new THREE.MeshStandardMaterial({
@@ -884,18 +939,20 @@ function buildStartGantry(track, scene) {
     g.add(pillar);
   }
 
-  var beam = new THREE.Mesh(new THREE.BoxGeometry((WALL_HALF + 1.8) * 2, 1.9, 1.3), darkMat);
-  beam.position.set(mid.x, mid.y + 8.0, mid.z);
-  beam.rotation.y = yaw;
-  g.add(beam);
-
-  var bannerTex = texFromCanvas(makeSignTex('PAPAYA GP', '#ff8000', '#1b1c22', '#ffffff'), 1, 1, true);
-  var banner = new THREE.Mesh(new THREE.PlaneGeometry((WALL_HALF + 1.5) * 2, 2.6),
-    new THREE.MeshBasicMaterial({ map: bannerTex, side: THREE.DoubleSide, fog: false }));
-  banner.position.set(mid.x, mid.y + 6.4, mid.z);
-  /* spans the track, lettered face turned back toward the approach */
-  banner.rotation.y = yaw + Math.PI;
-  g.add(banner);
+  
+    var beam = new THREE.Mesh(new THREE.BoxGeometry((WALL_HALF + 1.8) * 2, 1.9, 1.3), darkMat);
+    beam.position.set(mid.x, mid.y + 8.0, mid.z);
+    beam.rotation.y = yaw;
+    g.add(beam);
+    var gpName = track.id === 'monaco-gp-v1' ? 'MONACO GP' : 'PAPAYA GP';
+    var bannerTex = texFromCanvas(makeCheckeredBannerTex(gpName, '#ff8000', '#1b1c22', '#ffffff'), 1, 1, true);
+    var banner = new THREE.Mesh(new THREE.PlaneGeometry((WALL_HALF + 1.5) * 2, 2.6),
+      new THREE.MeshBasicMaterial({ map: bannerTex, side: THREE.DoubleSide, fog: false }));
+    banner.position.set(mid.x, mid.y + 6.4, mid.z);
+    /* spans the track, lettered face turned back toward the approach */
+    banner.rotation.y = yaw + Math.PI;
+    g.add(banner);
+  
 
   /* five-light start gantry — the actual F1 ritual, and the game's clock */
   var lights = [];
@@ -947,7 +1004,7 @@ function buildScenery(track, scene) {
      start line, and leaving both in would bury five stands inside it. */
   var ringed = !!track.def.standRing;
   if (ringed) buildStandRing(scene, track, crowdMat);
-  for (var s = 0; !ringed && s < 5; s++) {
+  for (var s = 0; !ringed && track.id !== 'monaco-gp-v1' && s < 5; s++) {
     var idx = (track.startIndex - 12 + s * 9 + n) % n;
     var side = s % 2 === 0 ? 1 : -1;
     var p = track.p[idx], l = track.lat[idx], f = track.fwd[idx];
@@ -1012,11 +1069,16 @@ function buildScenery(track, scene) {
     var si = (corner.index - 24 + n) % n;
     var sp = track.p[si], sl = track.lat[si], sf = track.fwd[si];
     var sideS = track.curv[corner.index] > 0 ? -1 : 1;   /* outside of the bend */
-    var signMat = new THREE.MeshStandardMaterial({
-      map: texFromCanvas(makeSignTex(corner.name, '#1b1c22', '#ff8000', '#ff8000'), 1, 1, true),
+    if (track.id === 'monaco-gp-v1' && si > 460 && si < 580) continue; /* skip signs in tunnel */
+    
+    var signTex = texFromCanvas(makeSignTex(corner.name, '#1b1c22', '#ff8000', '#ff8000'), 1, 1, true);
+    var signMat = new THREE.MeshBasicMaterial({
+      map: signTex,
       side: THREE.DoubleSide, roughness: 0.7, metalness: 0.0
     });
-    var sign = new THREE.Mesh(new THREE.PlaneGeometry(11, 2.75), signMat);
+    var signAspect = signTex.image.width / signTex.image.height;
+    var sign = new THREE.Mesh(new THREE.PlaneGeometry(2.75 * signAspect, 2.75), signMat);
+
     sign.position.set(sp.x + sl.x * sideS * (WALL_HALF + 3.6), groundY(track, si, sideS * (WALL_HALF + 3.6)) + 2.9, sp.z + sl.z * sideS * (WALL_HALF + 3.6));
     /* +PI so the lettered FRONT face turns back up the road to meet the
        driver. Facing it down-track shows the mirrored reverse. */
@@ -1035,65 +1097,45 @@ function buildScenery(track, scene) {
   }
 
   /* crossed-quad treeline */
-  var treeTex = texFromCanvas(makeTreeTex(), 1, 1, true);
-  var treeMat = new THREE.MeshStandardMaterial({
-    map: treeTex, transparent: false, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0
-  });
-  var treeBuf = new RibbonBuilder();
-  var treeProbe = { i: 0, lateral: 0, s: 0, y: 0, fwd: null, lat: null };
-  var placed = 0;
-  for (i = 0; i < n; i += 2) {
-    for (var side2 = -1; side2 <= 1; side2 += 2) {
-      if (rnd() > 0.55) continue;
-      /* A ringed circuit is walled in by terracing from WALL_HALF + 14 out to
-         + 45, and the old + 20 grew a wood straight up through the middle of
-         the crowd. Two things keep them out of it now.
+  if (true) {
+    var treeTex = texFromCanvas(makeTreeTex(), 1, 1, true);
+    var treeMat = new THREE.MeshStandardMaterial({
+      map: treeTex, transparent: false, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0
+    });
+    var treeBuf = new RibbonBuilder();
+    var treeProbe = { i: 0, lateral: 0, s: 0, y: 0, fwd: null, lat: null };
+    var placed = 0;
+    for (i = 0; i < n; i += 2) {
+      for (var side2 = -1; side2 <= 1; side2 += 2) {
+        if (rnd() > 0.55) continue;
+        if (track.id === 'monaco-gp-v1' && i > 540 && i < 880 && side2 === 1) continue; /* harbour */
+        if (track.def.standRing && side2 > 0) continue;
+        var d = WALL_HALF + (track.def.standRing ? 56 : 20) + rnd() * 90;
+        var tp = track.p[i], tl = track.lat[i];
+        var x = tp.x + tl.x * side2 * d + (rnd() - 0.5) * 14;
+        var z = tp.z + tl.z * side2 * d + (rnd() - 0.5) * 14;
 
-         Nothing on the infield side: side2 +1 is inside the oval (lat is the
-         car's LEFT and this runs anti-clockwise), and anything planted there
-         is hidden behind the infield bank anyway.
+        track.frame(x, z, null, treeProbe);
+        if (Math.abs(treeProbe.lateral) < WALL_HALF + 6) continue;
 
-         And the margin has to cover more than the trunk. Each tree is jittered
-         up to 7 m in x AND z — worst case ~9.9 m projected onto lat — and its
-         crossed quads span up to 5.6 m either side of the trunk. So the first
-         trunk goes 15.5 m further out than the last row of seats, not flush
-         against it. */
-      if (track.def.standRing && side2 > 0) continue;
-      var d = WALL_HALF + (track.def.standRing ? 56 : 20) + rnd() * 90;
-      var tp = track.p[i], tl = track.lat[i];
-      var x = tp.x + tl.x * side2 * d + (rnd() - 0.5) * 14;
-      var z = tp.z + tl.z * side2 * d + (rnd() - 0.5) * 14;
-
-      /* Re-frame against the WHOLE circuit, not the sample we scattered from.
-         hint = null forces nearestIndex to do its global sweep instead of
-         searching +/-8 samples around i. A lap that folds back on itself puts
-         one stretch of road within scattering range of another — Brands brings
-         Druids back alongside the climb to Graham Hill — so a tree measured
-         30 m clear of sample i can be sitting on the racing line somewhere
-         else entirely. Drop anything that lands inside the barriers. */
-      track.frame(x, z, null, treeProbe);
-      if (Math.abs(treeProbe.lateral) < WALL_HALF + 6) continue;
-
-      /* Height from where the tree ACTUALLY is, not from the sample it was
-         scattered off. On a flat circuit those agree; on Brands, with 34 m
-         between Paddock Hill and Druids, the old centreline height left whole
-         stands of trees hanging in the air.
-
-         The bank term is clamped at the grass edge because beyond WALL_HALF +
-         VERGE there is no ground mesh to follow, and extrapolating the camber
-         out to 120 m would lift them off the ground all over again. */
-      var vergeEdge = WALL_HALF + VERGE;
-      var y = groundY(track, treeProbe.i, clamp(treeProbe.lateral, -vergeEdge, vergeEdge)) - 0.6;
-      var hgt = 9 + rnd() * 9;
-      var wdt = hgt * 0.62;
-      pushCrossQuad(treeBuf, x, y, z, wdt, hgt, rnd() * TAU);
-      placed++;
+        var vergeEdge = WALL_HALF + VERGE;
+        var y = groundY(track, treeProbe.i, clamp(treeProbe.lateral, -vergeEdge, vergeEdge)) - 0.6;
+        var hgt = 9 + rnd() * 9;
+        var wdt = hgt * 0.62;
+        pushCrossQuad(treeBuf, x, y, z, wdt, hgt, rnd() * TAU);
+        placed++;
+        if (placed > 420) break;
+      }
       if (placed > 420) break;
     }
-    if (placed > 420) break;
+    var trees = new THREE.Mesh(treeBuf.geometry(), treeMat); trees.castShadow = true; trees.receiveShadow = true;
+    scene.add(trees);
   }
-  var trees = new THREE.Mesh(treeBuf.geometry(), treeMat);
-  scene.add(trees);
+
+  /* Monaco GP Real 3D Tunnel Canopy, Fairmont Hotel & Urban Street Environment */
+  if (track.id === 'monaco-gp-v1') {
+    buildMonacoTunnelAndUrbanScenery(track, scene);
+  }
 
   /* drifting cloud plane */
   var cloudTex = texFromCanvas(makeCloudTex(), 1, 1, true);
@@ -1109,6 +1151,330 @@ function buildScenery(track, scene) {
   scene.add(clouds);
 
   return { clouds: clouds };
+}
+
+function buildMonacoTunnelAndUrbanScenery(track, scene) {
+  var n = track.n;
+  var tunnelBuilder = new RibbonBuilder();
+  var lightBuilder = new RibbonBuilder();
+  var darkConcrete = srgb(0x22242a);
+  var lightConcrete = srgb(0x555860);
+  var goldLight = new THREE.Color(0xffd700);
+
+  var tunnelStart = 470;
+  var tunnelEnd = 575;
+
+  /* 3D Tunnel Canopy & Inside Ceiling Lights */
+  for (var i = tunnelStart; i < tunnelEnd; i++) {
+    var i2 = (i + 1) % n;
+    var H = 5.8;
+    var wL = -WALL_HALF;
+    var wR = WALL_HALF;
+
+    var bL0 = edgeY(track, i, wL, 1.25), bL1 = edgeY(track, i2, wL, 1.25);
+    var bR0 = edgeY(track, i, wR, 1.25), bR1 = edgeY(track, i2, wR, 1.25);
+
+    var rL0 = edgeY(track, i, wL, H), rL1 = edgeY(track, i2, wL, H);
+    var rR0 = edgeY(track, i, wR, H), rR1 = edgeY(track, i2, wR, H);
+
+    /* Tunnel Roof Ceiling (inner face looking down) */
+    tunnelBuilder.quad(rL0, rL1, rR1, rR0, [[0, 0], [0, 1], [1, 1], [1, 0]], darkConcrete);
+
+    /* Tunnel Upper Side Walls */
+    tunnelBuilder.quad(bL0, bL1, rL1, rL0, [[0, 0], [0, 1], [1, 1], [1, 0]], darkConcrete);
+    tunnelBuilder.quad(rR0, rR1, bR1, bR0, [[0, 0], [0, 1], [1, 1], [1, 0]], darkConcrete);
+
+    /* Outer Roof Cover */
+    var oL0 = edgeY(track, i, wL - 1.0, H + 0.4), oL1 = edgeY(track, i2, wL - 1.0, H + 0.4);
+    var oR0 = edgeY(track, i, wR + 1.0, H + 0.4), oR1 = edgeY(track, i2, wR + 1.0, H + 0.4);
+    tunnelBuilder.quad(oL0, oL1, oR1, oR0, [[0, 0], [0, 1], [1, 1], [1, 0]], lightConcrete);
+
+    /* Interior Ceiling Lights */
+    if (i % 3 === 0) {
+      var lA0 = edgeY(track, i, -2.5, H - 0.05), lA1 = edgeY(track, i2, -2.5, H - 0.05);
+      var lB0 = edgeY(track, i, -1.5, H - 0.05), lB1 = edgeY(track, i2, -1.5, H - 0.05);
+      lightBuilder.quad(lA0, lA1, lB1, lB0, [[0,0],[0,1],[1,1],[1,0]], goldLight);
+
+      var rA0 = edgeY(track, i, 1.5, H - 0.05), rA1 = edgeY(track, i2, 1.5, H - 0.05);
+      var rB0 = edgeY(track, i, 2.5, H - 0.05), rB1 = edgeY(track, i2, 2.5, H - 0.05);
+      lightBuilder.quad(rA0, rA1, rB1, rB0, [[0,0],[0,1],[1,1],[1,0]], goldLight);
+    }
+  }
+
+  var tunnelMesh = new THREE.Mesh(tunnelBuilder.geometry(), new THREE.MeshStandardMaterial({
+    vertexColors: true, roughness: 0.8, metalness: 0.2, side: THREE.DoubleSide
+  }));
+  tunnelMesh.castShadow = true; tunnelMesh.receiveShadow = true; scene.add(tunnelMesh);
+
+  var lightMesh = new THREE.Mesh(lightBuilder.geometry(), new THREE.MeshBasicMaterial({
+    vertexColors: true, side: THREE.DoubleSide
+  }));
+  scene.add(lightMesh);
+
+  /* Tunnel Entrance & Exit Portals */
+  function buildPortal(idx, title) {
+    var p = track.p[idx], f = track.fwd[idx];
+    var yaw = datan2(f.x, f.z);
+    var g = new THREE.Group();
+    var archMat = new THREE.MeshStandardMaterial({ color: srgb(0x3a3d45), roughness: 0.7 });
+    
+    var archW = WALL_HALF * 2 + 3;
+    var arch = new THREE.Mesh(new THREE.BoxGeometry(archW, 2.2, 2.5), archMat);
+    arch.position.set(p.x, p.y + 6.2, p.z);
+    arch.rotation.y = yaw;
+    g.add(arch);
+
+    var bannerTex = texFromCanvas(makeCheckeredBannerTex(title, '#ff8000', '#1b1c22', '#ffffff'), 1, 1, true);
+    var sign = new THREE.Mesh(new THREE.PlaneGeometry((WALL_HALF + 1.5) * 2, 2.6),
+      new THREE.MeshBasicMaterial({ map: bannerTex, side: THREE.DoubleSide, fog: false }));
+    
+    // Position it slightly in front of the arch (from the driver's perspective)
+    // Driver comes from -f. So to face the driver, we move it back along -f.
+    var signOffset = idx === tunnelStart ? -1.3 : -1.3; 
+    sign.position.set(p.x + f.x * signOffset, p.y + 6.2, p.z + f.z * signOffset);
+    sign.rotation.y = yaw + Math.PI;
+    g.add(sign);
+    scene.add(g);
+  }
+
+  buildPortal(tunnelStart, 'THE TUNNEL - MONTE CARLO');
+  buildPortal(tunnelEnd, 'TUNNEL EXIT - NOUVELLE CHICANE');
+
+  /* Fairmont Hotel on top of Tunnel */
+  var midI = Math.floor((tunnelStart + tunnelEnd) / 2);
+  var midP = track.p[midI], midL = track.lat[midI], midF = track.fwd[midI];
+  var midYaw = datan2(midF.x, midF.z);
+
+  var hotelMat = new THREE.MeshStandardMaterial({ color: srgb(0xdedad4), roughness: 0.8 });
+  var hotel = new THREE.Mesh(new THREE.BoxGeometry(40, 16, 50), hotelMat);
+  hotel.position.set(midP.x + midL.x * 28, midP.y + 14, midP.z + midL.z * 28);
+  hotel.rotation.y = midYaw;
+  hotel.castShadow = true; hotel.receiveShadow = true; scene.add(hotel);
+
+  /* Casino de Monte-Carlo at Casino Square (Outer Left Side, clear of Sainte Devote) */
+  var casI = 225;
+  var casP = track.p[casI], casL = track.lat[casI], casF = track.fwd[casI];
+  var casYaw = datan2(casF.x, casF.z);
+
+  var casOff = WALL_HALF + 38;
+  var casX = casP.x + casL.x * casOff;
+  var casZ = casP.z + casL.z * casOff;
+
+  var casinoMat = new THREE.MeshStandardMaterial({ color: srgb(0xe8e2d8), roughness: 0.7 });
+  var casinoDomeMat = new THREE.MeshStandardMaterial({ color: srgb(0x386b62), roughness: 0.4 });
+  var casinoGroup = new THREE.Group();
+
+  var casinoMain = new THREE.Mesh(new THREE.BoxGeometry(40, 18, 22), casinoMat);
+  casinoMain.position.set(casX, casP.y + 9, casZ);
+  casinoMain.rotation.y = casYaw;
+  casinoGroup.add(casinoMain);
+
+  var dome = new THREE.Mesh(new THREE.SphereGeometry(7, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), casinoDomeMat);
+  dome.position.set(casX, casP.y + 18, casZ);
+  casinoGroup.add(dome);
+
+  var casSignTex = texFromCanvas(makeSignTex('CASINO DE MONTE-CARLO', '#ff8000', '#1c1b22', '#ffffff'), 1, 1, true);
+  var casSign = new THREE.Mesh(new THREE.PlaneGeometry(22, 3.2), new THREE.MeshBasicMaterial({ map: casSignTex, side: THREE.DoubleSide }));
+  var signX = casP.x + casL.x * (WALL_HALF + 9);
+  var signZ = casP.z + casL.z * (WALL_HALF + 9);
+  casSign.position.set(signX, casP.y + 5.5, signZ);
+  casSign.rotation.y = casYaw - Math.PI / 2;
+  casinoGroup.add(casSign);
+
+  casinoGroup.traverse(function(c) { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } }); scene.add(casinoGroup);
+
+  /* Harbour Mediterranean Sea & Superyachts */
+  var seaGeo = new THREE.PlaneGeometry(600, 700);
+  var seaMat = new THREE.MeshStandardMaterial({ color: srgb(0x16334f), roughness: 0.25, metalness: 0.6 });
+  var sea = new THREE.Mesh(seaGeo, seaMat);
+  sea.rotation.x = -Math.PI / 2;
+  var harbourY = track.p[700].y; // use track elevation at the harbour
+  sea.position.set(220, harbourY - 0.4, 50);
+  sea.receiveShadow = true; scene.add(sea);
+  track.sea = sea;
+
+  var yachtHullMat = new THREE.MeshStandardMaterial({ color: srgb(0xf0f2f5), roughness: 0.3, metalness: 0.2 });
+  var yachtDeckMat = new THREE.MeshStandardMaterial({ color: srgb(0x20242a), roughness: 0.5 });
+
+  var yachtPositions = [
+    { x: 300, z: -100, yaw: -0.5 },
+    { x: 220, z: -50, yaw: -0.2 },
+    { x: 250, z: 20, yaw: -0.7 },
+    { x: 350, z: 0, yaw: -0.3 },
+    { x: 300, z: 80, yaw: -0.5 },
+    { x: 240, z: 120, yaw: 0.1 },
+    { x: 180, z: 160, yaw: 0.3 },
+    { x: 280, z: 180, yaw: -0.4 },
+    { x: 220, z: 240, yaw: 0.5 },
+    { x: 150, z: 280, yaw: 0.8 }
+  ];
+
+  var safeDistSqYacht = (WALL_HALF + 8) * (WALL_HALF + 8);
+
+  yachtPositions.forEach(function (pos) {
+    var hitsTrack = false;
+    for (var tj = 0; tj < n; tj += 3) {
+      var tp = track.p[tj];
+      var dx = pos.x - tp.x, dz = pos.z - tp.z;
+      if (dx * dx + dz * dz < safeDistSqYacht) {
+        hitsTrack = true;
+        break;
+      }
+    }
+    if (hitsTrack) return;
+
+    var yacht = new THREE.Group();
+    
+    // Hull base
+    var hw = 4;
+    var hl = 12;
+    var hh = 2.5;
+
+    // Main box for the back of the hull
+    var backHull = new THREE.Mesh(new THREE.BoxGeometry(hw*2, hh*2, hl*2), yachtHullMat);
+    backHull.position.set(0, hh, -hl/2);
+    yacht.add(backHull);
+
+    // Cylinder/Cone for the front (bow)
+    var bowGeo = new THREE.CylinderGeometry(0.1, hw, hl*1.5, 3, 1, false, 0, Math.PI);
+    var bow = new THREE.Mesh(bowGeo, yachtHullMat);
+    // Cylinder is along Y. We want it along Z.
+    bow.rotation.x = Math.PI / 2;
+    // We want the flat part of the half-cylinder to align with the backHull.
+    // The half-cylinder is from 0 to PI. 
+    // Actually, a simple cone is better.
+    
+    var coneGeo = new THREE.ConeGeometry(hw, hl*1.5, 16);
+    var cone = new THREE.Mesh(coneGeo, yachtHullMat);
+    cone.rotation.x = Math.PI / 2;
+    cone.position.set(0, hh, hl/2 + hl*0.75);
+    // yacht.add(cone);
+
+    // Let's just use a Box for the back and a manually positioned wedge for the bow.
+    var bowWedge = new THREE.BufferGeometry();
+    var verts = new Float32Array([
+      -hw, 0, 0,    hw, 0, 0,     0, 0, hl*1.5,      // bottom triangle
+      -hw, hh*2, 0, hw, hh*2, 0,  0, hh*2, hl*1.5,   // top triangle
+      -hw, 0, 0,   -hw, hh*2, 0,  0, hh*2, hl*1.5,   // left side 1
+      -hw, 0, 0,    0, hh*2, hl*1.5, 0, 0, hl*1.5,   // left side 2
+       hw, 0, 0,    hw, hh*2, 0,  0, hh*2, hl*1.5,   // right side 1
+       hw, 0, 0,    0, hh*2, hl*1.5, 0, 0, hl*1.5,   // right side 2
+      -hw, 0, 0,    hw, 0, 0,     hw, hh*2, 0,       // back side 1
+      -hw, 0, 0,    hw, hh*2, 0, -hw, hh*2, 0        // back side 2
+    ]);
+    bowWedge.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+    bowWedge.computeVertexNormals();
+    var bow = new THREE.Mesh(bowWedge, yachtHullMat);
+    bow.position.set(0, 0, hl/2);
+    yacht.add(bow);
+
+    // Cabin
+    var cabin = new THREE.Mesh(new THREE.BoxGeometry(hw*1.5, 2.5, hl*1.2), yachtDeckMat);
+    cabin.position.set(0, hh*2 + 1.25, -hl/4);
+    yacht.add(cabin);
+    
+    // Windows
+    var winGeo = new THREE.BoxGeometry(hw*1.55, 1.2, hl*1.25);
+    var windowMat = new THREE.MeshBasicMaterial({color: 0x050505});
+    var windows = new THREE.Mesh(winGeo, windowMat);
+    windows.position.set(0, hh*2 + 1.25, -hl/4);
+    yacht.add(windows);
+
+    // Flybridge / Roof
+    var roof = new THREE.Mesh(new THREE.BoxGeometry(hw*1.4, 0.5, hl*1.1), yachtHullMat);
+    roof.position.set(0, hh*2 + 2.5 + 0.25, -hl/4);
+    yacht.add(roof);
+    
+    // Radar dome / Mast
+    var mast = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 3, 8), yachtHullMat);
+    mast.position.set(0, hh*2 + 2.5 + 1.5, -hl/2);
+    yacht.add(mast);
+
+    yacht.position.set(pos.x, harbourY - 0.5, pos.z);
+    yacht.rotation.y = pos.yaw;
+    yacht.traverse(function(c) { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } }); scene.add(yacht);
+  });
+
+  /* Monte Carlo Urban Buildings along streets */
+  var buildingTex1 = texFromCanvas(makeBuildingTex('#dbd3c5', '#1a1f24'), 1, 1, true);
+  var buildingTex2 = texFromCanvas(makeBuildingTex('#c9bba8', '#2a2f34'), 1, 1, true);
+  var buildingTex3 = texFromCanvas(makeBuildingTex('#b0a18f', '#1a1f24'), 1, 1, true);
+  var buildingMat1 = new THREE.MeshStandardMaterial({ map: buildingTex1, roughness: 0.8 });
+  var buildingMat2 = new THREE.MeshStandardMaterial({ map: buildingTex2, roughness: 0.8 });
+  var buildingMat3 = new THREE.MeshStandardMaterial({ map: buildingTex3, roughness: 0.8 });
+  var mats = [buildingMat1, buildingMat2, buildingMat3];
+
+  var step = 6;
+  for (var bi = 0; bi < n; bi += step) {
+    if (bi >= tunnelStart - 25 && bi <= tunnelEnd + 25) continue;
+    /* Strictly keep start/finish straight, Sainte Devote hill / Turn 1 (0-220), and La Rascasse / Anthony Noghes / Pit exit (640-n) 100% open */
+    
+
+    var bp = track.p[bi], bl = track.lat[bi], bf = track.fwd[bi];
+    var bYaw = datan2(bf.x, bf.z);
+    var cosY = dcos(bYaw), sinY = dsin(bYaw);
+
+    for (var bSide = -1; bSide <= 1; bSide += 2) {
+      if (bi > 540 && bi < 880 && bSide === 1) continue; /* Keep harbour side clear for superyachts */
+
+      var bDist = track.id === 'monaco-gp-v1' ? WALL_HALF + 15 + (bi % 4) * 5 : WALL_HALF + 30 + (bi % 3) * 6;
+      var bx = bp.x + bl.x * bSide * bDist;
+      var bz = bp.z + bl.z * bSide * bDist;
+
+      var bHeight = 16 + (bi % 5) * 8;
+      var bWidth = 16 + (bi % 2) * 6;
+      var bDepth = 14;
+
+      /* Dense rotated 2D footprint grid check against ALL track sample points across the ENTIRE circuit */
+      var marginW = bWidth / 2 + 5;
+      var marginD = bDepth / 2 + 5;
+      var safeDistSq = (WALL_HALF + 4) * (WALL_HALF + 4); /* 4m clearance from track centerline */
+      var hitsTrack = false;
+
+      for (var u = -1.0; u <= 1.0; u += 0.5) {
+        for (var v = -1.0; v <= 1.0; v += 0.5) {
+          var lx = u * marginW;
+          var lz = v * marginD;
+          /* Rotate local footprint offsets by bYaw into world space */
+          var wx = bx + lx * cosY - lz * sinY;
+          var wz = bz + lx * sinY + lz * cosY;
+
+          for (var tj = 0; tj < n; tj += 2) {
+            var tp = track.p[tj];
+            var dx = wx - tp.x, dz = wz - tp.z;
+            if (dx * dx + dz * dz < safeDistSq) {
+              hitsTrack = true;
+              break;
+            }
+          }
+          if (hitsTrack) break;
+        }
+        if (hitsTrack) break;
+      }
+      if (hitsTrack) continue;
+
+      var bGeo = new THREE.BoxGeometry(bWidth, bHeight, bDepth);
+      var pos = bGeo.attributes.position;
+      var uv = bGeo.attributes.uv;
+      for (var i = 0; i < uv.count; i++) {
+        var x = pos.getX(i);
+        var y = pos.getY(i);
+        var z = pos.getZ(i);
+        // Box faces: simple UV scaling based on world-ish size
+        if (Math.abs(x) >= bWidth/2 - 0.01) {
+          uv.setXY(i, z / 6, y / 6);
+        } else if (Math.abs(z) >= bDepth/2 - 0.01) {
+          uv.setXY(i, x / 6, y / 6);
+        } else {
+          uv.setXY(i, x / 6, z / 6);
+        }
+      }
+      var bMesh = new THREE.Mesh(bGeo, mats[(bi / step) % mats.length]);
+      bMesh.position.set(bx, bp.y + bHeight / 2 - 0.5, bz);
+      bMesh.rotation.y = bYaw; bMesh.castShadow = true; bMesh.receiveShadow = true;
+      scene.add(bMesh);
+    }
+  }
 }
 
 function pushCrossQuad(rb, x, y, z, w, h, rot) {
