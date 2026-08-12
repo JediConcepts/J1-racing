@@ -1,6 +1,6 @@
 name: tests
 
-# Three suites, each verifying a claim this repository makes in prose.
+# Four suites, each verifying a claim this repository makes in prose.
 #
 #   maths      the README says the deterministic transcendentals are bit-identical
 #              across V8 and JavaScriptCore. This runs both engines and checks it,
@@ -11,9 +11,15 @@ name: tests
 #              the physics-related part of the orientation-fix sequence. Three of
 #              those eight corrective commits are in scope; the rest were camera,
 #              mesh and tree orientation, which nothing here renders.
-#   migrations all fourteen migrations applied to an empty PostgreSQL, then the
+#   migrations all sixteen migrations applied to an empty PostgreSQL, then the
 #              security model asserted: PII unreachable, no client write path,
-#              rename is self-only, the board is data-minimised.
+#              rename is self-only, the board is data-minimised. Also that every
+#              circuit in src/20-track.js has a row in track_versions — Monaco
+#              shipped without one and every score posted on it was rejected.
+#   music      that adding Monaco's 3/4 waltz did not disturb the three 4/4
+#              themes it shares a scheduler with. Their whole scheduled event
+#              stream is pinned to a digest, because a background loop whose
+#              backbeat quietly moved is not something anyone would notice.
 #
 # Not covered, deliberately: anything that renders. 40-game.js has 98 references
 # to `document`, and a browser harness would cost more than it verifies here.
@@ -55,6 +61,16 @@ jobs:
         with:
           node-version: '22'
       - run: node test/physics.test.js
+
+  music:
+    name: music — themes and scheduler
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node test/music.test.js
 
   migrations:
     name: migrations — schema and security model

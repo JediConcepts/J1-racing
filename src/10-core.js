@@ -563,11 +563,60 @@ var DOWNLAND_KICK = [1, 0, 0, 1, 1, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 0,
 var DOWNLAND_SNARE = [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0,
                       0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0];
 
+/* VALSE DE MONACO — Monte Carlo. The odd one out, and deliberately so: the
+   other three are 4/4 driving rock and this is a 3/4 musette, the accordion
+   waltz of a Paris street rather than a grid.
+
+   G harmonic minor, i - iv - V7 - i. The F# is the point — the raised seventh
+   of the harmonic minor is what makes the ear hear Europe rather than a
+   generic minor-key game tune, and it is the note the whole idiom turns on.
+
+   Written as an oom-pah-pah, which is a rhythm the engine could not previously
+   express: the bass takes beat one alone, and the chord answers on two and
+   three, staccato. Voicings move by a step or less between bars, which is how
+   the accompaniment stays out of the melody's way — see `comp` in tickMusic.
+
+   Original, in the idiom, like the other three. Nothing is quoted, transposed
+   or paraphrased. i-iv-V7-i and oom-pah-pah are the common stock of every
+   waltz written since the 1800s and belong to nobody. */
+var MONACO_BASS = [
+  43, null, null, null, null, 46,
+  48, null, null, null, null, 50,
+  50, null, null, null, null, 42,
+  43, null, null, null, null, 45
+];
+/* The tune. Arches up through the Gm triad, turns at the top on Eb, then walks
+   back down to the F# that pulls the loop round again. */
+var MONACO_LEAD = [
+  67, 70, 74, 75, 74, 72,
+  70, null, 72, 70, 67, null,
+  69, null, 66, 69, 72, null,
+  74, 72, 70, 69, 67, 66
+];
+/* Gm - Cm - D7 - Gm, voiced for minimum movement: G-Bb-D, G-C-Eb, F#-A-C,
+   G-Bb-D. The D7 is rootless — the bass is already playing the D. */
+var MONACO_CHORDS = [[55, 58, 62], [55, 60, 63], [54, 57, 60], [55, 58, 62]];
+/* Kick on the downbeat only, doubling the oom. */
+var MONACO_KICK = [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+                   1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0];
+/* A backbeat on two and three, at less than half a hit. A full snare here
+   turns a waltz into a rock song in 3/4; at 0.45 it sits under the reeds and
+   keeps some of the drive the other three circuits have. */
+var MONACO_SNARE = [0, 0, 0.45, 0, 0.45, 0, 0, 0, 0.45, 0, 0.45, 0,
+                    0, 0, 0.45, 0, 0.45, 0, 0, 0, 0.45, 0, 0.45, 0];
+
+/* Chord on the downbeat: what every 4/4 theme here does, and the default. */
+var COMP_DOWNBEAT = [0];
+
 /* A circuit names one of these; unknown or absent falls back to `papaya`. */
 var MUSIC_THEMES = {
   papaya:   { bpm: 134, bass: BASS_LINE,     lead: LEAD_LINE,     chords: CHORDS,          kick: KICK,          snare: SNARE },
   speedway: { bpm: 142, bass: SPEEDWAY_BASS, lead: SPEEDWAY_LEAD, chords: SPEEDWAY_CHORDS, kick: SPEEDWAY_KICK, snare: SPEEDWAY_SNARE },
-  downland: { bpm: 126, bass: DOWNLAND_BASS, lead: DOWNLAND_LEAD, chords: DOWNLAND_CHORDS, kick: DOWNLAND_KICK, snare: DOWNLAND_SNARE }
+  downland: { bpm: 126, bass: DOWNLAND_BASS, lead: DOWNLAND_LEAD, chords: DOWNLAND_CHORDS, kick: DOWNLAND_KICK, snare: DOWNLAND_SNARE },
+  /* comp/compDur/detune/leadWave are the waltz-only fields; every one of them
+     defaults to the 4/4 behaviour above when a theme omits it. */
+  monaco:   { bpm: 168, bass: MONACO_BASS,   lead: MONACO_LEAD,   chords: MONACO_CHORDS,   kick: MONACO_KICK,   snare: MONACO_SNARE,
+              comp: [2, 4], compDur: 0.16, detune: 1.007, leadWave: 'sawtooth' }
 };
 
 function midiFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
@@ -604,14 +653,19 @@ EngineAudio.prototype.tone = function (t, freq, dur, type, vol, cutoff) {
   o.start(t); o.stop(t + dur + 0.05);
 };
 
-EngineAudio.prototype.drum = function (t, kind) {
+/* vel scales the hit, defaulting to a full one. It exists because Monaco wants
+   a backbeat soft enough to sit under an accordion rather than in front of it,
+   and a theme carries its dynamics in its own pattern arrays — a 1 is a full
+   hit, so every pattern written before this behaves exactly as it did. */
+EngineAudio.prototype.drum = function (t, kind, vel) {
   var ctx = this.ctx;
+  var v = (vel === undefined || vel === null) ? 1 : vel;
   if (kind === 'kick') {
     var o = ctx.createOscillator(), g = ctx.createGain();
     o.type = 'sine';
     o.frequency.setValueAtTime(132, t);
     o.frequency.exponentialRampToValueAtTime(42, t + 0.12);
-    g.gain.setValueAtTime(0.62, t);
+    g.gain.setValueAtTime(0.62 * v, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + 0.20);
     o.connect(g); g.connect(this.musicBus);
     o.start(t); o.stop(t + 0.22);
@@ -624,7 +678,7 @@ EngineAudio.prototype.drum = function (t, kind) {
   var g2 = ctx.createGain();
   if (kind === 'snare') {
     f.type = 'bandpass'; f.frequency.value = 1750; f.Q.value = 0.8;
-    g2.gain.setValueAtTime(0.34, t);
+    g2.gain.setValueAtTime(0.34 * v, t);
     g2.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
     src.start(t); src.stop(t + 0.18);
   } else {
@@ -652,24 +706,53 @@ EngineAudio.prototype.tickMusic = function (level) {
   var now = this.ctx.currentTime;
   if (this.musicNext < now) this.musicNext = now + 0.06;
 
+  /* DERIVED, not declared. Both used to be the constants 32 and 8, which made
+     4/4 an assumption of the engine rather than a property of a theme. Monaco
+     is a waltz: 24 eighth-notes, six to the bar. Taking the pattern length from
+     the arrays themselves and the bar length from the chord count means a theme
+     cannot disagree with itself — a `steps: 24` field beside a 24-long array is
+     the same fact written twice, and the second copy is the one that goes
+     stale. The three 4/4 themes give 32 and 8 exactly as before. */
+  var n = th.bass.length;
+  var barSteps = n / th.chords.length;
+
+  /* Which beats of the bar the chord sounds on. The default is the downbeat,
+     which is what every theme did when this was `i % 8 === 0`. A musette
+     inverts it: the bass takes the downbeat and the chord answers on two and
+     three — that displacement IS the oom-pah-pah, and it cannot be written as
+     note data because the chord track had no rhythm of its own. */
+  var comp = th.comp || COMP_DOWNBEAT;
+  var compDur = th.compDur || 0.62;
+  var leadWave = th.leadWave || 'square';
+
   var guard = 0;
   while (this.musicNext < now + 0.25 && guard++ < 16) {
     var i = this.musicStep, t = this.musicNext;
 
     if (th.bass[i] != null) this.tone(t, midiFreq(th.bass[i]), 0.23, 'sawtooth', 0.30, 620);
-    if (th.lead[i] != null) this.tone(t, midiFreq(th.lead[i]), 0.26, 'square', 0.11, 2600);
-    if (th.kick[i]) this.drum(t, 'kick');
-    if (th.snare[i]) this.drum(t, 'snare');
+    if (th.lead[i] != null) {
+      var lf = midiFreq(th.lead[i]);
+      this.tone(t, lf, 0.26, leadWave, 0.11, 2600);
+      /* Musette tuning is two reeds a few cents apart, beating against each
+         other. The beating is not an effect applied to an accordion — it is
+         what makes the sound one, so the second voice belongs here in the
+         instrument and not in an effects chain the engine does not have. */
+      if (th.detune) this.tone(t, lf * th.detune, 0.26, leadWave, 0.095, 2600);
+    }
+    /* The pattern value is the velocity, so a 1 is the full hit every theme
+       written before this used. */
+    if (th.kick[i]) this.drum(t, 'kick', th.kick[i]);
+    if (th.snare[i]) this.drum(t, 'snare', th.snare[i]);
     this.drum(t, 'hat');
 
-    if (i % 8 === 0) {
-      var ch = th.chords[(i / 8) | 0];
+    if (comp.indexOf(i % barSteps) >= 0) {
+      var ch = th.chords[(i / barSteps) | 0];
       for (var c = 0; c < ch.length; c++) {
-        this.tone(t, midiFreq(ch[c] + 12), 0.62, 'triangle', 0.055, 1800);
+        this.tone(t, midiFreq(ch[c] + 12), compDur, 'triangle', 0.055, 1800);
       }
     }
 
-    this.musicStep = (i + 1) % 32;
+    this.musicStep = (i + 1) % n;
     this.musicNext += stepDur;
   }
 };
