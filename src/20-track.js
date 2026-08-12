@@ -736,7 +736,7 @@ function buildTrackMeshes(track, scene) {
 
     /* grass or city street pavement skirt */
     if (track.id === 'monaco-gp-v1') {
-      var cityPavement = (i % 2 === 0) ? srgb(0x9a9a9a) : srgb(0x8a8a8a);
+      var cityPavement = (i % 2 === 0) ? srgb(0xc4ab97) : srgb(0xb39c89);
       pushStrip(grass, track, i, i2, WALL_HALF, WALL_HALF + VERGE, -0.55, v0 * 0.35, v1 * 0.35, cityPavement);
       pushStrip(grass, track, i, i2, -(WALL_HALF + VERGE), -WALL_HALF, -0.55, v0 * 0.35, v1 * 0.35, cityPavement);
     } else {
@@ -757,7 +757,7 @@ function buildTrackMeshes(track, scene) {
   group.add(new THREE.Mesh(runoff.geometry(), new THREE.MeshStandardMaterial({
     map: texFromCanvas(makeRunoffTex(), 1, 1), vertexColors: true, roughness: 0.95, metalness: 0.0 })));
   
-  var grassTexCanvas = track.id === 'monaco-gp-v1' ? makeAsphaltTex() : makeGrassTex();
+  var grassTexCanvas = track.id === 'monaco-gp-v1' ? makeCityGroundTex() : makeGrassTex();
   group.add(new THREE.Mesh(grass.geometry(), new THREE.MeshStandardMaterial({
     map: texFromCanvas(grassTexCanvas, 6, 1), vertexColors: true, roughness: 1.0, metalness: 0.0 })));
 
@@ -851,6 +851,7 @@ function pushWall(rb, track, i, i2, off, h, vAcc) {
    circuit so its normal points up and inward, toward the racing. */
 function buildStandRing(scene, track, crowdMat) {
   var n = track.n;
+  var rnd = mulberry32(12345);
   var STEP = 4;                     /* one quad per 4 samples is ample here */
   var Y0 = 1.4, Y1 = 15.0;
   /* The two sides are NOT symmetrical. Perimeter terracing crowds the wall,
@@ -988,6 +989,7 @@ function buildStartGantry(track, scene) {
 function buildScenery(track, scene) {
   var rnd = mulberry32(20240);
   var n = track.n;
+  var rnd = mulberry32(12345);
   var i;
 
   /* grandstands and pit buildings clustered around the start line */
@@ -995,7 +997,7 @@ function buildScenery(track, scene) {
   var standMat = new THREE.MeshStandardMaterial({ color: srgb(0x33353f), roughness: 0.82, metalness: 0.1 });
   var crowdMat = new THREE.MeshStandardMaterial({ map: crowdTex, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0 });
   var roofMat = new THREE.MeshStandardMaterial({ color: COL.papaya, roughness: 0.45, metalness: 0.2 });
-  var pitMat = new THREE.MeshStandardMaterial({ map: texFromCanvas(makePitwallTex(), 4, 1, true), roughness: 0.7, metalness: 0.0 });
+  var pitMat = new THREE.MeshStandardMaterial({ map: texFromCanvas(makePitwallTex(), 4, 1, true),  });
 
   /* Stands stand back far enough to frame the straight instead of walling it
      in, and the terracing is dark so the crowd is what actually reads.
@@ -1074,7 +1076,7 @@ function buildScenery(track, scene) {
     var signTex = texFromCanvas(makeSignTex(corner.name, '#1b1c22', '#ff8000', '#ff8000'), 1, 1, true);
     var signMat = new THREE.MeshBasicMaterial({
       map: signTex,
-      side: THREE.DoubleSide, roughness: 0.7, metalness: 0.0
+      side: THREE.DoubleSide
     });
     var signAspect = signTex.image.width / signTex.image.height;
     var sign = new THREE.Mesh(new THREE.PlaneGeometry(2.75 * signAspect, 2.75), signMat);
@@ -1148,13 +1150,24 @@ function buildScenery(track, scene) {
     cq.rotation.y = -ang + Math.PI / 2;
     clouds.add(cq);
   }
-  scene.add(clouds);
+    scene.add(clouds);
+
+  /* Massive City Ground Plane to block the sky "flooding" effect on the right */
+  var cityGroundGeo = new THREE.PlaneGeometry(4000, 4000);
+  var cityGroundMat = new THREE.MeshStandardMaterial({ color: srgb(0x555555), roughness: 0.9, metalness: 0.1 });
+  var cityGround = new THREE.Mesh(cityGroundGeo, cityGroundMat);
+  cityGround.rotation.x = -Math.PI / 2;
+  cityGround.position.set(0, -10.0, 0); // Just below sea and track
+  cityGround.receiveShadow = true;
+  scene.add(cityGround);
+
 
   return { clouds: clouds };
 }
 
 function buildMonacoTunnelAndUrbanScenery(track, scene) {
   var n = track.n;
+  var rnd = mulberry32(12345);
   var tunnelBuilder = new RibbonBuilder();
   var lightBuilder = new RibbonBuilder();
   var darkConcrete = srgb(0x22242a);
@@ -1284,32 +1297,91 @@ function buildMonacoTunnelAndUrbanScenery(track, scene) {
   casinoGroup.traverse(function(c) { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } }); scene.add(casinoGroup);
 
   /* Harbour Mediterranean Sea & Superyachts */
-  var seaGeo = new THREE.PlaneGeometry(600, 700);
-  var seaMat = new THREE.MeshStandardMaterial({ color: srgb(0x16334f), roughness: 0.25, metalness: 0.6 });
+    var seaGeo = new THREE.BufferGeometry();
+  var seaVerts = [];
+  var cx = 1200, cz = 100;
+  var coastPts = [
+    [420, -300],
+    [420, -240],
+    [550, -120],
+    [490, 20],
+    [410, 120],
+    [310, 240],
+    [230, 340],
+    [270, 440],
+    [340, 490],
+    [1200, 490],
+    [1200, -300],
+    [420, -300]
+  ];
+  for (var ci = 0; ci < coastPts.length - 1; ci++) {
+    seaVerts.push(cx, 0, cz);
+    // Note: winding order must be counter-clockwise for the face to point UP (+Y)
+    // Wait: if cx,cz is East, and we iterate North to South (or South to North)
+    // Coast points are ordered from Z=-300 (North) to Z=500 (South).
+    // Center is at X=1200 (East).
+    // So triangle is (1200, 100), (coast_i), (coast_i+1)
+    // i is North, i+1 is South.
+    // E.g. (1200, 0), (0, -100), (0, 100) -> 1200 to 0 to 0 -> CCW? 
+    // Wait. Top view (+X right, +Z down).
+    // 1200,100 is Right. 0,-100 is Top-Left. 0,100 is Bottom-Left.
+    // Right -> Top-Left -> Bottom-Left -> Right is CCW.
+    // Yes, this winding is correct for +Y normal.
+    seaVerts.push(coastPts[ci][0], 0, coastPts[ci][1]);
+    seaVerts.push(coastPts[ci+1][0], 0, coastPts[ci+1][1]);
+  }
+  seaGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(seaVerts), 3));
+  seaGeo.computeVertexNormals();
+
+  var seaMat = new THREE.MeshStandardMaterial({ color: srgb(0x005f73), roughness: 0.25, metalness: 0.6 });
   var sea = new THREE.Mesh(seaGeo, seaMat);
-  sea.rotation.x = -Math.PI / 2;
   var harbourY = track.p[700].y; // use track elevation at the harbour
-  sea.position.set(220, harbourY - 0.4, 50);
+  sea.position.set(0, harbourY - 0.4, 0);
   sea.receiveShadow = true; scene.add(sea);
   track.sea = sea;
 
   var yachtHullMat = new THREE.MeshStandardMaterial({ color: srgb(0xf0f2f5), roughness: 0.3, metalness: 0.2 });
   var yachtDeckMat = new THREE.MeshStandardMaterial({ color: srgb(0x20242a), roughness: 0.5 });
 
-  var yachtPositions = [
-    { x: 300, z: -100, yaw: -0.5 },
-    { x: 220, z: -50, yaw: -0.2 },
-    { x: 250, z: 20, yaw: -0.7 },
-    { x: 350, z: 0, yaw: -0.3 },
-    { x: 300, z: 80, yaw: -0.5 },
-    { x: 240, z: 120, yaw: 0.1 },
-    { x: 180, z: 160, yaw: 0.3 },
-    { x: 280, z: 180, yaw: -0.4 },
-    { x: 220, z: 240, yaw: 0.5 },
-    { x: 150, z: 280, yaw: 0.8 }
-  ];
+  
+  
+    var yachtPositions = [];
+  var placedBoats = 0;
+  var attempts = 0;
+  while (placedBoats < 120 && attempts < 1000) {
+    attempts++;
+    var bx = 280 + rnd() * 600; // 280 to 880
+    var bz = -250 + rnd() * 700; // -250 to 450
+    
+    var coastX = 0;
+    if (bz < -120) {
+      coastX = 420 + ((bz - -240) / 120) * (550 - 420);
+    } else if (bz < 20) {
+      coastX = 550 + ((bz - -120) / 140) * (490 - 550);
+    } else if (bz < 120) {
+      coastX = 490 + ((bz - 20) / 100) * (410 - 490);
+    } else if (bz < 240) {
+      coastX = 410 + ((bz - 120) / 120) * (310 - 410);
+    } else if (bz < 340) {
+      coastX = 310 + ((bz - 240) / 100) * (230 - 310);
+    } else if (bz < 440) {
+      coastX = 230 + ((bz - 340) / 100) * (270 - 230);
+    } else {
+      coastX = 270 + ((bz - 440) / 50) * (340 - 270);
+    }
+    
+    if (bx < coastX + 25) continue; // Skip if on land or too close to coast
+    
+    yachtPositions.push({
+      x: bx,
+      z: bz,
+      yaw: rnd() * Math.PI * 2,
+      type: rnd() > 0.35 ? 1 : (rnd() > 0.5 ? 0 : 2) // 65% sailboats, 17.5% superyachts, 17.5% small boats
+    });
+    placedBoats++;
+  }
 
-  var safeDistSqYacht = (WALL_HALF + 8) * (WALL_HALF + 8);
+  var safeDistSqYacht = (WALL_HALF + 15) * (WALL_HALF + 15);
 
   yachtPositions.forEach(function (pos) {
     var hitsTrack = false;
@@ -1325,74 +1397,99 @@ function buildMonacoTunnelAndUrbanScenery(track, scene) {
 
     var yacht = new THREE.Group();
     
-    // Hull base
-    var hw = 4;
-    var hl = 12;
-    var hh = 2.5;
+    if (pos.type === 0 || pos.type === 2) {
+      var scale = pos.type === 0 ? 1.2 : 0.6;
+      var hw = 4 * scale;
+      var hl = 12 * scale;
+      var hh = 2.5 * scale;
 
-    // Main box for the back of the hull
-    var backHull = new THREE.Mesh(new THREE.BoxGeometry(hw*2, hh*2, hl*2), yachtHullMat);
-    backHull.position.set(0, hh, -hl/2);
-    yacht.add(backHull);
+      var backHull = new THREE.Mesh(new THREE.BoxGeometry(hw*2, hh*2, hl*2), yachtHullMat);
+      backHull.position.set(0, hh, -hl/2);
+      yacht.add(backHull);
 
-    // Cylinder/Cone for the front (bow)
-    var bowGeo = new THREE.CylinderGeometry(0.1, hw, hl*1.5, 3, 1, false, 0, Math.PI);
-    var bow = new THREE.Mesh(bowGeo, yachtHullMat);
-    // Cylinder is along Y. We want it along Z.
-    bow.rotation.x = Math.PI / 2;
-    // We want the flat part of the half-cylinder to align with the backHull.
-    // The half-cylinder is from 0 to PI. 
-    // Actually, a simple cone is better.
-    
-    var coneGeo = new THREE.ConeGeometry(hw, hl*1.5, 16);
-    var cone = new THREE.Mesh(coneGeo, yachtHullMat);
-    cone.rotation.x = Math.PI / 2;
-    cone.position.set(0, hh, hl/2 + hl*0.75);
-    // yacht.add(cone);
+      var bowWedge = new THREE.BufferGeometry();
+      var verts = new Float32Array([
+        -hw, 0, 0,    hw, 0, 0,     0, 0, hl*1.5,
+        -hw, hh*2, 0, hw, hh*2, 0,  0, hh*2, hl*1.5,
+        -hw, 0, 0,   -hw, hh*2, 0,  0, hh*2, hl*1.5,
+        -hw, 0, 0,    0, hh*2, hl*1.5, 0, 0, hl*1.5,
+         hw, 0, 0,    hw, hh*2, 0,  0, hh*2, hl*1.5,
+         hw, 0, 0,    0, hh*2, hl*1.5, 0, 0, hl*1.5,
+        -hw, 0, 0,    hw, 0, 0,     hw, hh*2, 0,
+        -hw, 0, 0,    hw, hh*2, 0, -hw, hh*2, 0
+      ]);
+      bowWedge.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+      bowWedge.computeVertexNormals();
+      var bow = new THREE.Mesh(bowWedge, yachtHullMat);
+      bow.position.set(0, 0, hl/2);
+      yacht.add(bow);
 
-    // Let's just use a Box for the back and a manually positioned wedge for the bow.
-    var bowWedge = new THREE.BufferGeometry();
-    var verts = new Float32Array([
-      -hw, 0, 0,    hw, 0, 0,     0, 0, hl*1.5,      // bottom triangle
-      -hw, hh*2, 0, hw, hh*2, 0,  0, hh*2, hl*1.5,   // top triangle
-      -hw, 0, 0,   -hw, hh*2, 0,  0, hh*2, hl*1.5,   // left side 1
-      -hw, 0, 0,    0, hh*2, hl*1.5, 0, 0, hl*1.5,   // left side 2
-       hw, 0, 0,    hw, hh*2, 0,  0, hh*2, hl*1.5,   // right side 1
-       hw, 0, 0,    0, hh*2, hl*1.5, 0, 0, hl*1.5,   // right side 2
-      -hw, 0, 0,    hw, 0, 0,     hw, hh*2, 0,       // back side 1
-      -hw, 0, 0,    hw, hh*2, 0, -hw, hh*2, 0        // back side 2
-    ]);
-    bowWedge.setAttribute('position', new THREE.BufferAttribute(verts, 3));
-    bowWedge.computeVertexNormals();
-    var bow = new THREE.Mesh(bowWedge, yachtHullMat);
-    bow.position.set(0, 0, hl/2);
-    yacht.add(bow);
+      var cabin = new THREE.Mesh(new THREE.BoxGeometry(hw*1.5, 2.5*scale, hl*1.2), yachtDeckMat);
+      cabin.position.set(0, hh*2 + 1.25*scale, -hl/4);
+      yacht.add(cabin);
+        
+      var winGeo = new THREE.BoxGeometry(hw*1.55, 1.2*scale, hl*1.25);
+      var windowMat = new THREE.MeshBasicMaterial({color: 0x050505});
+      var windows = new THREE.Mesh(winGeo, windowMat);
+      windows.position.set(0, hh*2 + 1.25*scale, -hl/4);
+      yacht.add(windows);
 
-    // Cabin
-    var cabin = new THREE.Mesh(new THREE.BoxGeometry(hw*1.5, 2.5, hl*1.2), yachtDeckMat);
-    cabin.position.set(0, hh*2 + 1.25, -hl/4);
-    yacht.add(cabin);
-    
-    // Windows
-    var winGeo = new THREE.BoxGeometry(hw*1.55, 1.2, hl*1.25);
-    var windowMat = new THREE.MeshBasicMaterial({color: 0x050505});
-    var windows = new THREE.Mesh(winGeo, windowMat);
-    windows.position.set(0, hh*2 + 1.25, -hl/4);
-    yacht.add(windows);
+      var roof = new THREE.Mesh(new THREE.BoxGeometry(hw*1.4, 0.5*scale, hl*1.1), yachtHullMat);
+      roof.position.set(0, hh*2 + 2.5*scale + 0.25*scale, -hl/4);
+      yacht.add(roof);
+        
+      if (pos.type === 0) {
+        var mast = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 8, 8), yachtHullMat);
+        mast.position.set(0, hh*2 + 4 + 2.5, -hl/4);
+        yacht.add(mast);
+      }
+    } else {
+      // Sailboat
+      var scale = 0.8 + rnd() * 0.6;
+      var hw = 3 * scale;
+      var hl = 10 * scale;
+      var hh = 2 * scale;
 
-    // Flybridge / Roof
-    var roof = new THREE.Mesh(new THREE.BoxGeometry(hw*1.4, 0.5, hl*1.1), yachtHullMat);
-    roof.position.set(0, hh*2 + 2.5 + 0.25, -hl/4);
-    yacht.add(roof);
-    
-    // Radar dome / Mast
-    var mast = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 3, 8), yachtHullMat);
-    mast.position.set(0, hh*2 + 2.5 + 1.5, -hl/2);
-    yacht.add(mast);
+      var backHull = new THREE.Mesh(new THREE.BoxGeometry(hw*2, hh*2, hl*2), yachtHullMat);
+      backHull.position.set(0, hh, -hl/2);
+      yacht.add(backHull);
 
-    yacht.position.set(pos.x, harbourY - 0.5, pos.z);
+      var bowWedge = new THREE.BufferGeometry();
+      var verts = new Float32Array([
+        -hw, 0, 0,    hw, 0, 0,     0, 0, hl*1.5,
+        -hw, hh*2, 0, hw, hh*2, 0,  0, hh*2, hl*1.5,
+        -hw, 0, 0,   -hw, hh*2, 0,  0, hh*2, hl*1.5,
+        -hw, 0, 0,    0, hh*2, hl*1.5, 0, 0, hl*1.5,
+         hw, 0, 0,    hw, hh*2, 0,  0, hh*2, hl*1.5,
+         hw, 0, 0,    0, hh*2, hl*1.5, 0, 0, hl*1.5,
+        -hw, 0, 0,    hw, 0, 0,     hw, hh*2, 0,
+        -hw, 0, 0,    hw, hh*2, 0, -hw, hh*2, 0
+      ]);
+      bowWedge.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+      bowWedge.computeVertexNormals();
+      var bow = new THREE.Mesh(bowWedge, yachtHullMat);
+      bow.position.set(0, 0, hl/2);
+      yacht.add(bow);
+
+      // Cabin (small)
+      var cabin = new THREE.Mesh(new THREE.BoxGeometry(hw*1.2, 1.5*scale, hl*0.8), yachtDeckMat);
+      cabin.position.set(0, hh*2 + 0.75*scale, -hl/4);
+      yacht.add(cabin);
+
+      // Tall mast
+      var mastHeight = (28 + rnd() * 12) * scale;
+      var mast = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.3, mastHeight, 8), yachtHullMat);
+      mast.position.set(0, hh*2 + mastHeight/2, 0);
+      yacht.add(mast);
+    }
+
+    yacht.traverse(function(c) {
+      if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; }
+    });
+
+    yacht.position.set(pos.x, harbourY + 0.1, pos.z);
     yacht.rotation.y = pos.yaw;
-    yacht.traverse(function(c) { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } }); scene.add(yacht);
+    scene.add(yacht);
   });
 
   /* Monte Carlo Urban Buildings along streets */

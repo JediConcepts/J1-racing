@@ -1,0 +1,6 @@
+{
+  "name": "MCL-64 — Papaya Grand Prix",
+  "description": "A Formula 1 racer built the way a 1997 console would have built it: 240p, 5-bit dither, 3 laps of Silverstone with global leaderboards.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

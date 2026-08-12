@@ -868,6 +868,81 @@
   .btn:focus-visible { outline: 2px solid var(--papaya); outline-offset: 2px; }
   .btn.is-on { background: var(--papaya); border-color: var(--papaya); color: #14120f; }
   .btn[hidden] { display: none; }
+  .btn-papaya { border-color: var(--papaya); color: var(--papaya); background: rgba(255, 128, 0, 0.12); font-weight: 700; }
+  .btn-papaya:hover { background: var(--papaya); color: #14120f; }
+  .btn-cyan { border-color: var(--cyan); color: var(--cyan); background: rgba(79, 227, 224, 0.12); font-weight: 700; }
+  .btn-cyan:hover { background: var(--cyan); color: #14120f; }
+
+  /* --- Monaco Map & Street view & Flutter Modals --- */
+  .modal-wide { max-width: 860px; width: 95vw; max-height: 90vh; overflow-y: auto; }
+  .map-container { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+  @media (max-width: 680px) { .map-container { grid-template-columns: 1fr; } }
+  .map-box { background: #121218; border: 1px solid var(--line); border-radius: 4px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .map-box-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: 6px; font-weight: bold; font-size: 11px; color: var(--papaya); }
+  .landmark-grid { display: flex; flex-wrap: wrap; gap: 4px; max-height: 140px; overflow-y: auto; }
+  .lm-btn { background: #1f1d24; border: 1px solid #322e38; color: var(--ink); font-size: 9px; padding: 4px 8px; cursor: pointer; border-radius: 2px; }
+  .lm-btn:hover, .lm-btn.active { border-color: var(--cyan); color: var(--cyan); background: rgba(79,227,224,0.15); }
+  .sv-frame { width: 100%; height: 260px; border: none; border-radius: 4px; background: #000; }
+  .code-pre { background: #09090d; border: 1px solid #2a2730; color: #a6e22e; padding: 10px; font-family: monospace; font-size: 10px; border-radius: 4px; max-height: 240px; overflow: auto; text-align: left; white-space: pre-wrap; word-break: break-all; }
+
+  /* Live Driving Street View PIP Widget */
+  .pip-streetview {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 200px;
+    background: rgba(18, 18, 24, 0.92);
+    border: 1px solid var(--papaya);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+    z-index: 15;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    transition: all 0.2s ease;
+  }
+  .pip-streetview.collapsed {
+    height: 22px;
+  }
+  .pip-streetview.collapsed .pip-sv-iframe {
+    display: none;
+  }
+  .pip-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 3px 6px;
+    background: rgba(255, 128, 0, 0.2);
+    border-bottom: 1px solid rgba(255, 128, 0, 0.4);
+    font-size: 8px;
+    font-weight: bold;
+    color: var(--cyan);
+    user-select: none;
+  }
+  .pip-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px;
+  }
+  .pip-toggle-btn {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 11px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    font-weight: bold;
+  }
+  .pip-toggle-btn:hover { color: var(--papaya); }
+  .pip-sv-iframe {
+    width: 100%;
+    height: 115px;
+    border: none;
+    background: #000;
+  }
+
 
   .fine {
     flex: 1 1 100%;
@@ -914,6 +989,7 @@
     <div class="scanlines"></div>
     <div class="glow"></div>
 
+
     <div class="pads">
       <div class="stick-zone" id="stick-zone">
         <div class="stick-base" id="stick-base"></div>
@@ -926,6 +1002,7 @@
 
     <div class="rotate-hint">ROTATE PHONE</div>
 
+    
     <div class="settings" id="board" hidden>
       <div class="settings-box" role="dialog" aria-modal="true" aria-labelledby="board-title">
         <h2 class="settings-title" id="board-title">GLOBAL LEADERBOARD</h2>
@@ -966,6 +1043,7 @@
       <div class="settings-box" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <h2 class="settings-title" id="settings-title">SETTINGS</h2>
 
+        
         <div class="srow srow-stack">
           <span class="slabel">CIRCUIT</span>
           <!-- Filled from the TRACKS registry at runtime, so adding a circuit
@@ -980,7 +1058,7 @@
           <button type="button" class="sval" id="set-steer">JOYSTICK</button>
         </div>
 
-        <div class="srow" id="row-invert">
+                <div class="srow" id="row-invert">
           <span class="slabel">TILT INVERT</span>
           <button type="button" class="sval" id="set-invert">OFF</button>
         </div>
@@ -1168,7 +1246,7 @@
     </div>
 
     <div class="actions">
-      <button type="button" class="btn" id="btn-board" aria-label="Open the global leaderboard" hidden>LEADERBOARD</button>
+                        <button type="button" class="btn" id="btn-board" aria-label="Open the global leaderboard" hidden>LEADERBOARD</button>
       <button type="button" class="btn" id="btn-settings" aria-label="Open settings">SETTINGS</button>
       <button type="button" class="btn" id="btn-fs" aria-label="Toggle fullscreen">FULLSCREEN</button>
       <button type="button" class="btn" id="btn-steer" aria-label="Cycle steering mode: finger joystick, tilt, inverted tilt">JOYSTICK</button>

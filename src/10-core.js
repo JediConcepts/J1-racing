@@ -199,6 +199,12 @@ function noiseFill(ctx, w, h, base, amp, rnd, density) {
   }
 }
 
+function makeCityGroundTex() {
+  var s = 64, cv = makeCanvas(s, s), ctx = cv.getContext('2d'), rnd = mulberry32(8);
+  noiseFill(ctx, s, s, '#bdaea3', 80, rnd, 0.45);
+  return cv;
+}
+
 function makeAsphaltTex() {
   var s = 64, cv = makeCanvas(s, s), ctx = cv.getContext('2d'), rnd = mulberry32(7);
   noiseFill(ctx, s, s, '#6f6f7d', 150, rnd, 0.55);
@@ -302,8 +308,10 @@ function makeCloudTex() {
 
 /* Trackside signage uses the same 5x7 font as the HUD — one voice on screen
    and in the world. */
-function makeSignTex(text, bg, fg, accent) {
-  var w = 128, h = 32, cv = makeCanvas(w, h), ctx = cv.getContext('2d');
+function makeSignTex(text, bg, fg, accent, minW) {
+  var textW = text.length * 12;
+  var w = Math.max(minW || 128, textW + 32);
+  var h = 32, cv = makeCanvas(w, h), ctx = cv.getContext('2d');
   ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
   if (accent) { ctx.fillStyle = accent; ctx.fillRect(0, 0, w, 3); ctx.fillRect(0, h - 3, w, 3); }
   drawTextCenter(ctx, text, w / 2, (h - GLYPH_H * 2) / 2, 2, fg, null, 1);
@@ -311,10 +319,14 @@ function makeSignTex(text, bg, fg, accent) {
 }
 
 function makeStartLineTex() {
-  var s = 64, cv = makeCanvas(s, s), ctx = cv.getContext('2d');
-  ctx.fillStyle = '#e9e9ec'; ctx.fillRect(0, 0, s, s);
-  ctx.fillStyle = '#1b1c22';
-  for (var y = 0; y < 8; y++) for (var x = 0; x < 8; x++) if ((x + y) % 2 === 0) ctx.fillRect(x * 8, y * 8, 8, 8);
+  var s = 256, cv = makeCanvas(s, s), ctx = cv.getContext('2d');
+  ctx.fillStyle = '#f9f9fc'; ctx.fillRect(0, 0, s, s);
+  ctx.fillStyle = '#111115';
+  for (var y = 0; y < 16; y++) {
+    for (var x = 0; x < 16; x++) {
+      if ((x + y) % 2 === 0) ctx.fillRect(x * 16, y * 16, 16, 16);
+    }
+  }
   return cv;
 }
 
@@ -677,3 +689,72 @@ EngineAudio.prototype.thud = function (power) {
     o.start(t); o.stop(t + 0.34);
   } catch (e) { /* see above */ }
 };
+
+function makeBuildingTex(baseColor, winColor) {
+  var w = 256, h = 256, cv = makeCanvas(w, h), ctx = cv.getContext('2d');
+  ctx.fillStyle = baseColor;
+  ctx.fillRect(0, 0, w, h);
+  
+  // draw some noise for texture
+  for (var i = 0; i < 2000; i++) {
+    ctx.fillStyle = (Math.random() > 0.5) ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.04)';
+    ctx.fillRect(Math.random() * w, Math.random() * h, 2 + Math.random() * 8, 2 + Math.random() * 8);
+  }
+
+  // Windows
+  var padding = 8;
+  var winW = 24;
+  var winH = 32;
+  for (var y = padding; y < h; y += winH + padding) {
+    for (var x = padding; x < w; x += winW + padding) {
+      if (Math.random() > 0.1) {
+        // window frame
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(x - 2, y - 2, winW + 4, winH + 4);
+        // glass
+        ctx.fillStyle = winColor;
+        ctx.fillRect(x, y, winW, winH);
+        // reflection
+        ctx.fillStyle = 'rgba(255,255,255,0.15)';
+        ctx.beginPath();
+        ctx.moveTo(x, y + winH);
+        ctx.lineTo(x + winW, y);
+        ctx.lineTo(x + winW, y + winH);
+        ctx.fill();
+        // mullions
+        ctx.fillStyle = '#111';
+        ctx.fillRect(x + winW/2 - 1, y, 2, winH);
+        ctx.fillRect(x, y + winH/2 - 1, winW, 2);
+      }
+    }
+  }
+  return cv;
+}
+
+function makeCheckeredBannerTex(text, bg, fg, accent) {
+  var w = 512, h = 64, cv = makeCanvas(w, h), ctx = cv.getContext('2d');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
+  
+  ctx.fillStyle = '#111';
+  for (var y = 0; y < 4; y++) {
+    for (var x = 0; x < 8; x++) {
+      if ((x+y)%2 === 0) {
+        ctx.fillRect(x*16, y*16, 16, 16);
+        ctx.fillRect(w - 128 + x*16, y*16, 16, 16);
+      }
+    }
+  }
+  ctx.fillStyle = '#fff';
+  for (var y = 0; y < 4; y++) {
+    for (var x = 0; x < 8; x++) {
+      if ((x+y)%2 !== 0) {
+        ctx.fillRect(x*16, y*16, 16, 16);
+        ctx.fillRect(w - 128 + x*16, y*16, 16, 16);
+      }
+    }
+  }
+
+  if (accent) { ctx.fillStyle = accent; ctx.fillRect(0, 0, w, 4); ctx.fillRect(0, h - 4, w, 4); }
+  drawTextCenter(ctx, text, w / 2, (h - GLYPH_H * 3) / 2, 3, fg, null, 1);
+  return cv;
+}

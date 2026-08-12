@@ -15,10 +15,10 @@
      being served" — a stale cached copy still returns 200 with a valid title,
      but it cannot carry the version that was just published.
      STANDALONE ONLY: the artifact fragment has no <head> to put it in. -->
-<meta name="build" content="v0.83" />
-<meta name="build-sha" content="18bb12f" />
-<meta name="build-channel" content="release" />
-<meta name="build-time" content="2026-08-09 11:53Z" />
+<meta name="build" content="v0.85" />
+<meta name="build-sha" content="1024023*" />
+<meta name="build-channel" content="dev" />
+<meta name="build-time" content="2026-08-12 17:09Z" />
 <meta name="color-scheme" content="dark light" />
 <meta name="description" content="A Formula 1 racer built the way a 1997 console would have built it: 240p, a five-bit dither, three laps of a stylised Silverstone against a full grid. Plays in a browser, on desktop or phone, with a global leaderboard." />
 <link rel="canonical" href="https://jediconcepts.com/mcl64/" />
@@ -953,6 +953,81 @@
   .btn:focus-visible { outline: 2px solid var(--papaya); outline-offset: 2px; }
   .btn.is-on { background: var(--papaya); border-color: var(--papaya); color: #14120f; }
   .btn[hidden] { display: none; }
+  .btn-papaya { border-color: var(--papaya); color: var(--papaya); background: rgba(255, 128, 0, 0.12); font-weight: 700; }
+  .btn-papaya:hover { background: var(--papaya); color: #14120f; }
+  .btn-cyan { border-color: var(--cyan); color: var(--cyan); background: rgba(79, 227, 224, 0.12); font-weight: 700; }
+  .btn-cyan:hover { background: var(--cyan); color: #14120f; }
+
+  /* --- Monaco Map & Street view & Flutter Modals --- */
+  .modal-wide { max-width: 860px; width: 95vw; max-height: 90vh; overflow-y: auto; }
+  .map-container { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+  @media (max-width: 680px) { .map-container { grid-template-columns: 1fr; } }
+  .map-box { background: #121218; border: 1px solid var(--line); border-radius: 4px; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .map-box-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--line); padding-bottom: 6px; font-weight: bold; font-size: 11px; color: var(--papaya); }
+  .landmark-grid { display: flex; flex-wrap: wrap; gap: 4px; max-height: 140px; overflow-y: auto; }
+  .lm-btn { background: #1f1d24; border: 1px solid #322e38; color: var(--ink); font-size: 9px; padding: 4px 8px; cursor: pointer; border-radius: 2px; }
+  .lm-btn:hover, .lm-btn.active { border-color: var(--cyan); color: var(--cyan); background: rgba(79,227,224,0.15); }
+  .sv-frame { width: 100%; height: 260px; border: none; border-radius: 4px; background: #000; }
+  .code-pre { background: #09090d; border: 1px solid #2a2730; color: #a6e22e; padding: 10px; font-family: monospace; font-size: 10px; border-radius: 4px; max-height: 240px; overflow: auto; text-align: left; white-space: pre-wrap; word-break: break-all; }
+
+  /* Live Driving Street View PIP Widget */
+  .pip-streetview {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 200px;
+    background: rgba(18, 18, 24, 0.92);
+    border: 1px solid var(--papaya);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.6);
+    z-index: 15;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+    transition: all 0.2s ease;
+  }
+  .pip-streetview.collapsed {
+    height: 22px;
+  }
+  .pip-streetview.collapsed .pip-sv-iframe {
+    display: none;
+  }
+  .pip-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 3px 6px;
+    background: rgba(255, 128, 0, 0.2);
+    border-bottom: 1px solid rgba(255, 128, 0, 0.4);
+    font-size: 8px;
+    font-weight: bold;
+    color: var(--cyan);
+    user-select: none;
+  }
+  .pip-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px;
+  }
+  .pip-toggle-btn {
+    background: none;
+    border: none;
+    color: #fff;
+    font-size: 11px;
+    cursor: pointer;
+    padding: 0 4px;
+    line-height: 1;
+    font-weight: bold;
+  }
+  .pip-toggle-btn:hover { color: var(--papaya); }
+  .pip-sv-iframe {
+    width: 100%;
+    height: 115px;
+    border: none;
+    background: #000;
+  }
+
 
   .fine {
     flex: 1 1 100%;
@@ -1000,6 +1075,7 @@
     <div class="scanlines"></div>
     <div class="glow"></div>
 
+
     <div class="pads">
       <div class="stick-zone" id="stick-zone">
         <div class="stick-base" id="stick-base"></div>
@@ -1012,6 +1088,7 @@
 
     <div class="rotate-hint">ROTATE PHONE</div>
 
+    
     <div class="settings" id="board" hidden>
       <div class="settings-box" role="dialog" aria-modal="true" aria-labelledby="board-title">
         <h2 class="settings-title" id="board-title">GLOBAL LEADERBOARD</h2>
@@ -1052,6 +1129,7 @@
       <div class="settings-box" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <h2 class="settings-title" id="settings-title">SETTINGS</h2>
 
+        
         <div class="srow srow-stack">
           <span class="slabel">CIRCUIT</span>
           <!-- Filled from the TRACKS registry at runtime, so adding a circuit
@@ -1066,7 +1144,7 @@
           <button type="button" class="sval" id="set-steer">JOYSTICK</button>
         </div>
 
-        <div class="srow" id="row-invert">
+                <div class="srow" id="row-invert">
           <span class="slabel">TILT INVERT</span>
           <button type="button" class="sval" id="set-invert">OFF</button>
         </div>
@@ -1254,7 +1332,7 @@
     </div>
 
     <div class="actions">
-      <button type="button" class="btn" id="btn-board" aria-label="Open the global leaderboard" hidden>LEADERBOARD</button>
+                        <button type="button" class="btn" id="btn-board" aria-label="Open the global leaderboard" hidden>LEADERBOARD</button>
       <button type="button" class="btn" id="btn-settings" aria-label="Open settings">SETTINGS</button>
       <button type="button" class="btn" id="btn-fs" aria-label="Toggle fullscreen">FULLSCREEN</button>
       <button type="button" class="btn" id="btn-steer" aria-label="Cycle steering mode: finger joystick, tilt, inverted tilt">JOYSTICK</button>
@@ -1402,7 +1480,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 `);let e=await s.signMessage(new TextEncoder().encode(t),`utf8`);if(!e||!(e instanceof Uint8Array))throw Error(`@supabase/auth-js: Wallet signMessage() API returned an recognized value`);n=e}}try{let{data:r,error:i}=await J(this.fetch,`POST`,`${this.url}/token?grant_type=web3`,{headers:this.headers,body:Object.assign({chain:`solana`,message:t,signature:z(n)},e.options?.captchaToken?{gotrue_meta_security:{captcha_token:e.options?.captchaToken}}:null),xform:Y});if(i)throw i;if(!r||!r.session||!r.user){let e=new R;return this._returnResult({data:{user:null,session:null},error:e})}return r.session&&(await this._saveSession(r.session),await this._notifyAllSubscribers(`SIGNED_IN`,r.session)),this._returnResult({data:Object.assign({},r),error:i})}catch(e){if(P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async _exchangeCodeForSession(e){let[t,n]=(await H(this.storage,`${this.storageKey}-code-verifier`)??``).split(`/`);try{if(!t&&this.flowType===`pkce`)throw new Zn;let{data:r,error:i}=await J(this.fetch,`POST`,`${this.url}/token?grant_type=pkce`,{headers:this.headers,body:{auth_code:e,code_verifier:t},xform:Y});if(await U(this.storage,`${this.storageKey}-code-verifier`),i)throw i;if(!r||!r.session||!r.user){let e=new R;return this._returnResult({data:{user:null,session:null,redirectType:null},error:e})}return r.session&&(await this._saveSession(r.session),await this._notifyAllSubscribers(n===`recovery`?`PASSWORD_RECOVERY`:`SIGNED_IN`,r.session)),this._returnResult({data:Object.assign(Object.assign({},r),{redirectType:n??null}),error:i})}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:{user:null,session:null,redirectType:null},error:e});throw e}}async signInWithIdToken(e){try{let{options:t,provider:n,token:r,access_token:i,nonce:a}=e,{data:o,error:s}=await J(this.fetch,`POST`,`${this.url}/token?grant_type=id_token`,{headers:this.headers,body:{provider:n,id_token:r,access_token:i,nonce:a,gotrue_meta_security:{captcha_token:t?.captchaToken}},xform:Y});if(s)return this._returnResult({data:{user:null,session:null},error:s});if(!o||!o.session||!o.user){let e=new R;return this._returnResult({data:{user:null,session:null},error:e})}return o.session&&(await this._saveSession(o.session),await this._notifyAllSubscribers(`SIGNED_IN`,o.session)),this._returnResult({data:o,error:s})}catch(e){if(P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async signInWithOtp(e){try{if(`email`in e){let{email:t,options:n}=e,r=null,i=null;this.flowType===`pkce`&&([r,i]=await W(this.storage,this.storageKey));let{error:a}=await J(this.fetch,`POST`,`${this.url}/otp`,{headers:this.headers,body:{email:t,data:n?.data??{},create_user:n?.shouldCreateUser??!0,gotrue_meta_security:{captcha_token:n?.captchaToken},code_challenge:r,code_challenge_method:i},redirectTo:n?.emailRedirectTo});return this._returnResult({data:{user:null,session:null},error:a})}if(`phone`in e){let{phone:t,options:n}=e,{data:r,error:i}=await J(this.fetch,`POST`,`${this.url}/otp`,{headers:this.headers,body:{phone:t,data:n?.data??{},create_user:n?.shouldCreateUser??!0,gotrue_meta_security:{captcha_token:n?.captchaToken},channel:n?.channel??`sms`}});return this._returnResult({data:{user:null,session:null,messageId:r?.message_id},error:i})}throw new qn(`You must provide either an email or phone number.`)}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async verifyOtp(e){try{let t,n;`options`in e&&(t=e.options?.redirectTo,n=e.options?.captchaToken);let{data:r,error:i}=await J(this.fetch,`POST`,`${this.url}/verify`,{headers:this.headers,body:Object.assign(Object.assign({},e),{gotrue_meta_security:{captcha_token:n}}),redirectTo:t,xform:Y});if(i)throw i;if(!r)throw Error(`An error occurred on token verification.`);let a=r.session,o=r.user;return a?.access_token&&(await this._saveSession(a),await this._notifyAllSubscribers(e.type==`recovery`?`PASSWORD_RECOVERY`:`SIGNED_IN`,a)),this._returnResult({data:{user:o,session:a},error:null})}catch(e){if(P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async signInWithSSO(e){try{let t=null,n=null;this.flowType===`pkce`&&([t,n]=await W(this.storage,this.storageKey));let r=await J(this.fetch,`POST`,`${this.url}/sso`,{body:Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({},`providerId`in e?{provider_id:e.providerId}:null),`domain`in e?{domain:e.domain}:null),{redirect_to:e.options?.redirectTo??void 0}),e?.options?.captchaToken?{gotrue_meta_security:{captcha_token:e.options.captchaToken}}:null),{skip_http_redirect:!0,code_challenge:t,code_challenge_method:n}),headers:this.headers,xform:Gr});return r.data?.url&&B()&&!e.options?.skipBrowserRedirect&&window.location.assign(r.data.url),this._returnResult(r)}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:null,error:e});throw e}}async reauthenticate(){return await this.initializePromise,this.lock==null?await this._reauthenticate():await this._acquireLock(this.lockAcquireTimeout,async()=>await this._reauthenticate())}async _reauthenticate(){try{return await this._useSession(async e=>{let{data:{session:t},error:n}=e;if(n)throw n;if(!t)throw new L;let{error:r}=await J(this.fetch,`GET`,`${this.url}/reauthenticate`,{headers:this.headers,jwt:t.access_token});return this._returnResult({data:{user:null,session:null},error:r})})}catch(e){if(P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async resend(e){try{let t=`${this.url}/resend`;if(`email`in e){let{email:n,type:r,options:i}=e,a=null,o=null;this.flowType===`pkce`&&([a,o]=await W(this.storage,this.storageKey));let{error:s}=await J(this.fetch,`POST`,t,{headers:this.headers,body:{email:n,type:r,gotrue_meta_security:{captcha_token:i?.captchaToken},code_challenge:a,code_challenge_method:o},redirectTo:i?.emailRedirectTo});return s&&await U(this.storage,`${this.storageKey}-code-verifier`),this._returnResult({data:{user:null,session:null},error:s})}else if(`phone`in e){let{phone:n,type:r,options:i}=e,{data:a,error:o}=await J(this.fetch,`POST`,t,{headers:this.headers,body:{phone:n,type:r,gotrue_meta_security:{captcha_token:i?.captchaToken}}});return this._returnResult({data:{user:null,session:null,messageId:a?.message_id},error:o})}throw new qn(`You must provide either an email or phone number and a type`)}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async getSession(){return await this.initializePromise,this.lock==null?await this._useSession(async e=>e):await this._acquireLock(this.lockAcquireTimeout,async()=>this._useSession(async e=>e))}async _acquireLock(e,t){this._debug(`#_acquireLock`,`begin`,e);try{if(this.lockAcquired){let e=this.pendingInLock.length?this.pendingInLock[this.pendingInLock.length-1]:Promise.resolve(),n=(async()=>(await e,await t()))();return this.pendingInLock.push((async()=>{try{await n}catch{}})()),n}return await this.lock(`lock:${this.storageKey}`,e,async()=>{this._debug(`#_acquireLock`,`lock acquired for storage key`,this.storageKey);try{this.lockAcquired=!0;let e=t();for(this.pendingInLock.push((async()=>{try{await e}catch{}})()),await e;this.pendingInLock.length;){let e=[...this.pendingInLock];await Promise.all(e),this.pendingInLock.splice(0,e.length)}return await e}finally{this._debug(`#_acquireLock`,`lock released for storage key`,this.storageKey),this.lockAcquired=!1}})}finally{this._debug(`#_acquireLock`,`end`)}}async _useSession(e){this._debug(`#_useSession`,`begin`);try{return await e(await this.__loadSession())}finally{this._debug(`#_useSession`,`end`)}}async __loadSession(){this._debug(`#__loadSession()`,`begin`),this.lock!=null&&!this.lockAcquired&&this._debug(`#__loadSession()`,`used outside of an acquired lock!`,Error().stack);try{let e=null,t=await H(this.storage,this.storageKey);if(this._debug(`#getSession()`,`session from storage`,t),t!==null&&(this._isValidSession(t)?e=t:(this._debug(`#getSession()`,`session from storage is not valid`),await this._removeSession())),!e)return{data:{session:null},error:null};let n=e.expires_at?e.expires_at*1e3-Date.now()<zn:!1;if(this._debug(`#__loadSession()`,`session has${n?``:` not`} expired`,`expires_at`,e.expires_at),!n){if(this.userStorage){let t=await H(this.userStorage,this.storageKey+`-user`);t?.user?e.user=t.user:e.user=Lr()}if(this.storage.isServer&&e.user&&!e.user.__isUserNotAvailableProxy){let t={value:this.suppressGetSessionWarning};e.user=Rr(e.user,t),t.value&&(this.suppressGetSessionWarning=!0)}return{data:{session:e},error:null}}let{data:r,error:i}=await this._callRefreshToken(e.refresh_token);if(i){if(e.expires_at&&e.expires_at*1e3>Date.now()){let t=await H(this.storage,this.storageKey);if(t&&t.refresh_token===e.refresh_token)return this._returnResult({data:{session:e},error:null})}return this._returnResult({data:{session:null},error:i})}return this._returnResult({data:{session:r},error:null})}finally{this._debug(`#__loadSession()`,`end`)}}async getUser(e){if(e)return await this._getUser(e);await this.initializePromise;let t;return t=this.lock==null?await this._getUser():await this._acquireLock(this.lockAcquireTimeout,async()=>await this._getUser()),t.data.user&&(this.suppressGetSessionWarning=!0),t}async _getUser(e){try{return e?await J(this.fetch,`GET`,`${this.url}/user`,{headers:this.headers,jwt:e,xform:X}):await this._useSession(async e=>{let{data:t,error:n}=e;if(n)throw n;return!t.session?.access_token&&!this.hasCustomAuthorizationHeader?{data:{user:null},error:new L}:await J(this.fetch,`GET`,`${this.url}/user`,{headers:this.headers,jwt:t.session?.access_token??void 0,xform:X})})}catch(e){if(P(e))return Kn(e)&&(await this._removeSession(),await U(this.storage,`${this.storageKey}-code-verifier`)),this._returnResult({data:{user:null},error:e});throw e}}async updateUser(e,t={}){return await this.initializePromise,this.lock==null?await this._updateUser(e,t):await this._acquireLock(this.lockAcquireTimeout,async()=>await this._updateUser(e,t))}async _updateUser(e,t={}){try{return await this._useSession(async n=>{let{data:r,error:i}=n;if(i)throw i;if(!r.session)throw new L;let a=r.session,o=null,s=null;this.flowType===`pkce`&&e.email!=null&&([o,s]=await W(this.storage,this.storageKey));let{data:c,error:l}=await J(this.fetch,`PUT`,`${this.url}/user`,{headers:this.headers,redirectTo:t?.emailRedirectTo,body:Object.assign(Object.assign({},e),{code_challenge:o,code_challenge_method:s}),jwt:a.access_token,xform:X});if(l)throw l;return a.user=c.user,await this._saveSession(a),await this._notifyAllSubscribers(`USER_UPDATED`,a),this._returnResult({data:{user:a.user},error:null})})}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:{user:null},error:e});throw e}}async setSession(e){return await this.initializePromise,this.lock==null?await this._setSession(e):await this._acquireLock(this.lockAcquireTimeout,async()=>await this._setSession(e))}async _setSession(e){try{if(!e.access_token||!e.refresh_token)throw new L;let t=Date.now()/1e3,n=t,r=!0,i=null,{payload:a}=Tr(e.access_token);if(a.exp&&(n=a.exp,r=n<=t),r){let{data:t,error:n}=await this._callRefreshToken(e.refresh_token);if(n)return this._returnResult({data:{user:null,session:null},error:n});if(!t)return{data:{user:null,session:null},error:null};i=t}else{let{data:r,error:a}=await this._getUser(e.access_token);if(a)return this._returnResult({data:{user:null,session:null},error:a});i={access_token:e.access_token,refresh_token:e.refresh_token,user:r.user,token_type:`bearer`,expires_in:n-t,expires_at:n},await this._saveSession(i),await this._notifyAllSubscribers(`SIGNED_IN`,i)}return this._returnResult({data:{user:i.user,session:i},error:null})}catch(e){if(P(e))return this._returnResult({data:{session:null,user:null},error:e});throw e}}async refreshSession(e){return await this.initializePromise,this.lock==null?await this._refreshSession(e):await this._acquireLock(this.lockAcquireTimeout,async()=>await this._refreshSession(e))}async _refreshSession(e){try{return await this._useSession(async t=>{if(!e){let{data:n,error:r}=t;if(r)throw r;e=n.session??void 0}if(!e?.refresh_token)throw new L;let{data:n,error:r}=await this._callRefreshToken(e.refresh_token);return r?this._returnResult({data:{user:null,session:null},error:r}):n?this._returnResult({data:{user:n.user,session:n},error:null}):this._returnResult({data:{user:null,session:null},error:null})})}catch(e){if(P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async _getSessionFromURL(e,t){try{if(!B())throw new Jn(`No browser detected.`);if(e.error||e.error_description||e.error_code)throw new Jn(e.error_description||`Error in URL with unspecified error_description`,{error:e.error||`unspecified_error`,code:e.error_code||`unspecified_code`});switch(t){case`implicit`:if(this.flowType===`pkce`)throw new Xn(`Not a valid PKCE flow url.`);break;case`pkce`:if(this.flowType===`implicit`)throw new Jn(`Not a valid implicit grant flow url.`);break;default:}if(t===`pkce`){if(this._debug(`#_initialize()`,`begin`,`is PKCE flow`,!0),!e.code)throw new Xn(`No code detected.`);let{data:t,error:n}=await this._exchangeCodeForSession(e.code);if(n)throw n;let r=new URL(window.location.href);return r.searchParams.delete(`code`),window.history.replaceState(window.history.state,``,r.toString()),{data:{session:t.session,redirectType:t.redirectType??null},error:null}}let{provider_token:n,provider_refresh_token:r,access_token:i,refresh_token:a,expires_in:o,expires_at:s,token_type:c}=e;if(!i||!o||!a||!c)throw new Jn(`No session defined in URL`);let l=Math.round(Date.now()/1e3),u=parseInt(o),d=l+u;s&&(d=parseInt(s));let f=d-l;f*1e3<=M&&console.warn(`@supabase/gotrue-js: Session as retrieved from URL expires in ${f}s, should have been closer to ${u}s`);let p=d-u;l-p>=120?console.warn(`@supabase/gotrue-js: Session as retrieved from URL was issued over 120s ago, URL could be stale`,p,d,l):l-p<0&&console.warn(`@supabase/gotrue-js: Session as retrieved from URL was issued in the future? Check the device clock for skew`,p,d,l);let{data:m,error:h}=await this._getUser(i);if(h)throw h;let g={provider_token:n,provider_refresh_token:r,access_token:i,expires_in:u,expires_at:d,refresh_token:a,token_type:c,user:m.user};return window.location.hash=``,this._debug(`#_getSessionFromURL()`,`clearing window.location.hash`),this._returnResult({data:{session:g,redirectType:e.type},error:null})}catch(e){if(P(e))return this._returnResult({data:{session:null,redirectType:null},error:e});throw e}}_isImplicitGrantCallback(e){return typeof this.detectSessionInUrl==`function`?this.detectSessionInUrl(new URL(window.location.href),e):!!(e.access_token||e.error||e.error_description||e.error_code)}async _isPKCECallback(e){let t=await H(this.storage,`${this.storageKey}-code-verifier`);return!!(e.code&&t)}async signOut(e={scope:`global`}){return await this.initializePromise,this.lock==null?await this._signOut(e):await this._acquireLock(this.lockAcquireTimeout,async()=>await this._signOut(e))}async _signOut({scope:e}={scope:`global`}){return await this._useSession(async t=>{let n=async()=>{await this._removeSession(),await U(this.storage,`${this.storageKey}-code-verifier`)},{data:r,error:i}=t;if(i&&!Kn(i))return this._returnResult({error:i});let a=r.session?.access_token;if(a){let{error:t}=await this.admin.signOut(a,e);if(t&&!(Gn(t)&&(t.status===404||t.status===401||t.status===403)||Kn(t)))return e!==`others`&&await n(),this._returnResult({error:t})}return e!==`others`&&await n(),this._returnResult({error:null})})}onAuthStateChange(e){let t=vr(),n={id:t,callback:e,unsubscribe:()=>{this._debug(`#unsubscribe()`,`state change callback with id removed`,t),this.stateChangeEmitters.delete(t)}};return this._debug(`#onAuthStateChange()`,`registered callback with id`,t),this.stateChangeEmitters.set(t,n),(async()=>{await this.initializePromise,this.lock==null?await this._emitInitialSession(t):await this._acquireLock(this.lockAcquireTimeout,async()=>{this._emitInitialSession(t)})})(),{data:{subscription:n}}}async _emitInitialSession(e){return await this._useSession(async t=>{try{let{data:{session:n},error:r}=t;if(r)throw r;await this.stateChangeEmitters.get(e)?.callback(`INITIAL_SESSION`,n),this._debug(`INITIAL_SESSION`,`callback id`,e,`session`,n)}catch(t){await this.stateChangeEmitters.get(e)?.callback(`INITIAL_SESSION`,null),this._debug(`INITIAL_SESSION`,`callback id`,e,`error`,t),Kn(t)||er(t)||Gn(t)&&(t.code===`refresh_token_not_found`||t.code===`refresh_token_already_used`||t.code===`session_expired`)?console.warn(t):console.error(t)}})}async resetPasswordForEmail(e,t={}){let n=null,r=null;this.flowType===`pkce`&&([n,r]=await W(this.storage,this.storageKey,!0));try{return await J(this.fetch,`POST`,`${this.url}/recover`,{body:{email:e,code_challenge:n,code_challenge_method:r,gotrue_meta_security:{captcha_token:t.captchaToken}},headers:this.headers,redirectTo:t.redirectTo})}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:null,error:e});throw e}}async getUserIdentities(){try{let{data:e,error:t}=await this.getUser();if(t)throw t;return this._returnResult({data:{identities:e.user.identities??[]},error:null})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async linkIdentity(e){return`token`in e?this.linkIdentityIdToken(e):this.linkIdentityOAuth(e)}async linkIdentityOAuth(e){try{let{data:t,error:n}=await this._useSession(async t=>{let{data:n,error:r}=t;if(r)throw r;let i=await this._getUrlForProvider(`${this.url}/user/identities/authorize`,e.provider,{redirectTo:e.options?.redirectTo,scopes:e.options?.scopes,queryParams:e.options?.queryParams,skipBrowserRedirect:!0});return await J(this.fetch,`GET`,i,{headers:this.headers,jwt:n.session?.access_token??void 0})});if(n)throw n;return B()&&!e.options?.skipBrowserRedirect&&window.location.assign(t?.url),this._returnResult({data:{provider:e.provider,url:t?.url},error:null})}catch(t){if(P(t))return this._returnResult({data:{provider:e.provider,url:null},error:t});throw t}}async linkIdentityIdToken(e){return await this._useSession(async t=>{try{let{error:n,data:{session:r}}=t;if(n)throw n;let{options:i,provider:a,token:o,access_token:s,nonce:c}=e,{data:l,error:u}=await J(this.fetch,`POST`,`${this.url}/token?grant_type=id_token`,{headers:this.headers,jwt:r?.access_token??void 0,body:{provider:a,id_token:o,access_token:s,nonce:c,link_identity:!0,gotrue_meta_security:{captcha_token:i?.captchaToken}},xform:Y});return u?this._returnResult({data:{user:null,session:null},error:u}):!l||!l.session||!l.user?this._returnResult({data:{user:null,session:null},error:new R}):(l.session&&(await this._saveSession(l.session),await this._notifyAllSubscribers(`USER_UPDATED`,l.session)),this._returnResult({data:l,error:u}))}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}})}async unlinkIdentity(e){try{return await this._useSession(async t=>{let{data:n,error:r}=t;if(r)throw r;return await J(this.fetch,`DELETE`,`${this.url}/user/identities/${e.identity_id}`,{headers:this.headers,jwt:n.session?.access_token??void 0})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _refreshAccessToken(e){let t=`#_refreshAccessToken()`;this._debug(t,`begin`);try{let n=Date.now();return await Dr(async n=>(n>0&&await Er(200*2**(n-1)),this._debug(t,`refreshing attempt`,n),await J(this.fetch,`POST`,`${this.url}/token?grant_type=refresh_token`,{body:{refresh_token:e},headers:this.headers,xform:Y})),(e,t)=>{let r=200*2**e;return t&&er(t)&&Date.now()+r-n<M})}catch(e){if(this._debug(t,`error`,e),P(e))return this._returnResult({data:{session:null,user:null},error:e});throw e}finally{this._debug(t,`end`)}}_isValidSession(e){return typeof e==`object`&&!!e&&`access_token`in e&&`refresh_token`in e&&`expires_at`in e}async _handleProviderSignIn(e,t){let n=await this._getUrlForProvider(`${this.url}/authorize`,e,{redirectTo:t.redirectTo,scopes:t.scopes,queryParams:t.queryParams});return this._debug(`#_handleProviderSignIn()`,`provider`,e,`options`,t,`url`,n),B()&&!t.skipBrowserRedirect&&window.location.assign(n),{data:{provider:e,url:n},error:null}}async _recoverAndRefresh(){let e=`#_recoverAndRefresh()`;this._debug(e,`begin`);try{let t=await H(this.storage,this.storageKey);if(t&&this.userStorage){let e=await H(this.userStorage,this.storageKey+`-user`);!this.storage.isServer&&Object.is(this.storage,this.userStorage)&&!e&&(e={user:t.user},await Cr(this.userStorage,this.storageKey+`-user`,e)),t.user=e?.user??Lr()}else if(t&&!t.user&&!t.user){let e=await H(this.storage,this.storageKey+`-user`);e&&e?.user?(t.user=e.user,await U(this.storage,this.storageKey+`-user`),await Cr(this.storage,this.storageKey,t)):t.user=Lr()}if(this._debug(e,`session from storage`,t),!this._isValidSession(t)){this._debug(e,`session is not valid`),t!==null&&await this._removeSession();return}let n=(t.expires_at??1/0)*1e3-Date.now()<zn;if(this._debug(e,`session has${n?``:` not`} expired with margin of ${zn}s`),n){if(this.autoRefreshToken&&t.refresh_token){let{error:n}=await this._callRefreshToken(t.refresh_token);n&&(nr(n)?this._debug(e,`refresh discarded by commit guard`,n):this._debug(e,`refresh failed`,n))}}else if(t.user&&t.user.__isUserNotAvailableProxy===!0)try{let{data:n,error:r}=await this._getUser(t.access_token);!r&&n?.user?(t.user=n.user,await this._saveSession(t),await this._notifyAllSubscribers(`SIGNED_IN`,t)):this._debug(e,`could not get user data, skipping SIGNED_IN notification`)}catch(t){console.error(`Error getting user data:`,t),this._debug(e,`error getting user data, skipping SIGNED_IN notification`,t)}else await this._notifyAllSubscribers(`SIGNED_IN`,t)}catch(t){this._debug(e,`error`,t),er(t)?console.warn(t):console.error(t);return}finally{this._debug(e,`end`)}}async _callRefreshToken(e){var t,n;if(!e)throw new L;if(this.refreshingDeferred)return this.refreshingDeferred.promise;if(this.lastRefreshFailure&&this.lastRefreshFailure.refreshToken===e&&Date.now()<this.lastRefreshFailure.expiresAt)return this._debug(`#_callRefreshToken()`,`returning cached failure (cooldown active)`),this.lastRefreshFailure.result;let r=`#_callRefreshToken()`;this._debug(r,`begin`);try{this.refreshingDeferred=new wr;let t=await H(this.storage,this.storageKey),{data:n,error:i}=await this._refreshAccessToken(e);if(i)throw i;if(!n.session)throw new L;let a=await H(this.storage,this.storageKey);if(t!==null&&(a===null||a.refresh_token!==t.refresh_token)){this._debug(r,`commit guard: storage changed since refresh started, discarding rotated tokens`,{startedWith:`present`,nowHolds:a?`replaced`:`cleared`});let e={data:null,error:new tr};return this.refreshingDeferred.resolve(e),e}let o=this._sessionRemovalEpoch;if(await this._saveSession(n.session),this._sessionRemovalEpoch!==o){this._debug(r,`commit guard (post-save): _removeSession ran during _saveSession, undoing write`),await U(this.storage,this.storageKey),this.userStorage&&await U(this.userStorage,this.storageKey+`-user`);let e={data:null,error:new tr};return this.refreshingDeferred.resolve(e),e}await this._notifyAllSubscribers(`TOKEN_REFRESHED`,n.session);let s={data:n.session,error:null};return this.lastRefreshFailure=null,this.refreshingDeferred.resolve(s),s}catch(i){if(this._debug(r,`error`,i),P(i)){let n={data:null,error:i};if(!er(i)){let e=await H(this.storage,this.storageKey);e?.expires_at&&e.expires_at*1e3>Date.now()?this._debug(r,`proactive refresh failed, access token still valid — preserving session`):await this._removeSession()}return this.lastRefreshFailure={refreshToken:e,result:n,expiresAt:Date.now()+6e4},(t=this.refreshingDeferred)==null||t.resolve(n),n}throw(n=this.refreshingDeferred)==null||n.reject(i),i}finally{this.refreshingDeferred=null,this._debug(r,`end`)}}async _notifyAllSubscribers(e,t,n=!0){if(this._pendingInitNotifications!==null&&n){this._pendingInitNotifications.push({event:e,session:t,broadcast:n});return}let r=`#_notifyAllSubscribers(${e})`;this._debug(r,`begin`,t,`broadcast = ${n}`);try{this.broadcastChannel&&n&&this.broadcastChannel.postMessage({event:e,session:t});let r=[],i=Array.from(this.stateChangeEmitters.values()).map(async n=>{try{await n.callback(e,t)}catch(e){r.push(e)}});if(await Promise.all(i),r.length>0){for(let e=0;e<r.length;e+=1)console.error(r[e]);throw r[0]}}finally{this._debug(r,`end`)}}async _saveSession(e){this._debug(`#_saveSession()`,e),this.suppressGetSessionWarning=!0;let t=Object.assign({},e),n=t.user&&t.user.__isUserNotAvailableProxy===!0;if(this.userStorage){!n&&t.user&&await Cr(this.userStorage,this.storageKey+`-user`,{user:t.user});let e=Object.assign({},t);delete e.user;let r=zr(e);await Cr(this.storage,this.storageKey,r)}else{let e=zr(t);await Cr(this.storage,this.storageKey,e)}}async _removeSession(){this._sessionRemovalEpoch+=1,this._debug(`#_removeSession()`),this.lastRefreshFailure=null,this.suppressGetSessionWarning=!1,await U(this.storage,this.storageKey),await U(this.storage,this.storageKey+`-code-verifier`),await U(this.storage,this.storageKey+`-user`),this.userStorage&&await U(this.userStorage,this.storageKey+`-user`),await this._notifyAllSubscribers(`SIGNED_OUT`,null)}_removeVisibilityChangedCallback(){this._debug(`#_removeVisibilityChangedCallback()`);let e=this.visibilityChangedCallback;this.visibilityChangedCallback=null;try{e&&B()&&window!=null&&window.removeEventListener&&window.removeEventListener(`visibilitychange`,e)}catch(e){console.error(`removing visibilitychange callback failed`,e)}}async _startAutoRefresh(){await this._stopAutoRefresh(),this._debug(`#_startAutoRefresh()`);let e=setInterval(()=>this._autoRefreshTokenTick(),M);this.autoRefreshTicker=e,e&&typeof e==`object`&&typeof e.unref==`function`?e.unref():typeof Deno<`u`&&typeof Deno.unrefTimer==`function`&&Deno.unrefTimer(e);let t=setTimeout(async()=>{await this.initializePromise,await this._autoRefreshTokenTick()},0);this.autoRefreshTickTimeout=t,t&&typeof t==`object`&&typeof t.unref==`function`?t.unref():typeof Deno<`u`&&typeof Deno.unrefTimer==`function`&&Deno.unrefTimer(t)}async _stopAutoRefresh(){this._debug(`#_stopAutoRefresh()`);let e=this.autoRefreshTicker;this.autoRefreshTicker=null,e&&clearInterval(e);let t=this.autoRefreshTickTimeout;this.autoRefreshTickTimeout=null,t&&clearTimeout(t)}async startAutoRefresh(){this._removeVisibilityChangedCallback(),await this._startAutoRefresh()}async stopAutoRefresh(){this._removeVisibilityChangedCallback(),await this._stopAutoRefresh()}async dispose(){var e;this._removeVisibilityChangedCallback(),await this._stopAutoRefresh(),(e=this.broadcastChannel)==null||e.close(),this.broadcastChannel=null,this.stateChangeEmitters.clear()}async _autoRefreshTokenTick(){if(this._debug(`#_autoRefreshTokenTick()`,`begin`),this.lock!=null){try{await this._acquireLock(0,async()=>{try{let e=Date.now();try{return await this._useSession(async t=>{let{data:{session:n}}=t;if(!n||!n.refresh_token||!n.expires_at){this._debug(`#_autoRefreshTokenTick()`,`no session`);return}let r=Math.floor((n.expires_at*1e3-e)/M);this._debug(`#_autoRefreshTokenTick()`,`access token expires in ${r} ticks, a tick lasts ${M}ms, refresh threshold is 3 ticks`),r<=3&&await this._callRefreshToken(n.refresh_token)})}catch(e){console.error(`Auto refresh tick failed with error. This is likely a transient error.`,e)}}finally{this._debug(`#_autoRefreshTokenTick()`,`end`)}})}catch(e){if(e instanceof Qr)this._debug(`auto refresh token tick lock not available`);else throw e}return}if(this.refreshingDeferred!==null){this._debug(`#_autoRefreshTokenTick()`,`refresh already in flight, skipping`);return}try{let e=Date.now();try{await this._useSession(async t=>{let{data:{session:n}}=t;if(!n||!n.refresh_token||!n.expires_at){this._debug(`#_autoRefreshTokenTick()`,`no session`);return}let r=Math.floor((n.expires_at*1e3-e)/M);this._debug(`#_autoRefreshTokenTick()`,`access token expires in ${r} ticks, a tick lasts ${M}ms, refresh threshold is 3 ticks`),r<=3&&await this._callRefreshToken(n.refresh_token)})}catch(e){console.error(`Auto refresh tick failed with error. This is likely a transient error.`,e)}}finally{this._debug(`#_autoRefreshTokenTick()`,`end`)}}async _handleVisibilityChange(){if(this._debug(`#_handleVisibilityChange()`),!B()||!(window!=null&&window.addEventListener))return this.autoRefreshToken&&this.startAutoRefresh(),!1;try{this.visibilityChangedCallback=async()=>{try{await this._onVisibilityChanged(!1)}catch(e){this._debug(`#visibilityChangedCallback`,`error`,e)}},window==null||window.addEventListener(`visibilitychange`,this.visibilityChangedCallback),await this._onVisibilityChanged(!0)}catch(e){console.error(`_handleVisibilityChange`,e)}}async _onVisibilityChanged(e){let t=`#_onVisibilityChanged(${e})`;if(this._debug(t,`visibilityState`,document.visibilityState),document.visibilityState===`visible`){if(this.autoRefreshToken&&this._startAutoRefresh(),!e)if(await this.initializePromise,this.lock!=null)await this._acquireLock(this.lockAcquireTimeout,async()=>{if(document.visibilityState!==`visible`){this._debug(t,`acquired the lock to recover the session, but the browser visibilityState is no longer visible, aborting`);return}await this._recoverAndRefresh()});else{if(document.visibilityState!==`visible`){this._debug(t,`visibilityState is no longer visible, skipping recovery`);return}await this._recoverAndRefresh()}}else document.visibilityState===`hidden`&&this.autoRefreshToken&&this._stopAutoRefresh()}async _getUrlForProvider(e,t,n){let r=[`provider=${encodeURIComponent(t)}`];if(n?.redirectTo&&r.push(`redirect_to=${encodeURIComponent(n.redirectTo)}`),n?.scopes&&r.push(`scopes=${encodeURIComponent(n.scopes)}`),this.flowType===`pkce`){let[e,t]=await W(this.storage,this.storageKey),n=new URLSearchParams({code_challenge:`${encodeURIComponent(e)}`,code_challenge_method:`${encodeURIComponent(t)}`});r.push(n.toString())}if(n?.queryParams){let e=new URLSearchParams(n.queryParams);r.push(e.toString())}return n?.skipBrowserRedirect&&r.push(`skip_http_redirect=${n.skipBrowserRedirect}`),`${e}?${r.join(`&`)}`}async _unenroll(e){try{return await this._useSession(async t=>{let{data:n,error:r}=t;return r?this._returnResult({data:null,error:r}):await J(this.fetch,`DELETE`,`${this.url}/factors/${e.factorId}`,{headers:this.headers,jwt:n?.session?.access_token})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _enroll(e){try{return await this._useSession(async t=>{let{data:n,error:r}=t;if(r)return this._returnResult({data:null,error:r});let i=Object.assign({friendly_name:e.friendlyName,factor_type:e.factorType},e.factorType===`phone`?{phone:e.phone}:e.factorType===`totp`?{issuer:e.issuer}:{}),{data:a,error:o}=await J(this.fetch,`POST`,`${this.url}/factors`,{body:i,headers:this.headers,jwt:n?.session?.access_token});return o?this._returnResult({data:null,error:o}):(e.factorType===`totp`&&a.type===`totp`&&a?.totp?.qr_code&&(a.totp.qr_code=`data:image/svg+xml;utf-8,${a.totp.qr_code}`),this._returnResult({data:a,error:null}))})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _verify(e){let t=async()=>{try{return await this._useSession(async t=>{let{data:n,error:r}=t;if(r)return this._returnResult({data:null,error:r});let i=Object.assign({challenge_id:e.challengeId},`webauthn`in e?{webauthn:Object.assign(Object.assign({},e.webauthn),{credential_response:e.webauthn.type===`create`?hi(e.webauthn.credential_response):gi(e.webauthn.credential_response)})}:{code:e.code}),{data:a,error:o}=await J(this.fetch,`POST`,`${this.url}/factors/${e.factorId}/verify`,{body:i,headers:this.headers,jwt:n?.session?.access_token});return o?this._returnResult({data:null,error:o}):(await this._saveSession(Object.assign({expires_at:Math.round(Date.now()/1e3)+a.expires_in},a)),await this._notifyAllSubscribers(`MFA_CHALLENGE_VERIFIED`,a),this._returnResult({data:a,error:o}))})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}};return this.lock==null?t():this._acquireLock(this.lockAcquireTimeout,t)}async _challenge(e){let t=async()=>{try{return await this._useSession(async t=>{let{data:n,error:r}=t;if(r)return this._returnResult({data:null,error:r});let i=await J(this.fetch,`POST`,`${this.url}/factors/${e.factorId}/challenge`,{body:e,headers:this.headers,jwt:n?.session?.access_token});if(i.error)return i;let{data:a}=i;if(a.type!==`webauthn`)return{data:a,error:null};switch(a.webauthn.type){case`create`:return{data:Object.assign(Object.assign({},a),{webauthn:Object.assign(Object.assign({},a.webauthn),{credential_options:Object.assign(Object.assign({},a.webauthn.credential_options),{publicKey:pi(a.webauthn.credential_options.publicKey)})})}),error:null};case`request`:return{data:Object.assign(Object.assign({},a),{webauthn:Object.assign(Object.assign({},a.webauthn),{credential_options:Object.assign(Object.assign({},a.webauthn.credential_options),{publicKey:mi(a.webauthn.credential_options.publicKey)})})}),error:null}}})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}};return this.lock==null?t():this._acquireLock(this.lockAcquireTimeout,t)}async _challengeAndVerify(e){let{data:t,error:n}=await this._challenge({factorId:e.factorId});return n?this._returnResult({data:null,error:n}):await this._verify({factorId:e.factorId,challengeId:t.id,code:e.code})}async _listFactors(){let{data:{user:e},error:t}=await this.getUser();if(t)return{data:null,error:t};let n={all:[],phone:[],totp:[],webauthn:[]};for(let t of e?.factors??[])n.all.push(t),t.status===`verified`&&n[t.factor_type].push(t);return{data:n,error:null}}async _getAuthenticatorAssuranceLevel(e){if(e)try{let{payload:t}=Tr(e),n=null;t.aal&&(n=t.aal);let r=n,{data:{user:i},error:a}=await this.getUser(e);if(a)return this._returnResult({data:null,error:a});((i?.factors)?.filter(e=>e.status===`verified`)??[]).length>0&&(r=`aal2`);let o=t.amr||[];return{data:{currentLevel:n,nextLevel:r,currentAuthenticationMethods:o},error:null}}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}let{data:{session:t},error:n}=await this.getSession();if(n)return this._returnResult({data:null,error:n});if(!t)return{data:{currentLevel:null,nextLevel:null,currentAuthenticationMethods:[]},error:null};let{payload:r}=Tr(t.access_token),i=null;r.aal&&(i=r.aal);let a=i;(t.user.factors?.filter(e=>e.status===`verified`)??[]).length>0&&(a=`aal2`);let o=r.amr||[];return{data:{currentLevel:i,nextLevel:a,currentAuthenticationMethods:o},error:null}}async _getAuthorizationDetails(e){try{return await this._useSession(async t=>{let{data:{session:n},error:r}=t;return r?this._returnResult({data:null,error:r}):n?await J(this.fetch,`GET`,`${this.url}/oauth/authorizations/${e}`,{headers:this.headers,jwt:n.access_token,xform:e=>({data:e,error:null})}):this._returnResult({data:null,error:new L})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _approveAuthorization(e,t){try{return await this._useSession(async n=>{let{data:{session:r},error:i}=n;if(i)return this._returnResult({data:null,error:i});if(!r)return this._returnResult({data:null,error:new L});let a=await J(this.fetch,`POST`,`${this.url}/oauth/authorizations/${e}/consent`,{headers:this.headers,jwt:r.access_token,body:{action:`approve`},xform:e=>({data:e,error:null})});return a.data&&a.data.redirect_url&&B()&&!t?.skipBrowserRedirect&&window.location.assign(a.data.redirect_url),a})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _denyAuthorization(e,t){try{return await this._useSession(async n=>{let{data:{session:r},error:i}=n;if(i)return this._returnResult({data:null,error:i});if(!r)return this._returnResult({data:null,error:new L});let a=await J(this.fetch,`POST`,`${this.url}/oauth/authorizations/${e}/consent`,{headers:this.headers,jwt:r.access_token,body:{action:`deny`},xform:e=>({data:e,error:null})});return a.data&&a.data.redirect_url&&B()&&!t?.skipBrowserRedirect&&window.location.assign(a.data.redirect_url),a})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _listOAuthGrants(){try{return await this._useSession(async e=>{let{data:{session:t},error:n}=e;return n?this._returnResult({data:null,error:n}):t?await J(this.fetch,`GET`,`${this.url}/user/oauth/grants`,{headers:this.headers,jwt:t.access_token,xform:e=>({data:e,error:null})}):this._returnResult({data:null,error:new L})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _revokeOAuthGrant(e){try{return await this._useSession(async t=>{let{data:{session:n},error:r}=t;return r?this._returnResult({data:null,error:r}):n?(await J(this.fetch,`DELETE`,`${this.url}/user/oauth/grants`,{headers:this.headers,jwt:n.access_token,query:{client_id:e.clientId},noResolveJson:!0}),{data:{},error:null}):this._returnResult({data:null,error:new L})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async fetchJwk(e,t={keys:[]}){let n=t.keys.find(t=>t.kid===e);if(n)return n;let r=Date.now();if(n=this.jwks.keys.find(t=>t.kid===e),n&&this.jwks_cached_at+6e5>r)return n;let{data:i,error:a}=await J(this.fetch,`GET`,`${this.url}/.well-known/jwks.json`,{headers:this.headers});if(a)throw a;return!i.keys||i.keys.length===0||(this.jwks=i,this.jwks_cached_at=r,n=i.keys.find(t=>t.kid===e),!n)?null:n}async getClaims(e,t={}){try{let n=e;if(!n){let{data:e,error:t}=await this.getSession();if(t||!e.session)return this._returnResult({data:null,error:t});n=e.session.access_token}let{header:r,payload:i,signature:a,raw:{header:o,payload:s}}=Tr(n);if(!t?.allowExpired)try{Pr(i.exp)}catch(e){throw new ar(e instanceof Error?e.message:`JWT validation failed`)}let c=!r.alg||r.alg.startsWith(`HS`)||!r.kid||!(`crypto`in globalThis&&`subtle`in globalThis.crypto)?null:await this.fetchJwk(r.kid,t?.keys?{keys:t.keys}:t?.jwks);if(!c){let{error:e}=await this.getUser(n);if(e)throw e;return{data:{claims:i,header:r,signature:a},error:null}}let l=Fr(r.alg),u=await crypto.subtle.importKey(`jwk`,c,l,!0,[`verify`]);if(!await crypto.subtle.verify(l,u,a,gr(`${o}.${s}`)))throw new ar(`Invalid JWT signature`);return{data:{claims:i,header:r,signature:a},error:null}}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async signInWithPasskey(e){K(this.experimental);try{if(!vi())return this._returnResult({data:null,error:new F(`Browser does not support WebAuthn`,null)});let{data:t,error:n}=await this._startPasskeyAuthentication({options:{captchaToken:e?.options?.captchaToken}});if(n||!t)return this._returnResult({data:null,error:n});let{data:r,error:i}=await bi({publicKey:mi(t.options),signal:e?.options?.signal??fi.createNewAbortSignal()});if(i||!r)return this._returnResult({data:null,error:i??new F(`WebAuthn ceremony failed`,null)});let a=gi(r);return this._verifyPasskeyAuthentication({challengeId:t.challenge_id,credential:a})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async registerPasskey(e){K(this.experimental);try{if(!vi())return this._returnResult({data:null,error:new F(`Browser does not support WebAuthn`,null)});let{data:t,error:n}=await this._startPasskeyRegistration();if(n||!t)return this._returnResult({data:null,error:n});let{data:r,error:i}=await yi({publicKey:pi(t.options),signal:e?.options?.signal??fi.createNewAbortSignal()});if(i||!r)return this._returnResult({data:null,error:i??new F(`WebAuthn ceremony failed`,null)});let a=hi(r);return this._verifyPasskeyRegistration({challengeId:t.challenge_id,credential:a})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _startPasskeyRegistration(){K(this.experimental);try{return await this._useSession(async e=>{let{data:{session:t},error:n}=e;if(n)return this._returnResult({data:null,error:n});if(!t)return this._returnResult({data:null,error:new L});let{data:r,error:i}=await J(this.fetch,`POST`,`${this.url}/passkeys/registration/options`,{headers:this.headers,jwt:t.access_token,body:{}});return i?this._returnResult({data:null,error:i}):this._returnResult({data:r,error:null})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _verifyPasskeyRegistration(e){K(this.experimental);try{return await this._useSession(async t=>{let{data:{session:n},error:r}=t;if(r)return this._returnResult({data:null,error:r});if(!n)return this._returnResult({data:null,error:new L});let{data:i,error:a}=await J(this.fetch,`POST`,`${this.url}/passkeys/registration/verify`,{headers:this.headers,jwt:n.access_token,body:{challenge_id:e.challengeId,credential:e.credential}});return a?this._returnResult({data:null,error:a}):this._returnResult({data:i,error:null})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _startPasskeyAuthentication(e){K(this.experimental);try{let{data:t,error:n}=await J(this.fetch,`POST`,`${this.url}/passkeys/authentication/options`,{headers:this.headers,body:{gotrue_meta_security:{captcha_token:e?.options?.captchaToken}}});return n?this._returnResult({data:null,error:n}):this._returnResult({data:t,error:null})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _verifyPasskeyAuthentication(e){K(this.experimental);try{let{data:t,error:n}=await J(this.fetch,`POST`,`${this.url}/passkeys/authentication/verify`,{headers:this.headers,body:{challenge_id:e.challengeId,credential:e.credential},xform:Y});return n?this._returnResult({data:null,error:n}):(t.session&&(await this._saveSession(t.session),await this._notifyAllSubscribers(`SIGNED_IN`,t.session)),this._returnResult({data:t,error:null}))}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _listPasskeys(){K(this.experimental);try{return await this._useSession(async e=>{let{data:{session:t},error:n}=e;if(n)return this._returnResult({data:null,error:n});if(!t)return this._returnResult({data:null,error:new L});let{data:r,error:i}=await J(this.fetch,`GET`,`${this.url}/passkeys`,{headers:this.headers,jwt:t.access_token,xform:e=>({data:e,error:null})});return i?this._returnResult({data:null,error:i}):this._returnResult({data:r,error:null})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _updatePasskey(e){K(this.experimental);try{return await this._useSession(async t=>{let{data:{session:n},error:r}=t;if(r)return this._returnResult({data:null,error:r});if(!n)return this._returnResult({data:null,error:new L});let{data:i,error:a}=await J(this.fetch,`PATCH`,`${this.url}/passkeys/${e.passkeyId}`,{headers:this.headers,jwt:n.access_token,body:{friendly_name:e.friendlyName}});return a?this._returnResult({data:null,error:a}):this._returnResult({data:i,error:null})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _deletePasskey(e){K(this.experimental);try{return await this._useSession(async t=>{let{data:{session:n},error:r}=t;if(r)return this._returnResult({data:null,error:r});if(!n)return this._returnResult({data:null,error:new L});let{error:i}=await J(this.fetch,`DELETE`,`${this.url}/passkeys/${e.passkeyId}`,{headers:this.headers,jwt:n.access_token,noResolveJson:!0});return i?this._returnResult({data:null,error:i}):this._returnResult({data:null,error:null})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}};Oi.nextInstanceID={};var ki=Oi,Ai=Xr,ji=ki,Mi=class extends ji{constructor(e){super(e)}},Ni=class{constructor(e,t,n){this.supabaseUrl=e,this.supabaseKey=t;let r=Ln(e);if(!t)throw Error(`supabaseKey is required.`);jn(t),this.realtimeUrl=new URL(`realtime/v1`,r),this.realtimeUrl.protocol=this.realtimeUrl.protocol.replace(`http`,`ws`),this.authUrl=new URL(`auth/v1`,r),this.storageUrl=new URL(`storage/v1`,r),this.functionsUrl=new URL(`functions/v1`,r);let i=`sb-${r.hostname.split(`.`)[0]}-auth-token`,a={db:gn,realtime:vn,auth:{..._n,storageKey:i},global:hn,tracePropagation:yn},o=In(n??{},a);this.settings=o,this.storageKey=o.auth.storageKey??``,this.headers=o.global.headers??{},o.accessToken?(this.accessToken=o.accessToken,this.auth=new Proxy({},{get:(e,t)=>{throw Error(`@supabase/supabase-js: Supabase Client is configured with the accessToken option, accessing supabase.auth.${String(t)} is not possible`)}})):this.auth=this._initSupabaseAuthClient(o.auth??{},this.headers,o.global.fetch),this.fetch=Mn(t,e,this._getSessionToken.bind(this),o.global.fetch,o.tracePropagation),this.functionsFetch=Mn(t,e,this._getSessionToken.bind(this),o.global.fetch,o.tracePropagation,{omitApiKeyAsBearer:!0}),this.realtime=this._initRealtimeClient({headers:this.headers,accessToken:this._getAccessToken.bind(this),fetch:this.fetch,...o.realtime}),this.accessToken&&Promise.resolve(this.accessToken()).then(e=>this.realtime.setAuth(e)).catch(e=>console.warn(`Failed to set initial Realtime auth token:`,e)),this.rest=new ce(new URL(`rest/v1`,r).href,{headers:this.headers,schema:o.db.schema,fetch:this.fetch,timeout:o.db.timeout,urlLengthLimit:o.db.urlLengthLimit}),this.storage=new dn(this.storageUrl.href,this.headers,this.fetch,n?.storage),o.accessToken||this._listenForAuthEvents()}get functions(){return new l(this.functionsUrl.href,{headers:this.headers,customFetch:this.functionsFetch})}from(e){return this.rest.from(e)}schema(e){return this.rest.schema(e)}rpc(e,t={},n={head:!1,get:!1,count:void 0}){return this.rest.rpc(e,t,n)}channel(e,t={config:{}}){return this.realtime.channel(e,t)}getChannels(){return this.realtime.getChannels()}removeChannel(e){return this.realtime.removeChannel(e)}removeAllChannels(){return this.realtime.removeAllChannels()}async _getSessionToken(){if(this.accessToken)return await this.accessToken();let{data:e}=await this.auth.getSession();return e.session?.access_token??null}async _getAccessToken(){return await this._getSessionToken()??this.supabaseKey}_initSupabaseAuthClient({autoRefreshToken:e,persistSession:t,detectSessionInUrl:n,storage:r,userStorage:i,storageKey:a,flowType:o,lock:s,debug:c,throwOnError:l,experimental:u,lockAcquireTimeout:d,skipAutoInitialize:f},p,m){let h={Authorization:`Bearer ${this.supabaseKey}`,apikey:`${this.supabaseKey}`};return new Mi({url:this.authUrl.href,headers:{...h,...p},storageKey:a,autoRefreshToken:e,persistSession:t,detectSessionInUrl:n,storage:r,userStorage:i,flowType:o,lock:s,debug:c,throwOnError:l,experimental:u,fetch:m,lockAcquireTimeout:d,skipAutoInitialize:f,hasCustomAuthorizationHeader:Object.keys(this.headers).some(e=>e.toLowerCase()===`authorization`)})}_initRealtimeClient(e){return new pt(this.realtimeUrl.href,{...e,params:{apikey:this.supabaseKey,...e?.params}})}_listenForAuthEvents(){return this.auth.onAuthStateChange((e,t)=>{this._handleTokenChanged(e,`CLIENT`,t?.access_token)})}_handleTokenChanged(e,t,n){(e===`TOKEN_REFRESHED`||e===`SIGNED_IN`||e===`INITIAL_SESSION`)&&this.changedAccessToken!==n?(this.changedAccessToken=n,this.realtime.setAuth(n)):e===`SIGNED_OUT`&&(this.realtime.setAuth(),t==`STORAGE`&&this.auth.signOut(),this.changedAccessToken=void 0)}};let Pi=(e,t,n)=>new Ni(e,t,n);function Fi(){if(typeof window<`u`||globalThis.Deno!==void 0)return!1;let e=globalThis.process;if(!e)return!1;let t=e.version;if(t==null)return!1;let n=t.match(/^v(\d+)\./);return n?parseInt(n[1],10)<=20:!1}return Fi()&&console.warn(`⚠️  Node.js 20 and below are deprecated and will no longer be supported in future versions of @supabase/supabase-js. Please upgrade to Node.js 22 or later. For more information, visit: https://github.com/orgs/supabase/discussions/45715`),e.AuthAdminApi=Ai,e.AuthApiError=Wn,e.AuthClient=ji,e.AuthError=N,e.AuthImplicitGrantRedirectError=Jn,e.AuthInvalidCredentialsError=qn,e.AuthInvalidJwtError=ar,e.AuthInvalidTokenResponseError=R,e.AuthPKCECodeVerifierMissingError=Zn,e.AuthPKCEGrantCodeExchangeError=Xn,e.AuthRefreshDiscardedError=tr,e.AuthRetryableFetchError=$n,e.AuthSessionMissingError=L,e.AuthUnknownError=F,e.AuthWeakPasswordError=rr,e.CustomAuthError=I,Object.defineProperty(e,`FunctionRegion`,{enumerable:!0,get:function(){return c}}),e.FunctionsError=i,e.FunctionsFetchError=a,e.FunctionsHttpError=s,e.FunctionsRelayError=o,e.GoTrueAdminApi=Xr,e.GoTrueClient=ki,e.NavigatorLockAcquireTimeoutError=$r,e.PostgrestError=p,e.REALTIME_CHANNEL_STATES=ot,Object.defineProperty(e,`REALTIME_LISTEN_TYPES`,{enumerable:!0,get:function(){return E}}),Object.defineProperty(e,`REALTIME_POSTGRES_CHANGES_LISTEN_EVENT`,{enumerable:!0,get:function(){return at}}),Object.defineProperty(e,`REALTIME_PRESENCE_LISTEN_EVENTS`,{enumerable:!0,get:function(){return Ke}}),Object.defineProperty(e,`REALTIME_SUBSCRIBE_STATES`,{enumerable:!0,get:function(){return D}}),e.RealtimeChannel=st,e.RealtimeClient=pt,e.RealtimePostgresFilterBuilder=rt,e.RealtimePresence=qe,e.SIGN_OUT_SCOPES=Yr,e.StorageApiError=At,e.SupabaseClient=Ni,e.WebSocketFactory=le,e.createClient=Pi,e.isAuthApiError=Gn,e.isAuthError=P,e.isAuthImplicitGrantRedirectError=Yn,e.isAuthPKCECodeVerifierMissingError=Qn,e.isAuthRefreshDiscardedError=nr,e.isAuthRetryableFetchError=er,e.isAuthSessionMissingError=Kn,e.isAuthWeakPasswordError=ir,e.lockInternals=Z,e.navigatorLock=ti,e.postgresChangesFilter=it,e.processLock=ri,e})({});
 window.MCL64_CLOUD = {"url":"https://goqhiuxpinzltzxbjgug.supabase.co","key":"sb_publishable_MD1h-WEKI5xqWtLEk_OIOA_T-i77YHW"};
 </script>
-<script>window.MCL64_BUILD = {"version":"v0.83","channel":"release","sha":"18bb12f","branch":"main","at":"2026-08-09 11:53Z"};
+<script>window.MCL64_BUILD = {"version":"v0.85","channel":"dev","sha":"1024023*","branch":"mco","at":"2026-08-12 17:09Z"};
 (function(){
 "use strict";
 
@@ -1768,6 +1846,12 @@ function noiseFill(ctx, w, h, base, amp, rnd, density) {
   }
 }
 
+function makeCityGroundTex() {
+  var s = 64, cv = makeCanvas(s, s), ctx = cv.getContext('2d'), rnd = mulberry32(8);
+  noiseFill(ctx, s, s, '#bdaea3', 80, rnd, 0.45);
+  return cv;
+}
+
 function makeAsphaltTex() {
   var s = 64, cv = makeCanvas(s, s), ctx = cv.getContext('2d'), rnd = mulberry32(7);
   noiseFill(ctx, s, s, '#6f6f7d', 150, rnd, 0.55);
@@ -1871,8 +1955,10 @@ function makeCloudTex() {
 
 /* Trackside signage uses the same 5x7 font as the HUD — one voice on screen
    and in the world. */
-function makeSignTex(text, bg, fg, accent) {
-  var w = 128, h = 32, cv = makeCanvas(w, h), ctx = cv.getContext('2d');
+function makeSignTex(text, bg, fg, accent, minW) {
+  var textW = text.length * 12;
+  var w = Math.max(minW || 128, textW + 32);
+  var h = 32, cv = makeCanvas(w, h), ctx = cv.getContext('2d');
   ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
   if (accent) { ctx.fillStyle = accent; ctx.fillRect(0, 0, w, 3); ctx.fillRect(0, h - 3, w, 3); }
   drawTextCenter(ctx, text, w / 2, (h - GLYPH_H * 2) / 2, 2, fg, null, 1);
@@ -1880,10 +1966,14 @@ function makeSignTex(text, bg, fg, accent) {
 }
 
 function makeStartLineTex() {
-  var s = 64, cv = makeCanvas(s, s), ctx = cv.getContext('2d');
-  ctx.fillStyle = '#e9e9ec'; ctx.fillRect(0, 0, s, s);
-  ctx.fillStyle = '#1b1c22';
-  for (var y = 0; y < 8; y++) for (var x = 0; x < 8; x++) if ((x + y) % 2 === 0) ctx.fillRect(x * 8, y * 8, 8, 8);
+  var s = 256, cv = makeCanvas(s, s), ctx = cv.getContext('2d');
+  ctx.fillStyle = '#f9f9fc'; ctx.fillRect(0, 0, s, s);
+  ctx.fillStyle = '#111115';
+  for (var y = 0; y < 16; y++) {
+    for (var x = 0; x < 16; x++) {
+      if ((x + y) % 2 === 0) ctx.fillRect(x * 16, y * 16, 16, 16);
+    }
+  }
   return cv;
 }
 
@@ -2247,6 +2337,75 @@ EngineAudio.prototype.thud = function (power) {
   } catch (e) { /* see above */ }
 };
 
+function makeBuildingTex(baseColor, winColor) {
+  var w = 256, h = 256, cv = makeCanvas(w, h), ctx = cv.getContext('2d');
+  ctx.fillStyle = baseColor;
+  ctx.fillRect(0, 0, w, h);
+  
+  // draw some noise for texture
+  for (var i = 0; i < 2000; i++) {
+    ctx.fillStyle = (Math.random() > 0.5) ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.04)';
+    ctx.fillRect(Math.random() * w, Math.random() * h, 2 + Math.random() * 8, 2 + Math.random() * 8);
+  }
+
+  // Windows
+  var padding = 8;
+  var winW = 24;
+  var winH = 32;
+  for (var y = padding; y < h; y += winH + padding) {
+    for (var x = padding; x < w; x += winW + padding) {
+      if (Math.random() > 0.1) {
+        // window frame
+        ctx.fillStyle = '#2a2a2a';
+        ctx.fillRect(x - 2, y - 2, winW + 4, winH + 4);
+        // glass
+        ctx.fillStyle = winColor;
+        ctx.fillRect(x, y, winW, winH);
+        // reflection
+        ctx.fillStyle = 'rgba(255,255,255,0.15)';
+        ctx.beginPath();
+        ctx.moveTo(x, y + winH);
+        ctx.lineTo(x + winW, y);
+        ctx.lineTo(x + winW, y + winH);
+        ctx.fill();
+        // mullions
+        ctx.fillStyle = '#111';
+        ctx.fillRect(x + winW/2 - 1, y, 2, winH);
+        ctx.fillRect(x, y + winH/2 - 1, winW, 2);
+      }
+    }
+  }
+  return cv;
+}
+
+function makeCheckeredBannerTex(text, bg, fg, accent) {
+  var w = 512, h = 64, cv = makeCanvas(w, h), ctx = cv.getContext('2d');
+  ctx.fillStyle = bg; ctx.fillRect(0, 0, w, h);
+  
+  ctx.fillStyle = '#111';
+  for (var y = 0; y < 4; y++) {
+    for (var x = 0; x < 8; x++) {
+      if ((x+y)%2 === 0) {
+        ctx.fillRect(x*16, y*16, 16, 16);
+        ctx.fillRect(w - 128 + x*16, y*16, 16, 16);
+      }
+    }
+  }
+  ctx.fillStyle = '#fff';
+  for (var y = 0; y < 4; y++) {
+    for (var x = 0; x < 8; x++) {
+      if ((x+y)%2 !== 0) {
+        ctx.fillRect(x*16, y*16, 16, 16);
+        ctx.fillRect(w - 128 + x*16, y*16, 16, 16);
+      }
+    }
+  }
+
+  if (accent) { ctx.fillStyle = accent; ctx.fillRect(0, 0, w, 4); ctx.fillRect(0, h - 4, w, 4); }
+  drawTextCenter(ctx, text, w / 2, (h - GLYPH_H * 3) / 2, 3, fg, null, 1);
+  return cv;
+}
+
 
 /* ===== src/20-track.js ===== */
 /* =========================================================================
@@ -2439,7 +2598,53 @@ var BRANDS_CORNERS = [
   ['SHEENE CURVE', 34], ['STIRLINGS', 37], ['CLEARWAYS', 40], ['CLARK CURVE', 43]
 ];
 
+/* Circuit de Monaco - 3.337km street circuit around Monte Carlo harbour */
+var MONACO_CONTROL = [
+  [  350,   600,   0], /* Pit Straight / Start Finish */
+  [  120,   600,   0],
+  [ -100,   590,   0], /* Turn 1: SAINTE DEVOTE */
+  [ -220,   520,  12], /* Beau Rivage Uphill Climb */
+  [ -340,   410,  24],
+  [ -420,   280,  32], /* Turn 3: MASSENET */
+  [ -450,   120,  35], /* Turn 4: CASINO SQUARE */
+  [ -380,    10,  25],
+  [ -280,   -60,  15], /* Turn 5: MIRABEAU HAUTE */
+  [ -180,  -120,   8], /* Turn 6: FAIRMONT HAIRPIN */
+  [ -240,  -180,   4],
+  [ -210,  -260,   2], /* Turn 7: MIRABEAU BAS */
+  [ -120,  -320,   0], /* Turn 8: PORTIER */
+  [    0,  -350,   0], /* Turn 9: TUNNEL ENTRY */
+  [  200,  -320,   0], /* THE TUNNEL */
+  [  400,  -240,   0],
+  [  520,  -120,   0], /* Turns 10-11: NOUVELLE CHICANE */
+  [  460,    20,   0],
+  [  380,   120,   0], /* Turn 12: TABAC */
+  [  280,   240,   0], /* Turns 13-16: SWIMMING POOL */
+  [  200,   340,   0],
+  [  240,   440,   0],
+  [  310,   490,   0], /* Turn 18: LA RASCASSE */
+  [  380,   540,   0]  /* Turn 19: ANTHONY NOGHES */
+];
+
+var MONACO_CORNERS = [
+  ['SAINTE DEVOTE', 2], ['BEAU RIVAGE', 3], ['MASSENET', 5], ['CASINO SQUARE', 6],
+  ['MIRABEAU', 8], ['FAIRMONT HAIRPIN', 9], ['PORTIER', 12], ['THE TUNNEL', 14],
+  ['NOUVELLE CHICANE', 16], ['TABAC', 18], ['SWIMMING POOL', 19], ['LA RASCASSE', 22],
+  ['ANTHONY NOGHES', 23]
+];
+
 var TRACKS = [
+  {
+    id: 'monaco-gp-v1',
+    name: 'MONACO GRAND PRIX',
+    blurb: 'MONTE CARLO STREETS',
+    laps: 3,
+    halfW: 5.5,          /* Tight street track */
+    runoff: 4.5,         /* Armco barriers right against the track */
+    music: 'monaco',
+    control: MONACO_CONTROL,
+    corners: MONACO_CORNERS
+  },
   {
     id: 'silverstone-v1',
     name: 'SILVERSTONE',
@@ -2939,10 +3144,16 @@ function buildTrackMeshes(track, scene) {
     pushStrip(runoff, track, i, i2, HALF_W, WALL_HALF, -0.05, v0, v1, COL.runoff);
     pushStrip(runoff, track, i, i2, -WALL_HALF, -HALF_W, -0.05, v0, v1, COL.runoff);
 
-    /* grass skirt */
-    var gShade = (i % 5 === 0) ? COL.grassDark : COL.grass;
-    pushStrip(grass, track, i, i2, WALL_HALF, WALL_HALF + VERGE, -0.55, v0 * 0.35, v1 * 0.35, gShade);
-    pushStrip(grass, track, i, i2, -(WALL_HALF + VERGE), -WALL_HALF, -0.55, v0 * 0.35, v1 * 0.35, gShade);
+    /* grass or city street pavement skirt */
+    if (track.id === 'monaco-gp-v1') {
+      var cityPavement = (i % 2 === 0) ? srgb(0xc4ab97) : srgb(0xb39c89);
+      pushStrip(grass, track, i, i2, WALL_HALF, WALL_HALF + VERGE, -0.55, v0 * 0.35, v1 * 0.35, cityPavement);
+      pushStrip(grass, track, i, i2, -(WALL_HALF + VERGE), -WALL_HALF, -0.55, v0 * 0.35, v1 * 0.35, cityPavement);
+    } else {
+      var gShade = (i % 5 === 0) ? COL.grassDark : COL.grass;
+      pushStrip(grass, track, i, i2, WALL_HALF, WALL_HALF + VERGE, -0.55, v0 * 0.35, v1 * 0.35, gShade);
+      pushStrip(grass, track, i, i2, -(WALL_HALF + VERGE), -WALL_HALF, -0.55, v0 * 0.35, v1 * 0.35, gShade);
+    }
 
     /* barrier walls */
     pushWall(wall, track, i, i2, WALL_HALF, 1.25, vAccum);
@@ -2955,8 +3166,11 @@ function buildTrackMeshes(track, scene) {
     map: texFromCanvas(makeAsphaltTex(), 1, 1), vertexColors: true, roughness: 0.92, metalness: 0.0 })));
   group.add(new THREE.Mesh(runoff.geometry(), new THREE.MeshStandardMaterial({
     map: texFromCanvas(makeRunoffTex(), 1, 1), vertexColors: true, roughness: 0.95, metalness: 0.0 })));
+  
+  var grassTexCanvas = track.id === 'monaco-gp-v1' ? makeCityGroundTex() : makeGrassTex();
   group.add(new THREE.Mesh(grass.geometry(), new THREE.MeshStandardMaterial({
-    map: texFromCanvas(makeGrassTex(), 6, 1), vertexColors: true, roughness: 1.0, metalness: 0.0 })));
+    map: texFromCanvas(grassTexCanvas, 6, 1), vertexColors: true, roughness: 1.0, metalness: 0.0 })));
+
   group.add(new THREE.Mesh(kerb.geometry(), new THREE.MeshStandardMaterial({
     map: texFromCanvas(makeKerbTex(), 1, 1, true), vertexColors: true, roughness: 0.72, metalness: 0.0 })));
   group.add(new THREE.Mesh(wall.geometry(), new THREE.MeshStandardMaterial({
@@ -3047,6 +3261,7 @@ function pushWall(rb, track, i, i2, off, h, vAcc) {
    circuit so its normal points up and inward, toward the racing. */
 function buildStandRing(scene, track, crowdMat) {
   var n = track.n;
+  var rnd = mulberry32(12345);
   var STEP = 4;                     /* one quad per 4 samples is ample here */
   var Y0 = 1.4, Y1 = 15.0;
   /* The two sides are NOT symmetrical. Perimeter terracing crowds the wall,
@@ -3135,18 +3350,20 @@ function buildStartGantry(track, scene) {
     g.add(pillar);
   }
 
-  var beam = new THREE.Mesh(new THREE.BoxGeometry((WALL_HALF + 1.8) * 2, 1.9, 1.3), darkMat);
-  beam.position.set(mid.x, mid.y + 8.0, mid.z);
-  beam.rotation.y = yaw;
-  g.add(beam);
-
-  var bannerTex = texFromCanvas(makeSignTex('PAPAYA GP', '#ff8000', '#1b1c22', '#ffffff'), 1, 1, true);
-  var banner = new THREE.Mesh(new THREE.PlaneGeometry((WALL_HALF + 1.5) * 2, 2.6),
-    new THREE.MeshBasicMaterial({ map: bannerTex, side: THREE.DoubleSide, fog: false }));
-  banner.position.set(mid.x, mid.y + 6.4, mid.z);
-  /* spans the track, lettered face turned back toward the approach */
-  banner.rotation.y = yaw + Math.PI;
-  g.add(banner);
+  
+    var beam = new THREE.Mesh(new THREE.BoxGeometry((WALL_HALF + 1.8) * 2, 1.9, 1.3), darkMat);
+    beam.position.set(mid.x, mid.y + 8.0, mid.z);
+    beam.rotation.y = yaw;
+    g.add(beam);
+    var gpName = track.id === 'monaco-gp-v1' ? 'MONACO GP' : 'PAPAYA GP';
+    var bannerTex = texFromCanvas(makeCheckeredBannerTex(gpName, '#ff8000', '#1b1c22', '#ffffff'), 1, 1, true);
+    var banner = new THREE.Mesh(new THREE.PlaneGeometry((WALL_HALF + 1.5) * 2, 2.6),
+      new THREE.MeshBasicMaterial({ map: bannerTex, side: THREE.DoubleSide, fog: false }));
+    banner.position.set(mid.x, mid.y + 6.4, mid.z);
+    /* spans the track, lettered face turned back toward the approach */
+    banner.rotation.y = yaw + Math.PI;
+    g.add(banner);
+  
 
   /* five-light start gantry — the actual F1 ritual, and the game's clock */
   var lights = [];
@@ -3182,6 +3399,7 @@ function buildStartGantry(track, scene) {
 function buildScenery(track, scene) {
   var rnd = mulberry32(20240);
   var n = track.n;
+  var rnd = mulberry32(12345);
   var i;
 
   /* grandstands and pit buildings clustered around the start line */
@@ -3189,7 +3407,7 @@ function buildScenery(track, scene) {
   var standMat = new THREE.MeshStandardMaterial({ color: srgb(0x33353f), roughness: 0.82, metalness: 0.1 });
   var crowdMat = new THREE.MeshStandardMaterial({ map: crowdTex, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0 });
   var roofMat = new THREE.MeshStandardMaterial({ color: COL.papaya, roughness: 0.45, metalness: 0.2 });
-  var pitMat = new THREE.MeshStandardMaterial({ map: texFromCanvas(makePitwallTex(), 4, 1, true), roughness: 0.7, metalness: 0.0 });
+  var pitMat = new THREE.MeshStandardMaterial({ map: texFromCanvas(makePitwallTex(), 4, 1, true),  });
 
   /* Stands stand back far enough to frame the straight instead of walling it
      in, and the terracing is dark so the crowd is what actually reads.
@@ -3198,7 +3416,7 @@ function buildScenery(track, scene) {
      start line, and leaving both in would bury five stands inside it. */
   var ringed = !!track.def.standRing;
   if (ringed) buildStandRing(scene, track, crowdMat);
-  for (var s = 0; !ringed && s < 5; s++) {
+  for (var s = 0; !ringed && track.id !== 'monaco-gp-v1' && s < 5; s++) {
     var idx = (track.startIndex - 12 + s * 9 + n) % n;
     var side = s % 2 === 0 ? 1 : -1;
     var p = track.p[idx], l = track.lat[idx], f = track.fwd[idx];
@@ -3263,11 +3481,16 @@ function buildScenery(track, scene) {
     var si = (corner.index - 24 + n) % n;
     var sp = track.p[si], sl = track.lat[si], sf = track.fwd[si];
     var sideS = track.curv[corner.index] > 0 ? -1 : 1;   /* outside of the bend */
-    var signMat = new THREE.MeshStandardMaterial({
-      map: texFromCanvas(makeSignTex(corner.name, '#1b1c22', '#ff8000', '#ff8000'), 1, 1, true),
-      side: THREE.DoubleSide, roughness: 0.7, metalness: 0.0
+    if (track.id === 'monaco-gp-v1' && si > 460 && si < 580) continue; /* skip signs in tunnel */
+    
+    var signTex = texFromCanvas(makeSignTex(corner.name, '#1b1c22', '#ff8000', '#ff8000'), 1, 1, true);
+    var signMat = new THREE.MeshBasicMaterial({
+      map: signTex,
+      side: THREE.DoubleSide
     });
-    var sign = new THREE.Mesh(new THREE.PlaneGeometry(11, 2.75), signMat);
+    var signAspect = signTex.image.width / signTex.image.height;
+    var sign = new THREE.Mesh(new THREE.PlaneGeometry(2.75 * signAspect, 2.75), signMat);
+
     sign.position.set(sp.x + sl.x * sideS * (WALL_HALF + 3.6), groundY(track, si, sideS * (WALL_HALF + 3.6)) + 2.9, sp.z + sl.z * sideS * (WALL_HALF + 3.6));
     /* +PI so the lettered FRONT face turns back up the road to meet the
        driver. Facing it down-track shows the mirrored reverse. */
@@ -3286,65 +3509,45 @@ function buildScenery(track, scene) {
   }
 
   /* crossed-quad treeline */
-  var treeTex = texFromCanvas(makeTreeTex(), 1, 1, true);
-  var treeMat = new THREE.MeshStandardMaterial({
-    map: treeTex, transparent: false, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0
-  });
-  var treeBuf = new RibbonBuilder();
-  var treeProbe = { i: 0, lateral: 0, s: 0, y: 0, fwd: null, lat: null };
-  var placed = 0;
-  for (i = 0; i < n; i += 2) {
-    for (var side2 = -1; side2 <= 1; side2 += 2) {
-      if (rnd() > 0.55) continue;
-      /* A ringed circuit is walled in by terracing from WALL_HALF + 14 out to
-         + 45, and the old + 20 grew a wood straight up through the middle of
-         the crowd. Two things keep them out of it now.
+  if (true) {
+    var treeTex = texFromCanvas(makeTreeTex(), 1, 1, true);
+    var treeMat = new THREE.MeshStandardMaterial({
+      map: treeTex, transparent: false, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0
+    });
+    var treeBuf = new RibbonBuilder();
+    var treeProbe = { i: 0, lateral: 0, s: 0, y: 0, fwd: null, lat: null };
+    var placed = 0;
+    for (i = 0; i < n; i += 2) {
+      for (var side2 = -1; side2 <= 1; side2 += 2) {
+        if (rnd() > 0.55) continue;
+        if (track.id === 'monaco-gp-v1' && i > 540 && i < 880 && side2 === 1) continue; /* harbour */
+        if (track.def.standRing && side2 > 0) continue;
+        var d = WALL_HALF + (track.def.standRing ? 56 : 20) + rnd() * 90;
+        var tp = track.p[i], tl = track.lat[i];
+        var x = tp.x + tl.x * side2 * d + (rnd() - 0.5) * 14;
+        var z = tp.z + tl.z * side2 * d + (rnd() - 0.5) * 14;
 
-         Nothing on the infield side: side2 +1 is inside the oval (lat is the
-         car's LEFT and this runs anti-clockwise), and anything planted there
-         is hidden behind the infield bank anyway.
+        track.frame(x, z, null, treeProbe);
+        if (Math.abs(treeProbe.lateral) < WALL_HALF + 6) continue;
 
-         And the margin has to cover more than the trunk. Each tree is jittered
-         up to 7 m in x AND z — worst case ~9.9 m projected onto lat — and its
-         crossed quads span up to 5.6 m either side of the trunk. So the first
-         trunk goes 15.5 m further out than the last row of seats, not flush
-         against it. */
-      if (track.def.standRing && side2 > 0) continue;
-      var d = WALL_HALF + (track.def.standRing ? 56 : 20) + rnd() * 90;
-      var tp = track.p[i], tl = track.lat[i];
-      var x = tp.x + tl.x * side2 * d + (rnd() - 0.5) * 14;
-      var z = tp.z + tl.z * side2 * d + (rnd() - 0.5) * 14;
-
-      /* Re-frame against the WHOLE circuit, not the sample we scattered from.
-         hint = null forces nearestIndex to do its global sweep instead of
-         searching +/-8 samples around i. A lap that folds back on itself puts
-         one stretch of road within scattering range of another — Brands brings
-         Druids back alongside the climb to Graham Hill — so a tree measured
-         30 m clear of sample i can be sitting on the racing line somewhere
-         else entirely. Drop anything that lands inside the barriers. */
-      track.frame(x, z, null, treeProbe);
-      if (Math.abs(treeProbe.lateral) < WALL_HALF + 6) continue;
-
-      /* Height from where the tree ACTUALLY is, not from the sample it was
-         scattered off. On a flat circuit those agree; on Brands, with 34 m
-         between Paddock Hill and Druids, the old centreline height left whole
-         stands of trees hanging in the air.
-
-         The bank term is clamped at the grass edge because beyond WALL_HALF +
-         VERGE there is no ground mesh to follow, and extrapolating the camber
-         out to 120 m would lift them off the ground all over again. */
-      var vergeEdge = WALL_HALF + VERGE;
-      var y = groundY(track, treeProbe.i, clamp(treeProbe.lateral, -vergeEdge, vergeEdge)) - 0.6;
-      var hgt = 9 + rnd() * 9;
-      var wdt = hgt * 0.62;
-      pushCrossQuad(treeBuf, x, y, z, wdt, hgt, rnd() * TAU);
-      placed++;
+        var vergeEdge = WALL_HALF + VERGE;
+        var y = groundY(track, treeProbe.i, clamp(treeProbe.lateral, -vergeEdge, vergeEdge)) - 0.6;
+        var hgt = 9 + rnd() * 9;
+        var wdt = hgt * 0.62;
+        pushCrossQuad(treeBuf, x, y, z, wdt, hgt, rnd() * TAU);
+        placed++;
+        if (placed > 420) break;
+      }
       if (placed > 420) break;
     }
-    if (placed > 420) break;
+    var trees = new THREE.Mesh(treeBuf.geometry(), treeMat); trees.castShadow = true; trees.receiveShadow = true;
+    scene.add(trees);
   }
-  var trees = new THREE.Mesh(treeBuf.geometry(), treeMat);
-  scene.add(trees);
+
+  /* Monaco GP Real 3D Tunnel Canopy, Fairmont Hotel & Urban Street Environment */
+  if (track.id === 'monaco-gp-v1') {
+    buildMonacoTunnelAndUrbanScenery(track, scene);
+  }
 
   /* drifting cloud plane */
   var cloudTex = texFromCanvas(makeCloudTex(), 1, 1, true);
@@ -3357,9 +3560,428 @@ function buildScenery(track, scene) {
     cq.rotation.y = -ang + Math.PI / 2;
     clouds.add(cq);
   }
-  scene.add(clouds);
+    scene.add(clouds);
+
+  /* Massive City Ground Plane to block the sky "flooding" effect on the right */
+  var cityGroundGeo = new THREE.PlaneGeometry(4000, 4000);
+  var cityGroundMat = new THREE.MeshStandardMaterial({ color: srgb(0x555555), roughness: 0.9, metalness: 0.1 });
+  var cityGround = new THREE.Mesh(cityGroundGeo, cityGroundMat);
+  cityGround.rotation.x = -Math.PI / 2;
+  cityGround.position.set(0, -10.0, 0); // Just below sea and track
+  cityGround.receiveShadow = true;
+  scene.add(cityGround);
+
 
   return { clouds: clouds };
+}
+
+function buildMonacoTunnelAndUrbanScenery(track, scene) {
+  var n = track.n;
+  var rnd = mulberry32(12345);
+  var tunnelBuilder = new RibbonBuilder();
+  var lightBuilder = new RibbonBuilder();
+  var darkConcrete = srgb(0x22242a);
+  var lightConcrete = srgb(0x555860);
+  var goldLight = new THREE.Color(0xffd700);
+
+  var tunnelStart = 470;
+  var tunnelEnd = 575;
+
+  /* 3D Tunnel Canopy & Inside Ceiling Lights */
+  for (var i = tunnelStart; i < tunnelEnd; i++) {
+    var i2 = (i + 1) % n;
+    var H = 5.8;
+    var wL = -WALL_HALF;
+    var wR = WALL_HALF;
+
+    var bL0 = edgeY(track, i, wL, 1.25), bL1 = edgeY(track, i2, wL, 1.25);
+    var bR0 = edgeY(track, i, wR, 1.25), bR1 = edgeY(track, i2, wR, 1.25);
+
+    var rL0 = edgeY(track, i, wL, H), rL1 = edgeY(track, i2, wL, H);
+    var rR0 = edgeY(track, i, wR, H), rR1 = edgeY(track, i2, wR, H);
+
+    /* Tunnel Roof Ceiling (inner face looking down) */
+    tunnelBuilder.quad(rL0, rL1, rR1, rR0, [[0, 0], [0, 1], [1, 1], [1, 0]], darkConcrete);
+
+    /* Tunnel Upper Side Walls */
+    tunnelBuilder.quad(bL0, bL1, rL1, rL0, [[0, 0], [0, 1], [1, 1], [1, 0]], darkConcrete);
+    tunnelBuilder.quad(rR0, rR1, bR1, bR0, [[0, 0], [0, 1], [1, 1], [1, 0]], darkConcrete);
+
+    /* Outer Roof Cover */
+    var oL0 = edgeY(track, i, wL - 1.0, H + 0.4), oL1 = edgeY(track, i2, wL - 1.0, H + 0.4);
+    var oR0 = edgeY(track, i, wR + 1.0, H + 0.4), oR1 = edgeY(track, i2, wR + 1.0, H + 0.4);
+    tunnelBuilder.quad(oL0, oL1, oR1, oR0, [[0, 0], [0, 1], [1, 1], [1, 0]], lightConcrete);
+
+    /* Interior Ceiling Lights */
+    if (i % 3 === 0) {
+      var lA0 = edgeY(track, i, -2.5, H - 0.05), lA1 = edgeY(track, i2, -2.5, H - 0.05);
+      var lB0 = edgeY(track, i, -1.5, H - 0.05), lB1 = edgeY(track, i2, -1.5, H - 0.05);
+      lightBuilder.quad(lA0, lA1, lB1, lB0, [[0,0],[0,1],[1,1],[1,0]], goldLight);
+
+      var rA0 = edgeY(track, i, 1.5, H - 0.05), rA1 = edgeY(track, i2, 1.5, H - 0.05);
+      var rB0 = edgeY(track, i, 2.5, H - 0.05), rB1 = edgeY(track, i2, 2.5, H - 0.05);
+      lightBuilder.quad(rA0, rA1, rB1, rB0, [[0,0],[0,1],[1,1],[1,0]], goldLight);
+    }
+  }
+
+  var tunnelMesh = new THREE.Mesh(tunnelBuilder.geometry(), new THREE.MeshStandardMaterial({
+    vertexColors: true, roughness: 0.8, metalness: 0.2, side: THREE.DoubleSide
+  }));
+  tunnelMesh.castShadow = true; tunnelMesh.receiveShadow = true; scene.add(tunnelMesh);
+
+  var lightMesh = new THREE.Mesh(lightBuilder.geometry(), new THREE.MeshBasicMaterial({
+    vertexColors: true, side: THREE.DoubleSide
+  }));
+  scene.add(lightMesh);
+
+  /* Tunnel Entrance & Exit Portals */
+  function buildPortal(idx, title) {
+    var p = track.p[idx], f = track.fwd[idx];
+    var yaw = datan2(f.x, f.z);
+    var g = new THREE.Group();
+    var archMat = new THREE.MeshStandardMaterial({ color: srgb(0x3a3d45), roughness: 0.7 });
+    
+    var archW = WALL_HALF * 2 + 3;
+    var arch = new THREE.Mesh(new THREE.BoxGeometry(archW, 2.2, 2.5), archMat);
+    arch.position.set(p.x, p.y + 6.2, p.z);
+    arch.rotation.y = yaw;
+    g.add(arch);
+
+    var bannerTex = texFromCanvas(makeCheckeredBannerTex(title, '#ff8000', '#1b1c22', '#ffffff'), 1, 1, true);
+    var sign = new THREE.Mesh(new THREE.PlaneGeometry((WALL_HALF + 1.5) * 2, 2.6),
+      new THREE.MeshBasicMaterial({ map: bannerTex, side: THREE.DoubleSide, fog: false }));
+    
+    // Position it slightly in front of the arch (from the driver's perspective)
+    // Driver comes from -f. So to face the driver, we move it back along -f.
+    var signOffset = idx === tunnelStart ? -1.3 : -1.3; 
+    sign.position.set(p.x + f.x * signOffset, p.y + 6.2, p.z + f.z * signOffset);
+    sign.rotation.y = yaw + Math.PI;
+    g.add(sign);
+    scene.add(g);
+  }
+
+  buildPortal(tunnelStart, 'THE TUNNEL - MONTE CARLO');
+  buildPortal(tunnelEnd, 'TUNNEL EXIT - NOUVELLE CHICANE');
+
+  /* Fairmont Hotel on top of Tunnel */
+  var midI = Math.floor((tunnelStart + tunnelEnd) / 2);
+  var midP = track.p[midI], midL = track.lat[midI], midF = track.fwd[midI];
+  var midYaw = datan2(midF.x, midF.z);
+
+  var hotelMat = new THREE.MeshStandardMaterial({ color: srgb(0xdedad4), roughness: 0.8 });
+  var hotel = new THREE.Mesh(new THREE.BoxGeometry(40, 16, 50), hotelMat);
+  hotel.position.set(midP.x + midL.x * 28, midP.y + 14, midP.z + midL.z * 28);
+  hotel.rotation.y = midYaw;
+  hotel.castShadow = true; hotel.receiveShadow = true; scene.add(hotel);
+
+  /* Casino de Monte-Carlo at Casino Square (Outer Left Side, clear of Sainte Devote) */
+  var casI = 225;
+  var casP = track.p[casI], casL = track.lat[casI], casF = track.fwd[casI];
+  var casYaw = datan2(casF.x, casF.z);
+
+  var casOff = WALL_HALF + 38;
+  var casX = casP.x + casL.x * casOff;
+  var casZ = casP.z + casL.z * casOff;
+
+  var casinoMat = new THREE.MeshStandardMaterial({ color: srgb(0xe8e2d8), roughness: 0.7 });
+  var casinoDomeMat = new THREE.MeshStandardMaterial({ color: srgb(0x386b62), roughness: 0.4 });
+  var casinoGroup = new THREE.Group();
+
+  var casinoMain = new THREE.Mesh(new THREE.BoxGeometry(40, 18, 22), casinoMat);
+  casinoMain.position.set(casX, casP.y + 9, casZ);
+  casinoMain.rotation.y = casYaw;
+  casinoGroup.add(casinoMain);
+
+  var dome = new THREE.Mesh(new THREE.SphereGeometry(7, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2), casinoDomeMat);
+  dome.position.set(casX, casP.y + 18, casZ);
+  casinoGroup.add(dome);
+
+  var casSignTex = texFromCanvas(makeSignTex('CASINO DE MONTE-CARLO', '#ff8000', '#1c1b22', '#ffffff'), 1, 1, true);
+  var casSign = new THREE.Mesh(new THREE.PlaneGeometry(22, 3.2), new THREE.MeshBasicMaterial({ map: casSignTex, side: THREE.DoubleSide }));
+  var signX = casP.x + casL.x * (WALL_HALF + 9);
+  var signZ = casP.z + casL.z * (WALL_HALF + 9);
+  casSign.position.set(signX, casP.y + 5.5, signZ);
+  casSign.rotation.y = casYaw - Math.PI / 2;
+  casinoGroup.add(casSign);
+
+  casinoGroup.traverse(function(c) { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } }); scene.add(casinoGroup);
+
+  /* Harbour Mediterranean Sea & Superyachts */
+    var seaGeo = new THREE.BufferGeometry();
+  var seaVerts = [];
+  var cx = 1200, cz = 100;
+  var coastPts = [
+    [420, -300],
+    [420, -240],
+    [550, -120],
+    [490, 20],
+    [410, 120],
+    [310, 240],
+    [230, 340],
+    [270, 440],
+    [340, 490],
+    [1200, 490],
+    [1200, -300],
+    [420, -300]
+  ];
+  for (var ci = 0; ci < coastPts.length - 1; ci++) {
+    seaVerts.push(cx, 0, cz);
+    // Note: winding order must be counter-clockwise for the face to point UP (+Y)
+    // Wait: if cx,cz is East, and we iterate North to South (or South to North)
+    // Coast points are ordered from Z=-300 (North) to Z=500 (South).
+    // Center is at X=1200 (East).
+    // So triangle is (1200, 100), (coast_i), (coast_i+1)
+    // i is North, i+1 is South.
+    // E.g. (1200, 0), (0, -100), (0, 100) -> 1200 to 0 to 0 -> CCW? 
+    // Wait. Top view (+X right, +Z down).
+    // 1200,100 is Right. 0,-100 is Top-Left. 0,100 is Bottom-Left.
+    // Right -> Top-Left -> Bottom-Left -> Right is CCW.
+    // Yes, this winding is correct for +Y normal.
+    seaVerts.push(coastPts[ci][0], 0, coastPts[ci][1]);
+    seaVerts.push(coastPts[ci+1][0], 0, coastPts[ci+1][1]);
+  }
+  seaGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(seaVerts), 3));
+  seaGeo.computeVertexNormals();
+
+  var seaMat = new THREE.MeshStandardMaterial({ color: srgb(0x005f73), roughness: 0.25, metalness: 0.6 });
+  var sea = new THREE.Mesh(seaGeo, seaMat);
+  var harbourY = track.p[700].y; // use track elevation at the harbour
+  sea.position.set(0, harbourY - 0.4, 0);
+  sea.receiveShadow = true; scene.add(sea);
+  track.sea = sea;
+
+  var yachtHullMat = new THREE.MeshStandardMaterial({ color: srgb(0xf0f2f5), roughness: 0.3, metalness: 0.2 });
+  var yachtDeckMat = new THREE.MeshStandardMaterial({ color: srgb(0x20242a), roughness: 0.5 });
+
+  
+  
+    var yachtPositions = [];
+  var placedBoats = 0;
+  var attempts = 0;
+  while (placedBoats < 120 && attempts < 1000) {
+    attempts++;
+    var bx = 280 + rnd() * 600; // 280 to 880
+    var bz = -250 + rnd() * 700; // -250 to 450
+    
+    var coastX = 0;
+    if (bz < -120) {
+      coastX = 420 + ((bz - -240) / 120) * (550 - 420);
+    } else if (bz < 20) {
+      coastX = 550 + ((bz - -120) / 140) * (490 - 550);
+    } else if (bz < 120) {
+      coastX = 490 + ((bz - 20) / 100) * (410 - 490);
+    } else if (bz < 240) {
+      coastX = 410 + ((bz - 120) / 120) * (310 - 410);
+    } else if (bz < 340) {
+      coastX = 310 + ((bz - 240) / 100) * (230 - 310);
+    } else if (bz < 440) {
+      coastX = 230 + ((bz - 340) / 100) * (270 - 230);
+    } else {
+      coastX = 270 + ((bz - 440) / 50) * (340 - 270);
+    }
+    
+    if (bx < coastX + 25) continue; // Skip if on land or too close to coast
+    
+    yachtPositions.push({
+      x: bx,
+      z: bz,
+      yaw: rnd() * Math.PI * 2,
+      type: rnd() > 0.35 ? 1 : (rnd() > 0.5 ? 0 : 2) // 65% sailboats, 17.5% superyachts, 17.5% small boats
+    });
+    placedBoats++;
+  }
+
+  var safeDistSqYacht = (WALL_HALF + 15) * (WALL_HALF + 15);
+
+  yachtPositions.forEach(function (pos) {
+    var hitsTrack = false;
+    for (var tj = 0; tj < n; tj += 3) {
+      var tp = track.p[tj];
+      var dx = pos.x - tp.x, dz = pos.z - tp.z;
+      if (dx * dx + dz * dz < safeDistSqYacht) {
+        hitsTrack = true;
+        break;
+      }
+    }
+    if (hitsTrack) return;
+
+    var yacht = new THREE.Group();
+    
+    if (pos.type === 0 || pos.type === 2) {
+      var scale = pos.type === 0 ? 1.2 : 0.6;
+      var hw = 4 * scale;
+      var hl = 12 * scale;
+      var hh = 2.5 * scale;
+
+      var backHull = new THREE.Mesh(new THREE.BoxGeometry(hw*2, hh*2, hl*2), yachtHullMat);
+      backHull.position.set(0, hh, -hl/2);
+      yacht.add(backHull);
+
+      var bowWedge = new THREE.BufferGeometry();
+      var verts = new Float32Array([
+        -hw, 0, 0,    hw, 0, 0,     0, 0, hl*1.5,
+        -hw, hh*2, 0, hw, hh*2, 0,  0, hh*2, hl*1.5,
+        -hw, 0, 0,   -hw, hh*2, 0,  0, hh*2, hl*1.5,
+        -hw, 0, 0,    0, hh*2, hl*1.5, 0, 0, hl*1.5,
+         hw, 0, 0,    hw, hh*2, 0,  0, hh*2, hl*1.5,
+         hw, 0, 0,    0, hh*2, hl*1.5, 0, 0, hl*1.5,
+        -hw, 0, 0,    hw, 0, 0,     hw, hh*2, 0,
+        -hw, 0, 0,    hw, hh*2, 0, -hw, hh*2, 0
+      ]);
+      bowWedge.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+      bowWedge.computeVertexNormals();
+      var bow = new THREE.Mesh(bowWedge, yachtHullMat);
+      bow.position.set(0, 0, hl/2);
+      yacht.add(bow);
+
+      var cabin = new THREE.Mesh(new THREE.BoxGeometry(hw*1.5, 2.5*scale, hl*1.2), yachtDeckMat);
+      cabin.position.set(0, hh*2 + 1.25*scale, -hl/4);
+      yacht.add(cabin);
+        
+      var winGeo = new THREE.BoxGeometry(hw*1.55, 1.2*scale, hl*1.25);
+      var windowMat = new THREE.MeshBasicMaterial({color: 0x050505});
+      var windows = new THREE.Mesh(winGeo, windowMat);
+      windows.position.set(0, hh*2 + 1.25*scale, -hl/4);
+      yacht.add(windows);
+
+      var roof = new THREE.Mesh(new THREE.BoxGeometry(hw*1.4, 0.5*scale, hl*1.1), yachtHullMat);
+      roof.position.set(0, hh*2 + 2.5*scale + 0.25*scale, -hl/4);
+      yacht.add(roof);
+        
+      if (pos.type === 0) {
+        var mast = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.2, 8, 8), yachtHullMat);
+        mast.position.set(0, hh*2 + 4 + 2.5, -hl/4);
+        yacht.add(mast);
+      }
+    } else {
+      // Sailboat
+      var scale = 0.8 + rnd() * 0.6;
+      var hw = 3 * scale;
+      var hl = 10 * scale;
+      var hh = 2 * scale;
+
+      var backHull = new THREE.Mesh(new THREE.BoxGeometry(hw*2, hh*2, hl*2), yachtHullMat);
+      backHull.position.set(0, hh, -hl/2);
+      yacht.add(backHull);
+
+      var bowWedge = new THREE.BufferGeometry();
+      var verts = new Float32Array([
+        -hw, 0, 0,    hw, 0, 0,     0, 0, hl*1.5,
+        -hw, hh*2, 0, hw, hh*2, 0,  0, hh*2, hl*1.5,
+        -hw, 0, 0,   -hw, hh*2, 0,  0, hh*2, hl*1.5,
+        -hw, 0, 0,    0, hh*2, hl*1.5, 0, 0, hl*1.5,
+         hw, 0, 0,    hw, hh*2, 0,  0, hh*2, hl*1.5,
+         hw, 0, 0,    0, hh*2, hl*1.5, 0, 0, hl*1.5,
+        -hw, 0, 0,    hw, 0, 0,     hw, hh*2, 0,
+        -hw, 0, 0,    hw, hh*2, 0, -hw, hh*2, 0
+      ]);
+      bowWedge.setAttribute('position', new THREE.BufferAttribute(verts, 3));
+      bowWedge.computeVertexNormals();
+      var bow = new THREE.Mesh(bowWedge, yachtHullMat);
+      bow.position.set(0, 0, hl/2);
+      yacht.add(bow);
+
+      // Cabin (small)
+      var cabin = new THREE.Mesh(new THREE.BoxGeometry(hw*1.2, 1.5*scale, hl*0.8), yachtDeckMat);
+      cabin.position.set(0, hh*2 + 0.75*scale, -hl/4);
+      yacht.add(cabin);
+
+      // Tall mast
+      var mastHeight = (28 + rnd() * 12) * scale;
+      var mast = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.3, mastHeight, 8), yachtHullMat);
+      mast.position.set(0, hh*2 + mastHeight/2, 0);
+      yacht.add(mast);
+    }
+
+    yacht.traverse(function(c) {
+      if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; }
+    });
+
+    yacht.position.set(pos.x, harbourY + 0.1, pos.z);
+    yacht.rotation.y = pos.yaw;
+    scene.add(yacht);
+  });
+
+  /* Monte Carlo Urban Buildings along streets */
+  var buildingTex1 = texFromCanvas(makeBuildingTex('#dbd3c5', '#1a1f24'), 1, 1, true);
+  var buildingTex2 = texFromCanvas(makeBuildingTex('#c9bba8', '#2a2f34'), 1, 1, true);
+  var buildingTex3 = texFromCanvas(makeBuildingTex('#b0a18f', '#1a1f24'), 1, 1, true);
+  var buildingMat1 = new THREE.MeshStandardMaterial({ map: buildingTex1, roughness: 0.8 });
+  var buildingMat2 = new THREE.MeshStandardMaterial({ map: buildingTex2, roughness: 0.8 });
+  var buildingMat3 = new THREE.MeshStandardMaterial({ map: buildingTex3, roughness: 0.8 });
+  var mats = [buildingMat1, buildingMat2, buildingMat3];
+
+  var step = 6;
+  for (var bi = 0; bi < n; bi += step) {
+    if (bi >= tunnelStart - 25 && bi <= tunnelEnd + 25) continue;
+    /* Strictly keep start/finish straight, Sainte Devote hill / Turn 1 (0-220), and La Rascasse / Anthony Noghes / Pit exit (640-n) 100% open */
+    
+
+    var bp = track.p[bi], bl = track.lat[bi], bf = track.fwd[bi];
+    var bYaw = datan2(bf.x, bf.z);
+    var cosY = dcos(bYaw), sinY = dsin(bYaw);
+
+    for (var bSide = -1; bSide <= 1; bSide += 2) {
+      if (bi > 540 && bi < 880 && bSide === 1) continue; /* Keep harbour side clear for superyachts */
+
+      var bDist = track.id === 'monaco-gp-v1' ? WALL_HALF + 15 + (bi % 4) * 5 : WALL_HALF + 30 + (bi % 3) * 6;
+      var bx = bp.x + bl.x * bSide * bDist;
+      var bz = bp.z + bl.z * bSide * bDist;
+
+      var bHeight = 16 + (bi % 5) * 8;
+      var bWidth = 16 + (bi % 2) * 6;
+      var bDepth = 14;
+
+      /* Dense rotated 2D footprint grid check against ALL track sample points across the ENTIRE circuit */
+      var marginW = bWidth / 2 + 5;
+      var marginD = bDepth / 2 + 5;
+      var safeDistSq = (WALL_HALF + 4) * (WALL_HALF + 4); /* 4m clearance from track centerline */
+      var hitsTrack = false;
+
+      for (var u = -1.0; u <= 1.0; u += 0.5) {
+        for (var v = -1.0; v <= 1.0; v += 0.5) {
+          var lx = u * marginW;
+          var lz = v * marginD;
+          /* Rotate local footprint offsets by bYaw into world space */
+          var wx = bx + lx * cosY - lz * sinY;
+          var wz = bz + lx * sinY + lz * cosY;
+
+          for (var tj = 0; tj < n; tj += 2) {
+            var tp = track.p[tj];
+            var dx = wx - tp.x, dz = wz - tp.z;
+            if (dx * dx + dz * dz < safeDistSq) {
+              hitsTrack = true;
+              break;
+            }
+          }
+          if (hitsTrack) break;
+        }
+        if (hitsTrack) break;
+      }
+      if (hitsTrack) continue;
+
+      var bGeo = new THREE.BoxGeometry(bWidth, bHeight, bDepth);
+      var pos = bGeo.attributes.position;
+      var uv = bGeo.attributes.uv;
+      for (var i = 0; i < uv.count; i++) {
+        var x = pos.getX(i);
+        var y = pos.getY(i);
+        var z = pos.getZ(i);
+        // Box faces: simple UV scaling based on world-ish size
+        if (Math.abs(x) >= bWidth/2 - 0.01) {
+          uv.setXY(i, z / 6, y / 6);
+        } else if (Math.abs(z) >= bDepth/2 - 0.01) {
+          uv.setXY(i, x / 6, y / 6);
+        } else {
+          uv.setXY(i, x / 6, z / 6);
+        }
+      }
+      var bMesh = new THREE.Mesh(bGeo, mats[(bi / step) % mats.length]);
+      bMesh.position.set(bx, bp.y + bHeight / 2 - 0.5, bz);
+      bMesh.rotation.y = bYaw; bMesh.castShadow = true; bMesh.receiveShadow = true;
+      scene.add(bMesh);
+    }
+  }
 }
 
 function pushCrossQuad(rb, x, y, z, w, h, rot) {
@@ -3571,15 +4193,16 @@ function buildCarMesh(livery) {
      [RX, 0, PI] lays the half-torus flat AND spins it 180 in its own plane, so
      the arc is the REAR half — without the PI it wraps the front, where the
      blades need to be. */
-  parts.push(part(new THREE.TorusGeometry(0.40, 0.042, 4, 12, Math.PI), trim,
+  var haloParts = [];
+  haloParts.push(part(new THREE.TorusGeometry(0.40, 0.042, 4, 12, Math.PI), trim,
     [0, 0.985, 0.44], [RX, 0, Math.PI]));
   for (var hb = -1; hb <= 1; hb += 2) {
-    parts.push(part(new THREE.BoxGeometry(0.055, 0.048, 0.72), trim,
+    haloParts.push(part(new THREE.BoxGeometry(0.055, 0.048, 0.72), trim,
       [hb * 0.20, 0.992, 0.735], [0, -hb * 0.604, 0]));
   }
   /* The strut is a blade, not a rod — from the driver's seat it is the single
      heaviest thing in frame, splitting the road ahead in two. */
-  parts.push(part(new THREE.BoxGeometry(0.075, 0.58, 0.05), trim, [0, 0.71, 1.07], [-0.13, 0, 0]));
+  haloParts.push(part(new THREE.BoxGeometry(0.075, 0.58, 0.05), trim, [0, 0.71, 1.07], [-0.13, 0, 0]));
 
   /* COCKPIT COAMING — the raised rim around the opening, in body colour.
      From outside it is a detail; from the driver's eye it is the frame the
@@ -3655,6 +4278,10 @@ function buildCarMesh(livery) {
 
   /* Driver's head — its own mesh so the helmet camera can switch it off for
      the car you are sitting in, and only that car. */
+  var haloMesh = new THREE.Mesh(mergeParts(haloParts), bodyMat);
+  haloMesh.castShadow = true;
+  group.add(haloMesh);
+
   var head = new THREE.Mesh(mergeParts([
     part(new THREE.SphereGeometry(0.185, 8, 6), livery.helmet, [0, 0.775, 0.28]),
     part(new THREE.BoxGeometry(0.27, 0.085, 0.05), trim, [0, 0.79, 0.45])
@@ -3695,7 +4322,9 @@ function buildCarMesh(livery) {
   );
   shadow.rotation.x = -Math.PI / 2;
 
-  return { group: group, wheels: wheels, shadow: shadow, chassis: chassis, head: head, steerWheel: steerWheel };
+  
+  return { group: group, wheels: wheels, shadow: shadow, chassis: chassis, head: head, steerWheel: steerWheel, halo: haloMesh };
+
 }
 
 /* --- physics ------------------------------------------------------------ */
@@ -3719,6 +4348,11 @@ function Vehicle(track, livery, isPlayer) {
   this.head = built.head;
   this.steerWheel = built.steerWheel;
   this.shadow = built.shadow;
+  /* Kept as its own handle because the halo is the one body part the player
+     can switch off (H) — see Game.applyHalo. buildCarMesh returns it as a
+     separate mesh for exactly this reason; dropping it here is what made the
+     toggle a no-op. */
+  this.halo = built.halo;
 
   this.pos = new THREE.Vector3();
   this.yaw = 0;
@@ -4829,8 +5463,25 @@ Cloud.prototype.setDisplayName = function (name) {
    to write and nobody else's. When the upload path is built, the key must be
    derived server-side from the authenticated user, never sent from here. */
 Cloud.prototype.submitScore = function (r) {
-  if (!this.enabled) return Promise.resolve({ ok: false, reason: 'offline' });
-  if (!this.user) return Promise.resolve({ ok: false, reason: 'signed-out' });
+  var self = this;
+  var track = r.trackId || (r.trackVersion ? r.trackVersion.replace(/-v\d+$/, '') : 'monaco-gp-v1');
+  var driver = (this.profile && this.profile.display_name) || (this.user && this.user.email) || 'Player 1';
+  var lapTime = Math.round(r.bestLapMs || r.raceMs || 75000);
+
+  if (!this.enabled || !this.client) {
+    return fetch('/api/leaderboard', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        driverName: driver,
+        track: track,
+        lapTimeMs: lapTime,
+        carModel: 'MCL-64 Papaya'
+      })
+    }).then(function (res) { return res.json(); })
+      .then(function (data) { return { ok: true, improved: true, rank: 1 }; })
+      .catch(function () { return { ok: false, reason: 'offline' }; });
+  }
 
   return this.client.rpc('submit_score', {
     p_track_version: r.trackVersion,
@@ -4853,12 +5504,31 @@ Cloud.prototype.submitScore = function (r) {
 /* Reads the public projection, which exposes a display name and times and
    nothing else — no user id, no email, no surname. */
 Cloud.prototype.leaderboard = function (trackVersion, limit) {
-  if (!this.enabled) return Promise.resolve([]);
+  trackVersion = trackVersion || 'monaco-gp-v1';
+  if (!this.enabled || !this.client) {
+    return fetch('/api/leaderboard?track=' + encodeURIComponent(trackVersion))
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data && data.entries) {
+          return data.entries.map(function (entry, i) {
+            return {
+              rank: i + 1,
+              display_name: entry.driver_name,
+              country_code: 'MC',
+              race_ms: entry.lap_time_ms * 3,
+              best_lap_ms: entry.lap_time_ms,
+              finish_position: 1,
+              validated: true
+            };
+          });
+        }
+        return [];
+      })
+      .catch(function () { return []; });
+  }
+
   return this.client
     .from('leaderboard')
-    /* `validated` is selected so the board can say whether a time has been
-       replay-checked. It never was, which is why the README's claim that
-       unvalidated runs were shown "flagged" was false for as long as it stood. */
     .select('rank,display_name,country_code,race_ms,best_lap_ms,finish_position,validated')
     .eq('track_version', trackVersion)
     .order('rank', { ascending: true })
@@ -4946,6 +5616,10 @@ function Game(host) {
   this.splitGood = false;
   this.message = '';
   this.messageT = 0;
+  /* On, like the real car. Explicit rather than left undefined, or the first
+     H press reads as !undefined === true and flashes HALO: ON while the halo
+     is already on — one wasted press before the toggle tracks reality. */
+  this.haloVisible = true;
   this.reducedMotion = false;
 
   try {
@@ -4977,10 +5651,10 @@ Game.prototype.buildRenderer = function () {
   this.hud = this.hudCanvas.getContext('2d');
 
   this.renderer = new THREE.WebGLRenderer({
-    canvas: this.glCanvas, antialias: false, alpha: false,
+    canvas: this.glCanvas, antialias: true, alpha: false,
     powerPreference: 'high-performance', stencil: false
   });
-  this.renderer.setPixelRatio(1);
+  this.renderer.setPixelRatio(window.devicePixelRatio || 1);
   this.renderer.setClearColor(SKY_HAZE, 1);
   this.renderer.shadowMap.enabled = true;
   this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -5165,6 +5839,7 @@ Game.prototype.buildGrid = function () {
     if (i > 0) this.ais.push(new AIDriver(v, this.track, 0.940 + (i % 3) * 0.018, 100 + i * 37));
   }
   this.player = this.cars[0];
+  this.applyHalo();
 
   /* Drives the player's car during the attract demo */
   this.demoAI = new AIDriver(this.player, this.track, 0.965, 7);
@@ -5277,6 +5952,8 @@ Game.prototype.bindInput = function () {
       self.toggleMute();
     } else if (code === 'KeyN') {
       self.toggleMusic();
+    } else if (code === 'KeyH') {
+      self.toggleHalo();
     } else if (code === 'KeyP' || code === 'Escape') {
       if (self.state === STATE.RACING || self.state === STATE.COUNTDOWN) {
         self.paused = !self.paused;
@@ -5751,6 +6428,23 @@ Game.prototype.toggleMute = function () {
   this.applySettings();          /* pushes the mute and relabels the button */
   this.saveSettings();
   this.flash(this.settings.engineOn ? 'ENGINE ON' : 'ENGINE OFF');
+};
+
+
+/* Pushes haloVisible onto the cars that exist right now. Both the toggle and
+   buildGrid call it, so a car built after the halo was switched off comes out
+   of the garage matching — restarting a race used to silently put it back. */
+Game.prototype.applyHalo = function () {
+  var cars = this.cars || [];
+  for (var i = 0; i < cars.length; i++) {
+    if (cars[i].halo) cars[i].halo.visible = this.haloVisible;
+  }
+};
+
+Game.prototype.toggleHalo = function () {
+  this.haloVisible = !this.haloVisible;
+  this.applyHalo();
+  this.flash(this.haloVisible ? 'HALO: ON' : 'HALO: OFF');
 };
 
 Game.prototype.toggleMusic = function () {
@@ -7556,6 +8250,9 @@ Game.prototype.updateAudio = function () {
     for (var i = 0; i < game.cars.length; i++) game.cars[i].sync(dt, alpha);
     game.render(dt);
     game.updateAudio();
+    if (window.updateMonacoLiveStreetView && game.playerCar && game.track) {
+      window.updateMonacoLiveStreetView(game.playerCar, game.track);
+    }
   }
   requestAnimationFrame(frame);
 

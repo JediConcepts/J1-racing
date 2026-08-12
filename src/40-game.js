@@ -75,6 +75,10 @@ function Game(host) {
   this.splitGood = false;
   this.message = '';
   this.messageT = 0;
+  /* On, like the real car. Explicit rather than left undefined, or the first
+     H press reads as !undefined === true and flashes HALO: ON while the halo
+     is already on — one wasted press before the toggle tracks reality. */
+  this.haloVisible = true;
   this.reducedMotion = false;
 
   try {
@@ -106,10 +110,10 @@ Game.prototype.buildRenderer = function () {
   this.hud = this.hudCanvas.getContext('2d');
 
   this.renderer = new THREE.WebGLRenderer({
-    canvas: this.glCanvas, antialias: false, alpha: false,
+    canvas: this.glCanvas, antialias: true, alpha: false,
     powerPreference: 'high-performance', stencil: false
   });
-  this.renderer.setPixelRatio(1);
+  this.renderer.setPixelRatio(window.devicePixelRatio || 1);
   this.renderer.setClearColor(SKY_HAZE, 1);
   this.renderer.shadowMap.enabled = true;
   this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -294,6 +298,7 @@ Game.prototype.buildGrid = function () {
     if (i > 0) this.ais.push(new AIDriver(v, this.track, 0.940 + (i % 3) * 0.018, 100 + i * 37));
   }
   this.player = this.cars[0];
+  this.applyHalo();
 
   /* Drives the player's car during the attract demo */
   this.demoAI = new AIDriver(this.player, this.track, 0.965, 7);
@@ -406,6 +411,8 @@ Game.prototype.bindInput = function () {
       self.toggleMute();
     } else if (code === 'KeyN') {
       self.toggleMusic();
+    } else if (code === 'KeyH') {
+      self.toggleHalo();
     } else if (code === 'KeyP' || code === 'Escape') {
       if (self.state === STATE.RACING || self.state === STATE.COUNTDOWN) {
         self.paused = !self.paused;
@@ -880,6 +887,23 @@ Game.prototype.toggleMute = function () {
   this.applySettings();          /* pushes the mute and relabels the button */
   this.saveSettings();
   this.flash(this.settings.engineOn ? 'ENGINE ON' : 'ENGINE OFF');
+};
+
+
+/* Pushes haloVisible onto the cars that exist right now. Both the toggle and
+   buildGrid call it, so a car built after the halo was switched off comes out
+   of the garage matching — restarting a race used to silently put it back. */
+Game.prototype.applyHalo = function () {
+  var cars = this.cars || [];
+  for (var i = 0; i < cars.length; i++) {
+    if (cars[i].halo) cars[i].halo.visible = this.haloVisible;
+  }
+};
+
+Game.prototype.toggleHalo = function () {
+  this.haloVisible = !this.haloVisible;
+  this.applyHalo();
+  this.flash(this.haloVisible ? 'HALO: ON' : 'HALO: OFF');
 };
 
 Game.prototype.toggleMusic = function () {
@@ -2685,6 +2709,9 @@ Game.prototype.updateAudio = function () {
     for (var i = 0; i < game.cars.length; i++) game.cars[i].sync(dt, alpha);
     game.render(dt);
     game.updateAudio();
+    if (window.updateMonacoLiveStreetView && game.playerCar && game.track) {
+      window.updateMonacoLiveStreetView(game.playerCar, game.track);
+    }
   }
   requestAnimationFrame(frame);
 
