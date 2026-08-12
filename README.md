@@ -2,7 +2,7 @@
 
 A 3D racing game: an N64-era Formula 1 racer on a stylised Silverstone, built
 with Three.js and rendered at 240p with a 5-bit dither. Accounts, a global
-leaderboard, six-car races, three circuits, three onboard cameras, touch and
+leaderboard, six-car races, four circuits, three onboard cameras, touch and
 tilt controls on mobile.
 
 ![MCL-64 at Silverstone](deploy/share.png)
@@ -24,10 +24,10 @@ git log --format='%h  %ad  %s' --date=format:'%H:%M:%S' 42080d9 e804a8e
 # e804a8e  17:08:31  Initial commit
 ```
 
-Then 68 more commits over the following five days, most of them fixing what that
-hour got wrong. **The hour is not the interesting part. What the five days had to
-correct is** — and the rest of this README, the migrations, and the three test
-suites are that argument, at length.
+Then **81 more commits** over the week that followed, most of them fixing what
+that hour got wrong. **The hour is not the interesting part. What the week after
+it had to correct is** — and the rest of this README, sixteen migrations, and the
+test suites are that argument, at length.
 
 Exactly what git does and does not prove about the timing is set out in
 [Provenance, in detail](#provenance-in-detail) at the foot of this file. The
@@ -200,12 +200,18 @@ constraint is an allowlist, `^[[:alpha:][:digit:] '._-]+$`, deliberately, so
 widening it for one alphabet cannot quietly admit a script tag.
 
 Migrations are numbered and must be applied in order. **None of the above is
-asserted on trust** — `./test/migrations.sh` applies all fourteen to a throwaway
-PostgreSQL 15+ cluster and checks every claim in this section, 41 assertions,
+asserted on trust** — `./test/migrations.sh` applies all sixteen to a throwaway
+PostgreSQL 15+ cluster and checks every claim in this section, 53 assertions,
 including that `anon` is refused on `profiles`, `scores`, `runs` and
 `player_pii`, that a player can rename only themselves, and that the board still
 returns rows once all of that is locked down. It needs 15 or later: the view uses
 `security_invoker`, which does not exist before it.
+
+It also checks that every circuit in `src/20-track.js` has a row in
+`track_versions`, reading the ids out of the client rather than restating them.
+Monaco shipped without one, so `submit_score` rejected every score posted on it
+with `unknown track_version` — and a rejected post is not a crash, so the race
+finished normally and the board simply never gained a row. `0016` seeds it.
 
 That harness paid for itself on its first run by finding that `0010` had never
 applied. Indianapolis starts 33 cars, its seed ended on P33, and
@@ -245,17 +251,29 @@ an upload path is added carelessly.
 
 ## Tests
 
-Three suites, 73 assertions, no dependencies to install beyond a PostgreSQL
-server. Each exists because this README makes a claim in prose, and a claim
-nobody can re-run is not evidence.
+Five suites, no dependencies to install beyond a PostgreSQL server and — for the
+last one only — Chromium. Each exists because this README makes a claim in prose,
+and a claim nobody can re-run is not evidence.
 
 ```bash
 node test/fpmath.test.js    #  3 — cross-engine determinism, and the control
-node test/physics.test.js   # 29 — sign conventions, geometry, elevation
-./test/migrations.sh        # 41 — 14 migrations applied, security model asserted
+node test/physics.test.js   # 37 — sign conventions, geometry, elevation
+node test/music.test.js     # 31 — themes pinned, and Monaco's waltz
+./test/migrations.sh        # 53 — 16 migrations applied, security model asserted
+node test/csp.js            #      the real header set, loaded in Chromium
 ```
 
-All three run in CI on every push ([`test.yml`](./.github/workflows/test.yml)).
+**124 assertions run in CI** on every push ([`test.yml`](./.github/workflows/test.yml)) —
+the first four. `csp.js` is not wired in: it needs a browser, so it is a local
+check for now, and saying so is better than implying five-suite coverage on every
+push.
+
+`music.test.js` earns its place by pinning the three circuits' themes that were
+already shipping to a digest of their entire scheduled event stream. Monaco's
+waltz needed the scheduler generalised out of 4/4, and a waltz that plays
+correctly while quietly moving Silverstone's backbeat is a regression nobody
+would ever catch by ear — you would have to A/B two builds of a background loop.
+
 `migrations.sh` needs **PostgreSQL 15 or later** — the leaderboard view uses
 `security_invoker`, which does not exist before it — and refuses to run on 14
 rather than let the resulting failures be misread as defects.
@@ -305,15 +323,24 @@ and session produced it. Those are my account, and I'd rather label them than
 let the word "verified" cover them by association. For the record: no earlier
 prototype, no scratch directory, one Claude Code sitting.
 
-**Commit accounting**, since the categories overlap and are easy to double-count:
+**Commit accounting**, since the categories overlap and are easy to double-count.
+Anchored to a commit rather than left as a bare number, because a bare number
+rots the moment anything else lands — as the previous version of this block did:
 
-```
-69 reachable commits = 6 merges + 63 non-merge
-                       63 non-merge = 54 human + 9 CI rebuilds
+```bash
+# as of ce5fc81 (7 Aug 2026)
+82 reachable commits = 7 merges + 75 non-merge
+                       75 non-merge = 58 human + 17 pipeline rebuilds
 ```
 
-An earlier version of this README said "63 human, 6 merges, 9 CI rebuilds" —
-three figures summing to 78 against a total of 69.
+Note that pipeline rebuilds can no longer be found by author: `3b0a140` set them
+to be attributed to the repository owner rather than the runner, so
+`--author=github-actions` now matches nothing. They are identifiable by subject,
+`^Rebuild dist`, which is what the figure above counts.
+
+Two earlier versions of this block were wrong. The first said "63 human, 6
+merges, 9 CI rebuilds" — three figures summing to 78 against a total of 69. The
+second was correct when written and silently went stale thirteen commits later.
 
 ## Licence
 
