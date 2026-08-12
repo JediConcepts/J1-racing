@@ -75,10 +75,17 @@ function Game(host) {
   this.splitGood = false;
   this.message = '';
   this.messageT = 0;
-  /* On, like the real car. Explicit rather than left undefined, or the first
-     H press reads as !undefined === true and flashes HALO: ON while the halo
-     is already on — one wasted press before the toggle tracks reality. */
-  this.haloVisible = true;
+  /* OFF to start. The halo is the one part of the car that sits between the
+     camera and the driver, and the onboard mounts are framed through it — so
+     the first thing anyone sees is the shot without a bar across it, and H
+     puts it back.
+
+     Explicit rather than left undefined either way: !undefined is true, so an
+     absent value would both start the halo on AND make the first press flash
+     HALO: ON while it was already showing. buildGrid calls applyHalo, so cars
+     are built hidden rather than shown and then corrected — no first frame
+     with a halo that immediately vanishes. */
+  this.haloVisible = false;
   this.reducedMotion = false;
 
   try {
@@ -2312,7 +2319,15 @@ Game.prototype.drawTitle = function () {
     : [
       'ARROWS / WASD   STEER + THROTTLE',
       'SPACE HANDBRAKE    SHIFT DRS BOOST',
-      'C CAM   P PAUSE   R RESTART   N MUSIC   M ENGINE'
+      /* Two rows rather than one, and the number that decides it is 300:
+         resize() steps uiCss down until `cw / uiCss >= 300`, so 300 virtual
+         units is the narrowest this HUD is ever drawn into and the width every
+         label has to fit. The old single row measured 287 — deliberately just
+         inside it. Appending H HALO would have made it 341, which fits on a
+         wide monitor and runs off the edge of anything that reaches the floor.
+         Two 27-character rows measure 161 each. */
+      'C CAM   P PAUSE   R RESTART',
+      'H HALO   N MUSIC   M ENGINE'
     ];
   /* keep clear of the START pad and the thumbstick on touch */
   var ly = touch ? Math.round(H * 0.60) : (H - 16 - lines.length * 9);
