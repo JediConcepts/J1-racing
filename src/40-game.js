@@ -75,6 +75,17 @@ function Game(host) {
   this.splitGood = false;
   this.message = '';
   this.messageT = 0;
+  /* OFF to start. The halo is the one part of the car that sits between the
+     camera and the driver, and the onboard mounts are framed through it — so
+     the first thing anyone sees is the shot without a bar across it, and H
+     puts it back.
+
+     Explicit rather than left undefined either way: !undefined is true, so an
+     absent value would both start the halo on AND make the first press flash
+     HALO: ON while it was already showing. buildGrid calls applyHalo, so cars
+     are built hidden rather than shown and then corrected — no first frame
+     with a halo that immediately vanishes. */
+  this.haloVisible = false;
   this.reducedMotion = false;
 
   try {
@@ -106,10 +117,10 @@ Game.prototype.buildRenderer = function () {
   this.hud = this.hudCanvas.getContext('2d');
 
   this.renderer = new THREE.WebGLRenderer({
-    canvas: this.glCanvas, antialias: false, alpha: false,
+    canvas: this.glCanvas, antialias: true, alpha: false,
     powerPreference: 'high-performance', stencil: false
   });
-  this.renderer.setPixelRatio(1);
+  this.renderer.setPixelRatio(window.devicePixelRatio || 1);
   this.renderer.setClearColor(SKY_HAZE, 1);
   this.renderer.shadowMap.enabled = true;
   this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -294,6 +305,7 @@ Game.prototype.buildGrid = function () {
     if (i > 0) this.ais.push(new AIDriver(v, this.track, 0.940 + (i % 3) * 0.018, 100 + i * 37));
   }
   this.player = this.cars[0];
+  this.applyHalo();
 
   /* Drives the player's car during the attract demo */
   this.demoAI = new AIDriver(this.player, this.track, 0.965, 7);
@@ -406,6 +418,8 @@ Game.prototype.bindInput = function () {
       self.toggleMute();
     } else if (code === 'KeyN') {
       self.toggleMusic();
+    } else if (code === 'KeyH') {
+      self.toggleHalo();
     } else if (code === 'KeyP' || code === 'Escape') {
       if (self.state === STATE.RACING || self.state === STATE.COUNTDOWN) {
         self.paused = !self.paused;
@@ -880,6 +894,23 @@ Game.prototype.toggleMute = function () {
   this.applySettings();          /* pushes the mute and relabels the button */
   this.saveSettings();
   this.flash(this.settings.engineOn ? 'ENGINE ON' : 'ENGINE OFF');
+};
+
+
+/* Pushes haloVisible onto the cars that exist right now. Both the toggle and
+   buildGrid call it, so a car built after the halo was switched off comes out
+   of the garage matching — restarting a race used to silently put it back. */
+Game.prototype.applyHalo = function () {
+  var cars = this.cars || [];
+  for (var i = 0; i < cars.length; i++) {
+    if (cars[i].halo) cars[i].halo.visible = this.haloVisible;
+  }
+};
+
+Game.prototype.toggleHalo = function () {
+  this.haloVisible = !this.haloVisible;
+  this.applyHalo();
+  this.flash(this.haloVisible ? 'HALO: ON' : 'HALO: OFF');
 };
 
 Game.prototype.toggleMusic = function () {
@@ -2288,7 +2319,15 @@ Game.prototype.drawTitle = function () {
     : [
       'ARROWS / WASD   STEER + THROTTLE',
       'SPACE HANDBRAKE    SHIFT DRS BOOST',
-      'C CAM   P PAUSE   R RESTART   N MUSIC   M ENGINE'
+      /* Two rows rather than one, and the number that decides it is 300:
+         resize() steps uiCss down until `cw / uiCss >= 300`, so 300 virtual
+         units is the narrowest this HUD is ever drawn into and the width every
+         label has to fit. The old single row measured 287 — deliberately just
+         inside it. Appending H HALO would have made it 341, which fits on a
+         wide monitor and runs off the edge of anything that reaches the floor.
+         Two 27-character rows measure 161 each. */
+      'C CAM   P PAUSE   R RESTART',
+      'H HALO   N MUSIC   M ENGINE'
     ];
   /* keep clear of the START pad and the thumbstick on touch */
   var ly = touch ? Math.round(H * 0.60) : (H - 16 - lines.length * 9);
@@ -2685,6 +2724,9 @@ Game.prototype.updateAudio = function () {
     for (var i = 0; i < game.cars.length; i++) game.cars[i].sync(dt, alpha);
     game.render(dt);
     game.updateAudio();
+    if (window.updateMonacoLiveStreetView && game.playerCar && game.track) {
+      window.updateMonacoLiveStreetView(game.playerCar, game.track);
+    }
   }
   requestAnimationFrame(frame);
 

@@ -114,8 +114,20 @@ is "markup stripped, not stored" "$(q "select display_name from public.profiles 
 is "no metadata falls back"      "$(q "select display_name from public.profiles p join auth.users u on u.id=p.user_id where u.email='empty@t.test'")" "Driver"
 is "no display_name has markup"  "$(q "select count(*) from public.profiles where display_name ~ '[<>&\"/\\\\]'")" "0"
 
-echo; echo "circuits (0012)"
-is "track_versions exists"       "$(q "select count(*) from public.track_versions")" "3"
+echo; echo "circuits (0012, 0016)"
+is "track_versions exists"       "$(q "select count(*) from public.track_versions")" "4"
+
+# The registry and the client must agree. Monaco shipped in TRACKS with no
+# matching row for months, so every Monaco lap was rejected with "unknown
+# track_version" and the board just stayed empty — indistinguishable from a
+# circuit nobody had driven. Read the ids out of the client rather than
+# restating them here: a list written twice is a list that drifts, which is
+# the exact defect being tested for.
+CLIENT_IDS="$(grep -oE "id: '[a-z0-9-]+-v[0-9]+'" "$REPO/src/20-track.js" | sed "s/.*'\(.*\)'/\1/" | sort)"
+DB_IDS="$(q "select id from public.track_versions order by id")"
+is "client circuits all seeded"  "$(comm -23 <(echo "$CLIENT_IDS") <(echo "$DB_IDS" | sort) | tr '\n' ' ' | sed 's/ *$//')" ""
+is "monaco is postable"          "$(q "select count(*) from public.track_versions where id='monaco-gp-v1'")" "1"
+
 UID1="$(q "select user_id from public.profiles limit 1")"
 
 # Set the JWT claim through a DO block, not `select set_config(...)`. The select
@@ -140,7 +152,7 @@ has "anon cannot read scores"     "$(q "set role anon; select count(*) from publ
 has "anon cannot read runs"       "$(q "set role anon; select count(*) from public.runs")" "permission denied"
 has "anon cannot write scores"    "$(q "set role anon; insert into public.scores (user_id,race_ms,best_lap_ms,finish_position,track_version,sim_version) values ('$UID1',1,1,1,'silverstone-v1','x')")" "permission denied"
 has "anon cannot call submit"     "$(q "set role anon; select public.submit_score('silverstone-v1','x',300000,95000,1::smallint)")" "permission denied"
-is "anon reads track_versions"    "$(q "set role anon; select count(*) from public.track_versions")" "3"
+is "anon reads track_versions"    "$(q "set role anon; select count(*) from public.track_versions")" "4"
 is "board hides user_id"          "$(q "select count(*) from information_schema.columns where table_name='leaderboard' and column_name='user_id'")" "0"
 is "board exposes 9 columns"      "$(q "select count(*) from information_schema.columns where table_name='leaderboard'")" "9"
 is "view reads as owner"          "$(q "select coalesce(array_to_string(reloptions,','),'none') from pg_class where relname='leaderboard'")" "security_invoker=false"
@@ -182,7 +194,17 @@ is "40 bulk signups all landed"   "$(q "select count(*) from public.profiles p j
 is "names are unique"             "$(q "select count(distinct lower(display_name)) from public.profiles p join auth.users u on u.id=p.user_id where u.email like 'bulk%@t.test'")" "40"
 is "first five stay readable"     "$(q "select count(*) from public.profiles where display_name in ('Driver1','Driver2','Driver3','Driver4','Driver5')")" "5"
 # The point of the fix: past five, it stops counting and jumps to a suffix.
-is "no run-away numbering"        "$(q "select count(*) from public.profiles where display_name ~ '^Driver[0-9]+$' and substring(display_name from 7)::int > 5")" "0"
+#
+# Bounded to 1..3 digits, which is what the OLD behaviour produced — it counted
+# to 999. The md5 suffix is ten hex characters, and roughly one in a hundred
+# md5 slices comes out all digits, so 'Driver3187636398' is a perfectly correct
+# name that the unbounded '^Driver[0-9]+$' read as a runaway counter. With ~35
+# names on that path this fired about a third of the time, and the ::int cast
+# then overflowed rather than returning a count, so the suite failed with
+# "value 3187636398 is out of range for type integer" and not with a wrong
+# number — a flake that looked like a database error rather than a bad
+# assertion. A counter cannot reach ten digits: the loop exits at v_try > 12.
+is "no run-away numbering"        "$(q "select count(*) from public.profiles where display_name ~ '^Driver[0-9]{1,3}$' and substring(display_name from 7)::int > 5")" "0"
 is "all still satisfy the check"  "$(q "select count(*) from public.profiles where display_name !~ '^[[:alpha:][:digit:] ''._-]+$'")" "0"
 is "all within length limits"     "$(q "select count(*) from public.profiles where char_length(display_name) not between 2 and 24")" "0"
 
