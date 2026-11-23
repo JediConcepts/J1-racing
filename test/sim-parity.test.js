@@ -1,7 +1,9 @@
 /* Headless parity test of the race loop.
  *
  *   node test/sim-parity.test.js            compare against test/golden/sim-2.json
- *   node test/sim-parity.test.js --record   rewrite that file (done by hand, never in CI)
+ *   node test/sim-parity.test.js --record --recorded-at <commit sha>
+ *                                           rewrite that file (done by hand, never in CI);
+ *                                           the sha is the commit it was recorded at
  *
  * WHAT THIS IS FOR. The 3D engine is about to be replaced. The claim to protect
  * is that no lap time moves when it is. This runs a whole race on each of the
@@ -291,7 +293,7 @@ if (record) {
   const recIdx = process.argv.indexOf('--recorded-at');
   const recordedAt = recIdx !== -1 ? process.argv[recIdx + 1] : '';
   if (!recordedAt) {
-    console.error('--record needs --recorded-at <date>, so the golden file says when it was recorded. Nothing was written.');
+    console.error('--record needs --recorded-at <commit sha>, so the golden file says which commit it was recorded at. Nothing was written.');
     process.exit(1);
   }
   const out = { recordedAt: recordedAt, races: {} };

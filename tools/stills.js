@@ -16,14 +16,16 @@
  * layers for the photo frame, so a still measures the renderer and nothing
  * the page lays over it.
  *
- * Math.random is pinned to one fixed stream in the page (pinRandom in
- * tools/browser.js). Monaco's building textures are drawn with Math.random,
- * so in the live game they differ on every page load; a still shows one
- * fixed variant of them, the same one every time.
+ * Math.random is pinned in the page (pinRandom in tools/browser.js): one
+ * fixed stream, started again every time a canvas is asked for a 2D context.
+ * Monaco's building textures are drawn with Math.random, so in the live game
+ * they differ on every page load; a still shows one fixed set of them, the
+ * same one every time, in which the three textures share one pattern.
  *
  * A camera that a circuit cannot place (stands at Monaco, which has no main
- * grandstand) is skipped there, with a line saying so. A circuit with no
- * still at all is an error.
+ * grandstand) is skipped there, with a line saying so. A run that takes no
+ * still at all is an error; a circuit left with none in a run that took
+ * others is not.
  *
  * Needs Playwright on NODE_PATH; see tools/browser.js. */
 'use strict';
@@ -95,7 +97,8 @@ const list = (s) => s.split(',').map((x) => x.trim()).filter(Boolean);
             }
             const rect = await page.evaluate(() => {
               const r = document.getElementById('screen').getBoundingClientRect();
-              /* whole pixels: the stage is 622.5 px tall at 1280 x 720 */
+              /* whole pixels: the stage is 607.5 px tall at 1280 x 720, so a
+                 still is 607 */
               return { x: Math.round(r.left), y: Math.round(r.top), width: Math.floor(r.width), height: Math.floor(r.height) };
             });
             const file = path.join(out, [circuit, quality, tod, cam, 'png'].join('.'));

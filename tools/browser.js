@@ -1,9 +1,10 @@
-/* Shared by tools/stills.js and tools/bench.js: find Playwright, serve dist/,
-   the one set of Chromium launch arguments every still is taken with, and
-   the fixed Math.random the stills page runs on (pinRandom, stills only).
+/* Shared by tools/stills.js, tools/stills-pin-check.js and tools/bench.js:
+   find Playwright, serve dist/, the one set of Chromium launch arguments
+   every still is taken with, and the pinned Math.random the stills page runs
+   on (pinRandom, stills only).
 
-   Playwright is never installed in this repo (it has no package.json and
-   must not gain one). Point NODE_PATH at a node_modules that has it:
+   Nothing is installed into this repo; Playwright is found through
+   NODE_PATH. Point it at a node_modules that has it:
 
      NODE_PATH=/path/to/node_modules node tools/stills.js ...
 
@@ -37,14 +38,17 @@ function requirePlaywright() {
   }
 }
 
-function serveDist() {
-  if (!fs.existsSync(DIST)) {
-    console.error('FATAL: dist/index.html missing. Run `node build.js` first.');
+/* Serves dist/index.html of this repo, or of the dist folder given (the pin
+   check serves a build made somewhere else). */
+function serveDist(dir) {
+  const file = dir ? path.join(path.resolve(dir), 'index.html') : DIST;
+  if (!fs.existsSync(file)) {
+    console.error('FATAL: ' + (dir ? file : 'dist/index.html') + ' missing. Run `node build.js` first.');
     process.exit(2);
   }
   const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-    res.end(fs.readFileSync(DIST));
+    res.end(fs.readFileSync(file));
   });
   return new Promise((resolve) => {
     server.listen(0, '127.0.0.1', () => {
@@ -64,34 +68,75 @@ async function localOnly(page, url) {
   });
 }
 
-/* Replaces Math.random in every page of the context with one fixed stream
-   (mulberry32 from a constant seed), installed before any page script runs
-   and started again on every load, a reload for a change of circuit
-   included.
+/* Pins Math.random in every page of the context, for tools that take
+   pictures. It is installed before any page script runs and again on every
+   load, a reload for a change of circuit included.
 
-   Why: makeBuildingTex in src/10-core.js draws the three Monaco building
-   textures with Math.random (the noise specks, and which windows are left
-   out), so in the live game Monaco's buildings are different on every page
-   load and two stills of the same frame did not match. The game is left as
-   it is, because what is live is the reference picture; the tools pin the
-   stream instead, so a Monaco still shows one fixed variant of the
-   buildings. Nothing in the simulation reads Math.random, and the only other
-   use in src/ is audio noise, so the other circuits' stills do not move.
+   What is pinned. Math.random becomes one fixed generator (mulberry32 from a
+   constant seed), and the generator is started again from that seed every
+   time a canvas is asked for a 2D context: getContext is wrapped on
+   HTMLCanvasElement and on OffscreenCanvas, for the '2d' type only, and a
+   call counts whether it is the first on that canvas or a later one. The
+   game's own code only draws on HTMLCanvasElement; the vendored three.js
+   makes an OffscreenCanvas of its own, so both are wrapped and there is one
+   rule.
 
-   For tools that take pictures only. tools/bench.js must not call this: it
-   measures the game as players get it.
+   Why pin at all. makeBuildingTex in src/10-core.js draws the three Monaco
+   building textures with Math.random (the noise specks, and which windows
+   are left out), so in the live game Monaco's buildings are different on
+   every page load and two stills of the same frame did not match. The game
+   is left as it is, because what is live is the reference picture; the
+   tools pin it instead. Nothing in the simulation reads Math.random, and
+   the only other use in src/ is audio noise, so the other circuits' stills
+   do not move.
 
-   CHANGING THE SEED OR THE GENERATOR INVALIDATES EVERY EARLIER MONACO
-   STILL, the same as the launch arguments above. */
+   Why start again at every 2D context. The vendored three.js draws four
+   values from Math.random for every UUID it makes, and it makes one for
+   every geometry, material, texture and object. With a single stream for
+   the whole page the building textures started at a point that depended on
+   how many of those the engine had built before them. One more object early
+   in boot, or a newer three.js, and Monaco rolled different buildings
+   although their code had not changed. A canvas texture asks for its 2D
+   context just before it draws, so starting the stream there gives it the
+   same values whatever was built first. tools/stills-pin-check.js is the
+   proof, and can be run again.
+
+   The cost, accepted. Canvas textures that used to differ only by their
+   random draws now share one pattern: the three Monaco building textures
+   have the same specks and the same missing windows, and differ only in
+   their two colours. So a Monaco still shows one fixed set of buildings,
+   and not a set a player can be dealt. The UUIDs three.js makes also repeat
+   in a pinned page (the first one made after each 2D context gets the same
+   four values). The vendored three.js reads them only for JSON export,
+   loading and animation bindings, none of which the game uses; a newer
+   three.js has to be checked for that again.
+
+   tools/bench.js must not call this: it measures the game as players get
+   it.
+
+   CHANGING THE SEED, THE GENERATOR OR THE RULE FOR STARTING AGAIN
+   INVALIDATES EVERY EARLIER STILL, the same as the launch arguments above.
+   Today the Monaco stills are the ones that would move. */
 async function pinRandom(context) {
   await context.addInitScript(() => {
-    let s = 0x4d434c36;
+    const SEED = 0x4d434c36;
+    let s = SEED;
     Math.random = function () {
       s = (s + 0x6d2b79f5) | 0;
       let t = Math.imul(s ^ (s >>> 15), 1 | s);
       t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
+    const startAgainOn2d = (proto) => {
+      const getContext = proto.getContext;
+      proto.getContext = function (type) {
+        const ctx = getContext.apply(this, arguments);
+        if (type === '2d' && ctx) s = SEED;
+        return ctx;
+      };
+    };
+    startAgainOn2d(HTMLCanvasElement.prototype);
+    if (typeof OffscreenCanvas !== 'undefined') startAgainOn2d(OffscreenCanvas.prototype);
   });
 }
 

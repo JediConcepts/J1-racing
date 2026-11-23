@@ -2669,6 +2669,11 @@ Game.prototype.updateAudio = function () {
 
 var PHOTO_CAMS = ['chase', 'helmet', 'grid', 'high', 'apex', 'stands'];
 
+/* The most ticks photo will run: 20 minutes of racing at 60 Hz, the same cap
+   test/sim-parity.test.js puts on a race. Every tick runs inside one call,
+   so without a top end a mistyped figure would hang the page. */
+var PHOTO_TICK_MAX = 72000;
+
 /* Circuit and tier for a hook. A circuit is only ever built at boot, so a
    different one is saved and the page reloaded, exactly as the settings
    picker does it; the caller sees a rejection and calls again once the page
@@ -2807,6 +2812,8 @@ Game.prototype.photoCamMissing = function (name) {
  * `cam`, and draws ONE frame with the HUD hidden. The frame loop is then held
  * so nothing draws over it before it is captured: the game is left frozen
  * afterwards, and needs a reload to be played. `timeOfDay` is ignored for now.
+ * `tick` must be a finite whole number from 0 to PHOTO_TICK_MAX; anything
+ * else is refused before the game is touched.
  *
  * Everything that would otherwise carry history into the frame is pinned:
  * the visual state on each car is reset to what a new Vehicle has, cars are
@@ -2831,7 +2838,9 @@ Game.prototype.photo = function (opts) {
     var cam = o.cam || 'chase';
     if (PHOTO_CAMS.indexOf(cam) < 0) throw new Error('unknown camera ' + cam);
     var ticks = o.tick == null ? 900 : o.tick;
-    if (!(ticks >= 0) || Math.floor(ticks) !== ticks) throw new Error('tick must be a whole number >= 0');
+    if (typeof ticks !== 'number' || !isFinite(ticks) || Math.floor(ticks) !== ticks || ticks < 0 || ticks > PHOTO_TICK_MAX) {
+      throw new Error('tick must be a whole number from 0 to ' + PHOTO_TICK_MAX);
+    }
     if (!this.hookSelect(o.circuit, o.quality)) {
       return Promise.reject(new Error('MCL64.photo: reloading to load ' + o.circuit + '; call again once the page has loaded'));
     }

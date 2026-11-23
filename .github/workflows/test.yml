@@ -71,7 +71,7 @@ jobs:
       - run: node test/track-bake.test.js
 
   parity:
-    name: parity — race loop digests
+    name: 'parity: race loop digests'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
