@@ -1,5 +1,6 @@
 /* Shared by tools/stills.js and tools/bench.js: find Playwright, serve dist/,
-   and the one set of Chromium launch arguments every still is taken with.
+   the one set of Chromium launch arguments every still is taken with, and
+   the fixed Math.random the stills page runs on (pinRandom, stills only).
 
    Playwright is never installed in this repo (it has no package.json and
    must not gain one). Point NODE_PATH at a node_modules that has it:
@@ -63,6 +64,37 @@ async function localOnly(page, url) {
   });
 }
 
+/* Replaces Math.random in every page of the context with one fixed stream
+   (mulberry32 from a constant seed), installed before any page script runs
+   and started again on every load, a reload for a change of circuit
+   included.
+
+   Why: makeBuildingTex in src/10-core.js draws the three Monaco building
+   textures with Math.random (the noise specks, and which windows are left
+   out), so in the live game Monaco's buildings are different on every page
+   load and two stills of the same frame did not match. The game is left as
+   it is, because what is live is the reference picture; the tools pin the
+   stream instead, so a Monaco still shows one fixed variant of the
+   buildings. Nothing in the simulation reads Math.random, and the only other
+   use in src/ is audio noise, so the other circuits' stills do not move.
+
+   For tools that take pictures only. tools/bench.js must not call this: it
+   measures the game as players get it.
+
+   CHANGING THE SEED OR THE GENERATOR INVALIDATES EVERY EARLIER MONACO
+   STILL, the same as the launch arguments above. */
+async function pinRandom(context) {
+  await context.addInitScript(() => {
+    let s = 0x4d434c36;
+    Math.random = function () {
+      s = (s + 0x6d2b79f5) | 0;
+      let t = Math.imul(s ^ (s >>> 15), 1 | s);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  });
+}
+
 /* Calls MCL64[method](opts) and returns its result. A hook asked for a
    circuit that is not loaded saves the choice and reloads the page, and its
    promise rejects (or the page goes away under it); in either case wait for
@@ -94,4 +126,4 @@ async function waitForGame(page, circuit) {
   }
 }
 
-module.exports = { ROOT, CHROMIUM_ARGS, STILL_VIEWPORT, requirePlaywright, serveDist, localOnly, callHook };
+module.exports = { ROOT, CHROMIUM_ARGS, STILL_VIEWPORT, requirePlaywright, serveDist, localOnly, pinRandom, callHook };

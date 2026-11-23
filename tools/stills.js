@@ -16,6 +16,11 @@
  * layers for the photo frame, so a still measures the renderer and nothing
  * the page lays over it.
  *
+ * Math.random is pinned to one fixed stream in the page (pinRandom in
+ * tools/browser.js). Monaco's building textures are drawn with Math.random,
+ * so in the live game they differ on every page load; a still shows one
+ * fixed variant of them, the same one every time.
+ *
  * A camera that a circuit cannot place (stands at Monaco, which has no main
  * grandstand) is skipped there, with a line saying so. A circuit with no
  * still at all is an error.
@@ -25,7 +30,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { CHROMIUM_ARGS, STILL_VIEWPORT, requirePlaywright, serveDist, localOnly, callHook } = require('./browser');
+const { CHROMIUM_ARGS, STILL_VIEWPORT, requirePlaywright, serveDist, localOnly, pinRandom, callHook } = require('./browser');
 
 function parseArgs(argv) {
   const a = {};
@@ -59,6 +64,8 @@ const list = (s) => s.split(',').map((x) => x.trim()).filter(Boolean);
   let failed = false;
   try {
     const context = await browser.newContext({ viewport: STILL_VIEWPORT, deviceScaleFactor: 1, reducedMotion: 'no-preference' });
+    /* before the page exists, so it is in place for the very first script */
+    await pinRandom(context);
     const page = await context.newPage();
     page.on('pageerror', (e) => { console.error('PAGEERROR: ' + e.message); failed = true; });
     await localOnly(page, server.url);
