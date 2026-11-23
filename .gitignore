@@ -18,3 +18,8 @@ node_modules/
 stills/
 .DS_Store
 *.log
+
+# Firebase applet config — kept local. The web apiKey is a public client
+# identifier rather than a credential, but this repo deliberately carries no
+# service configuration at all; see CLAUDE.md on secrets living in the Worker.
+firebase-applet-config.json

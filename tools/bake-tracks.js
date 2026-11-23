@@ -57,6 +57,19 @@ function bake() {
     '   Do not edit by hand: run  node tools/bake-tracks.js  and commit the result.\n' +
     '   test/track-bake.test.js fails if this file and a fresh sampling disagree. */\n' +
     'var TRACK_BAKED = {\n';
+  /* Every circuit needs its own key. Without one the block would be written
+     under "undefined" and the game would find no samples; with a shared one
+     the later circuit would silently replace the earlier. */
+  const seen = {};
+  tracks.forEach((def) => {
+    if (typeof def.geom !== 'string' || !def.geom) {
+      throw new Error('circuit ' + def.id + ' has no geom key in src/20-track.js: give it one, then bake again');
+    }
+    if (seen[def.geom]) {
+      throw new Error('circuits ' + seen[def.geom] + ' and ' + def.id + ' share the geom key "' + def.geom + '": each needs its own');
+    }
+    seen[def.geom] = def.id;
+  });
   tracks.forEach((def, k) => {
     const p = sampleWithThree(def);
     const col = (key) => '[' + p.map((v) => String(v[key])).join(',') + ']';

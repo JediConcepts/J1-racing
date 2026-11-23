@@ -75,8 +75,16 @@ const assert = (cond, m, d) => (cond ? ok(m) : bad(m, d));
 
 /* --------------------------------------------------------------------------- */
 console.log('loading circuits');
-assert(Array.isArray(TRACKS) && TRACKS.length === 3,
-  'three circuits are defined', 'got ' + (TRACKS && TRACKS.length));
+/* Named rather than counted. A bare `length === 3` failed with "got 4" when
+   Monaco shipped, which says a number changed but not which circuit, and the
+   same assertion would have stayed green had a circuit been swapped rather
+   than added. Updating this list is the deliberate act of shipping a circuit —
+   and its twin in test/migrations.sh checks the database was told too, which
+   is what Monaco missed. */
+const EXPECT_TRACKS = ['monaco-gp-v1', 'silverstone-v1', 'indianapolis-v1', 'brands-hatch-v1'];
+const gotTracks = (TRACKS || []).map((t) => t.id);
+assert(Array.isArray(TRACKS) && String(gotTracks) === String(EXPECT_TRACKS),
+  EXPECT_TRACKS.length + ' circuits are defined', 'got ' + gotTracks);
 
 const built = TRACKS.map((def) => {
   /* Track() sets module-level HALF_W/RUNOFF/WALL_HALF from the def, so each has
@@ -91,7 +99,7 @@ const built = TRACKS.map((def) => {
   cx /= t.n; cz /= t.n;
   return { def, t, halfW, cx, cz };
 });
-ok('all three circuits construct without a DOM');
+ok('all ' + built.length + ' circuits construct without a DOM');
 
 /* --------------------------------------------------------------------------- */
 console.log('');

@@ -159,15 +159,16 @@ function buildCarMesh(livery) {
      [RX, 0, PI] lays the half-torus flat AND spins it 180 in its own plane, so
      the arc is the REAR half — without the PI it wraps the front, where the
      blades need to be. */
-  parts.push(part(new THREE.TorusGeometry(0.40, 0.042, 4, 12, Math.PI), trim,
+  var haloParts = [];
+  haloParts.push(part(new THREE.TorusGeometry(0.40, 0.042, 4, 12, Math.PI), trim,
     [0, 0.985, 0.44], [RX, 0, Math.PI]));
   for (var hb = -1; hb <= 1; hb += 2) {
-    parts.push(part(new THREE.BoxGeometry(0.055, 0.048, 0.72), trim,
+    haloParts.push(part(new THREE.BoxGeometry(0.055, 0.048, 0.72), trim,
       [hb * 0.20, 0.992, 0.735], [0, -hb * 0.604, 0]));
   }
   /* The strut is a blade, not a rod — from the driver's seat it is the single
      heaviest thing in frame, splitting the road ahead in two. */
-  parts.push(part(new THREE.BoxGeometry(0.075, 0.58, 0.05), trim, [0, 0.71, 1.07], [-0.13, 0, 0]));
+  haloParts.push(part(new THREE.BoxGeometry(0.075, 0.58, 0.05), trim, [0, 0.71, 1.07], [-0.13, 0, 0]));
 
   /* COCKPIT COAMING — the raised rim around the opening, in body colour.
      From outside it is a detail; from the driver's eye it is the frame the
@@ -243,6 +244,10 @@ function buildCarMesh(livery) {
 
   /* Driver's head — its own mesh so the helmet camera can switch it off for
      the car you are sitting in, and only that car. */
+  var haloMesh = new THREE.Mesh(mergeParts(haloParts), bodyMat);
+  haloMesh.castShadow = true;
+  group.add(haloMesh);
+
   var head = new THREE.Mesh(mergeParts([
     part(new THREE.SphereGeometry(0.185, 8, 6), livery.helmet, [0, 0.775, 0.28]),
     part(new THREE.BoxGeometry(0.27, 0.085, 0.05), trim, [0, 0.79, 0.45])
@@ -283,7 +288,9 @@ function buildCarMesh(livery) {
   );
   shadow.rotation.x = -Math.PI / 2;
 
-  return { group: group, wheels: wheels, shadow: shadow, chassis: chassis, head: head, steerWheel: steerWheel };
+  
+  return { group: group, wheels: wheels, shadow: shadow, chassis: chassis, head: head, steerWheel: steerWheel, halo: haloMesh };
+
 }
 
 /* --- physics ------------------------------------------------------------ */
@@ -307,6 +314,11 @@ function Vehicle(track, livery, isPlayer) {
   this.head = built.head;
   this.steerWheel = built.steerWheel;
   this.shadow = built.shadow;
+  /* Kept as its own handle because the halo is the one body part the player
+     can switch off (H) — see Game.applyHalo. buildCarMesh returns it as a
+     separate mesh for exactly this reason; dropping it here is what made the
+     toggle a no-op. */
+  this.halo = built.halo;
 
   this.pos = new THREE.Vector3();
   this.yaw = 0;
