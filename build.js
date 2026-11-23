@@ -81,6 +81,7 @@ const SRC = [
      JS engine. That is what makes a submitted lap verifiable server-side. */
   'src/05-fpmath.js',
   'src/10-core.js',
+  'src/12-trackdata.js',
   'src/20-track.js',
   'src/30-cars.js',
   'src/35-mobile.js',

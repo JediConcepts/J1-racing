@@ -191,6 +191,7 @@ var BRANDS_CORNERS = [
 var TRACKS = [
   {
     id: 'silverstone-v1',
+    geom: 'silverstone',   /* key into TRACK_BAKED in 12-trackdata.js */
     name: 'SILVERSTONE',
     blurb: 'FAST AND OPEN',
     laps: 3,
@@ -201,6 +202,7 @@ var TRACKS = [
   },
   {
     id: 'indianapolis-v1',
+    geom: 'indianapolis',   /* key into TRACK_BAKED in 12-trackdata.js */
     name: 'INDIANAPOLIS',
     blurb: 'BANKED OVAL',
     laps: 5,
@@ -233,6 +235,7 @@ var TRACKS = [
   },
   {
     id: 'brands-hatch-v1',
+    geom: 'brands-hatch',   /* key into TRACK_BAKED in 12-trackdata.js */
     name: 'BRANDS HATCH',
     blurb: 'NARROW AND HILLY',
     laps: 4,
@@ -289,23 +292,20 @@ function Track(def) {
      walls would sit inside the runoff. */
   WALL_HALF = HALF_W + RUNOFF;
 
+  /* The centreline is baked data (12-trackdata.js, made by tools/bake-tracks.js
+     from the control points above), so the samples cannot move if three.js is
+     upgraded. Control rows were [x, z, y]; the baked arrays are x, y, z. */
+  var baked = TRACK_BAKED[def.geom];
+  /* The control points are still needed to place the corner names. Rows are
+     [x, z, y] so the array reads like a map; Vector3 wants (x, y, z). */
   var control = def.control;
-
-  /* Control rows are [x, z, y] so the array reads like a map; Vector3 wants
-     (x, y, z), and y is the height. Swapping these is what sends the circuit
-     climbing into the sky. */
   var pts = [];
   for (i = 0; i < control.length; i++) {
     pts.push(new THREE.Vector3(control[i][0], control[i][2], control[i][1]));
   }
-  /* centripetal parameterisation: the control points are unevenly spaced and
-     this is the variant that will not cusp or self-intersect between them */
-  this.curve = new THREE.CatmullRomCurve3(pts, true, 'centripetal', 0.5);
-
-  var raw = this.curve.getSpacedPoints(SAMPLES);   /* returns SAMPLES+1, last == first */
   this.n = SAMPLES;
   this.p = [];
-  for (i = 0; i < this.n; i++) this.p.push(raw[i].clone());
+  for (i = 0; i < this.n; i++) this.p.push(new THREE.Vector3(baked.x[i], baked.y[i], baked.z[i]));
 
   /* tangents, lateral normals, arc length */
   this.fwd = [];

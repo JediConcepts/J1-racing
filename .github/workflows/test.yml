@@ -10,7 +10,9 @@ name: tests
 #   physics    the geometry, elevation, banking and roll invariants underlying
 #              the physics-related part of the orientation-fix sequence. Three of
 #              those eight corrective commits are in scope; the rest were camera,
-#              mesh and tree orientation, which nothing here renders.
+#              mesh and tree orientation, which nothing here renders. It also runs
+#              track-bake, which checks the baked circuit centrelines still equal a
+#              fresh sampling with the vendored three.js.
 #   parity     a whole race on each circuit, run headless with no meshes, and the
 #              final state of every car hashed against a committed digest. This is
 #              the proof that a change to the engine moved no lap time. It runs a
@@ -60,6 +62,7 @@ jobs:
         with:
           node-version: '22'
       - run: node test/physics.test.js
+      - run: node test/track-bake.test.js
 
   parity:
     name: parity — race loop digests

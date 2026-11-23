@@ -56,7 +56,7 @@ const THREE = global.THREE;
 /* The src files are written to be concatenated into one IIFE, so evaluate them
    in order and hand back what the tests need. 40-game.js is deliberately absent:
    it is the DOM layer. */
-const CHAIN = ['src/05-fpmath.js', 'src/10-core.js', 'src/20-track.js', 'src/30-cars.js'];
+const CHAIN = ['src/05-fpmath.js', 'src/10-core.js', 'src/12-trackdata.js', 'src/20-track.js', 'src/30-cars.js'];
 const api = (function () {
   let body = '';
   for (const f of CHAIN) body += '\n;/* ' + f + ' */\n' + read(f);
