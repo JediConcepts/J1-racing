@@ -2618,6 +2618,255 @@ Game.prototype.updateAudio = function () {
   this.audio.tickMusic(level);
 };
 
+/* --- photo and bench hooks ----------------------------------------------
+   For tools/stills.js and tools/bench.js only; nothing in the game's own UI
+   reaches them. They are the camera every later change to the picture is
+   judged with, so the one property that matters is that the same arguments
+   always give the same frame.
+
+   Neither touches the simulation's code. photo swaps the player's input
+   source on THIS INSTANCE for the length of its run (the switch the attract
+   demo already makes for every car), and puts the prototype's back after. */
+
+var PHOTO_CAMS = ['chase', 'helmet', 'grid', 'high', 'apex', 'stands'];
+
+/* Circuit and tier for a hook. A circuit is only ever built at boot, so a
+   different one is saved and the page reloaded, exactly as the settings
+   picker does it; the caller sees a rejection and calls again once the page
+   has loaded. Returns false when that reload is under way. */
+Game.prototype.hookSelect = function (circuit, quality) {
+  if (circuit && trackById(circuit).id !== circuit) throw new Error('unknown circuit ' + circuit);
+  if (quality && quality !== 'retro' && quality !== 'modern') throw new Error('unknown quality ' + quality);
+  if (circuit && circuit !== this.track.def.id) {
+    this.settings.trackId = circuit;
+    if (quality) this.settings.quality = quality;
+    this.saveSettings();
+    location.reload();
+    return false;
+  }
+  if (quality && quality !== this.settings.quality) {
+    this.settings.quality = quality;
+    this.applyQuality();
+  }
+  return true;
+};
+
+/* A point on the track at arc length s from the sample origin, interpolated
+   between samples so "30 m past the line" means 30 m and not the nearest
+   sample to it (they are 3 to 6 m apart). */
+Game.prototype.photoPointAtS = function (s, lateral, out) {
+  var t = this.track, n = t.n, len = t.length;
+  s = ((s % len) + len) % len;
+  var lo = 0, hi = n;
+  while (hi - lo > 1) { var mid = (lo + hi) >> 1; if (t.cum[mid] <= s) lo = mid; else hi = mid; }
+  var f = (s - t.cum[lo]) / (t.cum[lo + 1] - t.cum[lo]);
+  var a = t.pointAt(lo, lateral, new THREE.Vector3());
+  var b = t.pointAt((lo + 1) % n, lateral, new THREE.Vector3());
+  return out.copy(a).lerp(b, f);
+};
+
+/* The four fixed cameras. Every one is derived from the circuit's own data,
+   so it lands in the same place on every circuit that has the feature. */
+Game.prototype.placePhotoCamera = function (name) {
+  var t = this.track, n = t.n, si = t.startIndex, sS = t.cum[si];
+  var eye = new THREE.Vector3(), at = new THREE.Vector3(), fov = 50;
+
+  if (name === 'grid') {
+    /* 3 m above the road's right hand edge (lateral -HALF_W, the side away
+       from the pit boards), 30 m past the line, looking back at the middle
+       row of the grid resetRace lays out. */
+    this.photoPointAtS(sS + 30, -HALF_W, eye);
+    eye.y += 3;
+    var cols = (t.def && t.def.gridCols) || 2;
+    var rows = Math.ceil(this.cars.length / cols);
+    var gi = (si - 5 - Math.round(3 * (rows - 1) / 2) + n) % n;
+    t.pointAt(gi, 0, at);
+    at.y += 0.6;
+    fov = 50;
+  } else if (name === 'high') {
+    /* 70 m straight up from the line, looking at the far end of the main
+       straight (the straight the line sits on). */
+    t.pointAt(si, 0, eye);
+    eye.y += 70;
+    var main = t.straights[0];
+    t.pointAt((main.start + main.count) % n, 0, at);
+    fov = 55;
+  } else if (name === 'apex') {
+    /* The first named corner after the line that has a kerb (the mesh only
+       lays kerbs where |curv| > 0.0026), 1.2 m above the middle of the inside
+       kerb, looking back up the road 80 m. */
+    var corner = null, best = Infinity;
+    for (var c = 0; c < t.corners.length; c++) {
+      var ci = t.corners[c].index;
+      var d = (ci - si + n) % n;
+      if (d > 0 && d < best && Math.abs(t.curv[ci]) > 0.0026) { best = d; corner = ci; }
+    }
+    if (corner === null) corner = (si + Math.round(n / 4)) % n;
+    var inner = t.curv[corner] > 0 ? 1 : -1;
+    t.pointAt(corner, inner * (HALF_W + 0.8), eye);
+    eye.y += 1.2;
+    this.photoPointAtS(t.cum[corner] - 80, 0, at);
+    at.y += 1.0;
+    this.photoApex = t.corners.filter(function (k) { return k.index === corner; }).map(function (k) { return k.name; })[0] || null;
+    fov = 50;
+  } else if (name === 'stands') {
+    /* The top row of the main grandstand: the one nearest the line. These
+       figures mirror buildScenery and buildStandRing; if either moves its
+       stands, this has to move with it. */
+    var side = -1, idx, rowOff, rowY;
+    if (t.def.standRing) {
+      /* outer ring (side -1): seats climb from 1.4 m at WALL_HALF + 14 to
+         15 m at 19 m further out. Sit 1.5 m in from the back. */
+      idx = si;
+      var near = WALL_HALF + 14, far = near + 19;
+      rowOff = far - 1.5;
+      rowY = groundY(t, idx, side * rowOff) + 1.4 + (15.0 - 1.4) * ((rowOff - near) / (far - near)) + 0.6;
+    } else {
+      /* stand s = 1 of buildScenery: index start - 3, side -1. Its crowd
+         panel is 10.5 m tall, centred 5.4 m up at WALL_HALF + 11.8, raked
+         back 0.42 rad, so the top row is 2.14 m further out and 4.79 m
+         higher than the centre. Sit just in front of it, under the roof. */
+      idx = (si - 3 + n) % n;
+      var cd = WALL_HALF + 20 - 8.2;
+      rowOff = cd + 5.25 * Math.sin(0.42) - 0.3;
+      rowY = groundY(t, idx, side * cd) + 5.4 + 5.25 * Math.cos(0.42) + 0.45;
+    }
+    t.pointAt(idx, side * rowOff, eye);
+    eye.y = rowY;
+    /* across the track: the far edge of the road, square to the stand */
+    t.pointAt(idx, -side * HALF_W, at);
+    fov = 50;
+  }
+
+  this.camera.position.copy(eye);
+  this.camera.near = 0.6;
+  this.camera.fov = fov;
+  this.camera.lookAt(at);
+  this.camera.updateProjectionMatrix();
+  this.sky.position.set(eye.x, 0, eye.z);
+};
+
+/* MCL64.photo({ circuit, tick, cam, quality, timeOfDay }) -> Promise<void>
+ *
+ * Starts a real race (grid, countdown and all), drives the player with the
+ * demo driver for exactly `tick` sim ticks without drawing, places camera
+ * `cam`, and draws ONE frame with the HUD hidden. The frame loop is then held
+ * so nothing draws over it before it is captured: the game is left frozen
+ * afterwards, and needs a reload to be played. `timeOfDay` is ignored for now.
+ *
+ * Everything that would otherwise carry history into the frame is pinned:
+ * the visual state on each car is reset to what a new Vehicle has, cars are
+ * synced at alpha 1 after every tick as a 60 Hz display would, the camera is
+ * snapped rather than damped, the countdown fade is forced to full, and the
+ * clouds are set from the tick count instead of drifting on wall clock time. */
+Game.prototype.photo = function (opts) {
+  var o = opts || {};
+  var self = this;
+  try {
+    var cam = o.cam || 'chase';
+    if (PHOTO_CAMS.indexOf(cam) < 0) throw new Error('unknown camera ' + cam);
+    var ticks = o.tick == null ? 900 : o.tick;
+    if (!(ticks >= 0) || Math.floor(ticks) !== ticks) throw new Error('tick must be a whole number >= 0');
+    if (!this.hookSelect(o.circuit, o.quality)) {
+      return Promise.reject(new Error('MCL64.photo: reloading to load ' + o.circuit + '; call again once the page has loaded'));
+    }
+
+    this.photoHold = true;
+
+    /* beginRace, less the audio wake and the fullscreen request */
+    this.resetRace(false);
+    this.startTrace();
+    this.state = STATE.COUNTDOWN;
+    this.countdown = 0;
+    this.paused = false;
+    this.input.keyDrs = false;
+    this.shake = 0;
+    for (var c = 0; c < this.cars.length; c++) { this.cars[c].steerVis = 0; this.cars[c].wheelSpin = 0; }
+
+    /* The demo driver's output, through the same quantiser playerInput ends
+       with, in place of the keyboard. */
+    var drive = { steer: 0, throttle: 0, brake: 0, handbrake: 0 };
+    this.playerInput = function (dt) {
+      var a = self.demoAI.update(dt, self.cars, self.time);
+      drive.steer = Math.round(clamp(a.steer, -1, 1) * 127) / 127;
+      drive.throttle = Math.round(clamp(a.throttle, 0, 1) * 255) / 255;
+      drive.brake = Math.round(clamp(a.brake, 0, 1) * 255) / 255;
+      drive.handbrake = 0;
+      return drive;
+    };
+    try {
+      for (var k = 0; k < ticks; k++) {
+        this.tick(STEP);
+        for (c = 0; c < this.cars.length; c++) this.cars[c].sync(STEP, 1);
+      }
+    } finally {
+      delete this.playerInput;
+    }
+
+    var keepMode = this.camMode;
+    this.camMode = cam === 'helmet' ? 2 : 0;
+    this.updateCamera(0, true);
+    if (cam !== 'chase' && cam !== 'helmet') this.placePhotoCamera(cam);
+    this.camMode = keepMode;
+
+    if (this.scenery && this.scenery.clouds) this.scenery.clouds.rotation.y = ticks * STEP * 0.004;
+
+    this.syncUiState();
+    this.hudCanvas.style.visibility = 'hidden';
+    this.renderer.setRenderTarget(this.rt);
+    this.renderer.clear();
+    this.renderer.render(this.scene, this.camera);
+    this.renderer.setRenderTarget(null);
+    this.postMat.uniforms.uFade.value = 1;
+    this.renderer.render(this.postScene, this.postCam);
+    return Promise.resolve();
+  } catch (e) {
+    return Promise.reject(e);
+  }
+};
+
+/* MCL64.bench({ circuit, quality, seconds }) -> Promise<{ frames, avgMs, p95Ms }>
+ *
+ * Runs the attract demo and times the gaps between animation frames, which
+ * is the frame time a player actually gets. The first second is a warm up
+ * (shaders compile on the first frames after a tier change) and is not
+ * counted. Releases a hold left by photo. */
+Game.prototype.bench = function (opts) {
+  var o = opts || {};
+  try {
+    var seconds = o.seconds > 0 ? o.seconds : 20;
+    if (!this.hookSelect(o.circuit, o.quality)) {
+      return Promise.reject(new Error('MCL64.bench: reloading to load ' + o.circuit + '; call again once the page has loaded'));
+    }
+    this.photoHold = false;
+    this.hudCanvas.style.visibility = '';
+    this.resetRace(true);
+  } catch (e) {
+    return Promise.reject(e);
+  }
+  return new Promise(function (resolve) {
+    var gaps = [], last = 0, start = 0;
+    function step(now) {
+      if (!start) start = now;
+      if (now - start >= 1000) {
+        if (last) gaps.push(now - last);
+        last = now;
+      }
+      if (now - start < 1000 + seconds * 1000) { requestAnimationFrame(step); return; }
+      var sum = 0;
+      for (var i = 0; i < gaps.length; i++) sum += gaps[i];
+      var sorted = gaps.slice().sort(function (a, b) { return a - b; });
+      var p95 = sorted.length ? sorted[Math.max(0, Math.ceil(sorted.length * 0.95) - 1)] : 0;
+      resolve({
+        frames: gaps.length,
+        avgMs: gaps.length ? Math.round(sum / gaps.length * 100) / 100 : 0,
+        p95Ms: Math.round(p95 * 100) / 100
+      });
+    }
+    requestAnimationFrame(step);
+  });
+};
+
 /* =========================================================================
    BOOT
    ========================================================================= */
@@ -2670,6 +2919,9 @@ Game.prototype.updateAudio = function () {
 
   function frame(now) {
     requestAnimationFrame(frame);
+    /* photo() holds the loop so its frame is the one on screen when the
+       stills tool captures it. Never set in normal play. */
+    if (game.photoHold) { last = now; return; }
     var dt = (now - last) / 1000;
     last = now;
     if (dt > 0.25) dt = 0.25;          /* tab was backgrounded — don't fast-forward */
@@ -2713,4 +2965,5 @@ Game.prototype.updateAudio = function () {
   /* The circuit registry, for the selector UI and for poking at in a console. */
   game.tracks = TRACKS;
   game.trackById = trackById;
+  game.photoCams = PHOTO_CAMS;
 })();

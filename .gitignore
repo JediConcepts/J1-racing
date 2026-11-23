@@ -15,5 +15,6 @@ mcl64-deploy/
 
 # Local scratch
 node_modules/
+stills/
 .DS_Store
 *.log
