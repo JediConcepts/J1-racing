@@ -1,6 +1,10 @@
 {
-  "recordedAt": "5be0717",
+  "recordedAt": "913ee61",
   "races": {
+    "monaco-gp-v1": {
+      "ticks": 13682,
+      "sha256": "6037856e7333ebddb95883a580929cc5c51aa3d179787cb47731204d86ed66bd"
+    },
     "silverstone-v1": {
       "ticks": 19749,
       "sha256": "356161746da67228c8e70720342de30813aa8d14e229316401f81e1baa00c458"

@@ -4,9 +4,10 @@
  *   node test/sim-parity.test.js --record   rewrite that file (done by hand, never in CI)
  *
  * WHAT THIS IS FOR. The 3D engine is about to be replaced. The claim to protect
- * is that no lap time moves when it is. This runs a whole race on each circuit
- * with no browser, hashes the final state of every car, and compares the hash to
- * a committed one. If a single float anywhere in the sim differs, the hash does.
+ * is that no lap time moves when it is. This runs a whole race on each of the
+ * four circuits with no browser, hashes the final state of every car, and
+ * compares the hash to a committed one. If a single float anywhere in the sim
+ * differs, the hash does.
  *
  * DUPLICATION, ACCEPTED. The race loop below is a transcription of parts of
  * src/40-game.js (buildGrid, gridOrder, resetRace, tick, settleField, inDrsZone,
@@ -38,7 +39,8 @@ const VENDOR = 'vendor/three.min.js';
 const CHAIN = ['src/05-fpmath.js', 'src/10-core.js', 'src/12-trackdata.js', 'src/20-track.js', 'src/30-cars.js'];
 
 const GOLDEN = path.join(__dirname, 'golden', 'sim-2.json');
-const RACES = ['silverstone-v1', 'indianapolis-v1', 'brands-hatch-v1'];
+/* Same order as TRACKS in src/20-track.js: Monaco first, then the older three. */
+const RACES = ['monaco-gp-v1', 'silverstone-v1', 'indianapolis-v1', 'brands-hatch-v1'];
 const TICK_CAP = 72000;
 
 global.window = global;
@@ -256,7 +258,14 @@ function tick(g, dt) {
 /* --- one race ------------------------------------------------------------- */
 
 function runRace(trackId) {
-  const g = { track: new Track(trackById(trackId)) };
+  /* trackById falls back to TRACKS[0] for an id it does not know. That is
+     Monaco now, so a mistyped id would quietly run Monaco under the wrong
+     name and record a hash for a race nobody asked for. */
+  const def = trackById(trackId);
+  if (def.id !== trackId) {
+    throw new Error('no circuit with the id "' + trackId + '" in src/20-track.js (trackById fell back to "' + def.id + '")');
+  }
+  const g = { track: new Track(def) };
   buildGrid(g);
   resetRace(g);
   let ticks = 0;
