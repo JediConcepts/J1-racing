@@ -1,6 +1,6 @@
 name: tests
 
-# Three suites, each verifying a claim this repository makes in prose.
+# Four suites, each verifying a claim this repository makes in prose.
 #
 #   maths      the README says the deterministic transcendentals are bit-identical
 #              across V8 and JavaScriptCore. This runs both engines and checks it,
@@ -11,6 +11,11 @@ name: tests
 #              the physics-related part of the orientation-fix sequence. Three of
 #              those eight corrective commits are in scope; the rest were camera,
 #              mesh and tree orientation, which nothing here renders.
+#   parity     a whole race on each circuit, run headless with no meshes, and the
+#              final state of every car hashed against a committed digest. This is
+#              the proof that a change to the engine moved no lap time. It runs a
+#              transcription of the race loop, not 40-game.js itself, and is
+#              retired when the race rules get a headless entry point.
 #   migrations all fourteen migrations applied to an empty PostgreSQL, then the
 #              security model asserted: PII unreachable, no client write path,
 #              rename is self-only, the board is data-minimised.
@@ -55,6 +60,16 @@ jobs:
         with:
           node-version: '22'
       - run: node test/physics.test.js
+
+  parity:
+    name: parity — race loop digests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node test/sim-parity.test.js
 
   migrations:
     name: migrations — schema and security model

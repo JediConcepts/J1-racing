@@ -1,0 +1,17 @@
+{
+  "recordedAt": "5be0717",
+  "races": {
+    "silverstone-v1": {
+      "ticks": 19749,
+      "sha256": "356161746da67228c8e70720342de30813aa8d14e229316401f81e1baa00c458"
+    },
+    "indianapolis-v1": {
+      "ticks": 22607,
+      "sha256": "ab3baea20ab7732a40bffe498fa42e07c716c59e93387534f64701542600e518"
+    },
+    "brands-hatch-v1": {
+      "ticks": 18849,
+      "sha256": "448205c497effcc1bde4597912637a7e942f03b535d0497ff9da212fef7ad621"
+    }
+  }
+}
