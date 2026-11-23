@@ -2785,6 +2785,21 @@ Game.prototype.placePhotoCamera = function (name) {
   this.sky.position.set(eye.x, 0, eye.z);
 };
 
+/* Why a camera cannot be placed on the loaded circuit, or '' when it can.
+   Only `stands` depends on scenery. buildScenery lays the stands by the line
+   on every circuit except Monaco, and a standRing circuit has the ring
+   instead; Monaco has neither, so there is no top row to sit in and the
+   camera would hang in the air over the street. This mirrors the conditions
+   in buildScenery: if a circuit gains or loses its stands there, change it
+   here too. tools/stills.js looks for the words "is not available at". */
+Game.prototype.photoCamMissing = function (name) {
+  var t = this.track;
+  if (name === 'stands' && !t.def.standRing && t.id === 'monaco-gp-v1') {
+    return 'camera stands is not available at ' + t.id + ': the circuit has no main grandstand';
+  }
+  return '';
+};
+
 /* MCL64.photo({ circuit, tick, cam, quality, timeOfDay }) -> Promise<void>
  *
  * Starts a real race (grid, countdown and all), drives the player with the
@@ -2796,11 +2811,22 @@ Game.prototype.placePhotoCamera = function (name) {
  * Everything that would otherwise carry history into the frame is pinned:
  * the visual state on each car is reset to what a new Vehicle has, cars are
  * synced at alpha 1 after every tick as a 60 Hz display would, the camera is
- * snapped rather than damped, the countdown fade is forced to full, and the
- * clouds are set from the tick count instead of drifting on wall clock time. */
+ * snapped rather than damped, the countdown fade is forced to full, the
+ * clouds are set from the tick count instead of drifting on wall clock time,
+ * and the halo is put back to the game's default (hidden) whatever H did
+ * earlier.
+ *
+ * THE RACE IS NEVER POSTED. It is a real race driven by the demo driver, and
+ * tick() sends a finished race to the leaderboard. So submitRace is switched
+ * off for the length of the run, and a `tick` past the end of the race is
+ * refused: that also keeps the count exact, because settleField would
+ * otherwise run thousands of further ticks inside one call. A photo that
+ * fails after it has started puts the game back on the title, so the frame
+ * loop is not left held and no half run race is left for it to finish. */
 Game.prototype.photo = function (opts) {
   var o = opts || {};
   var self = this;
+  var held = false;
   try {
     var cam = o.cam || 'chase';
     if (PHOTO_CAMS.indexOf(cam) < 0) throw new Error('unknown camera ' + cam);
@@ -2809,8 +2835,11 @@ Game.prototype.photo = function (opts) {
     if (!this.hookSelect(o.circuit, o.quality)) {
       return Promise.reject(new Error('MCL64.photo: reloading to load ' + o.circuit + '; call again once the page has loaded'));
     }
+    var missing = this.photoCamMissing(cam);
+    if (missing) return Promise.reject(new Error('MCL64.photo: ' + missing));
 
     this.photoHold = true;
+    held = true;
 
     /* beginRace, less the audio wake and the fullscreen request */
     this.resetRace(false);
@@ -2821,6 +2850,8 @@ Game.prototype.photo = function (opts) {
     this.input.keyDrs = false;
     this.shake = 0;
     for (var c = 0; c < this.cars.length; c++) { this.cars[c].steerVis = 0; this.cars[c].wheelSpin = 0; }
+    this.haloVisible = false;
+    this.applyHalo();
 
     /* The demo driver's output, through the same quantiser playerInput ends
        with, in place of the keyboard. */
@@ -2833,13 +2864,21 @@ Game.prototype.photo = function (opts) {
       drive.handbrake = 0;
       return drive;
     };
+    /* Shadowed the same way, so tick() itself stays untouched. The check in
+       the loop means tick() never gets as far as calling it; this is the
+       second lock on the same door. */
+    this.submitRace = function () {};
     try {
       for (var k = 0; k < ticks; k++) {
+        if (this.player.finished) {
+          throw new Error('tick is past the end of the race: the player finished after ' + k + ' of ' + ticks + ' ticks');
+        }
         this.tick(STEP);
         for (c = 0; c < this.cars.length; c++) this.cars[c].sync(STEP, 1);
       }
     } finally {
       delete this.playerInput;
+      delete this.submitRace;
     }
 
     var keepMode = this.camMode;
@@ -2865,6 +2904,17 @@ Game.prototype.photo = function (opts) {
     this.renderer.render(this.postScene, this.postCam);
     return Promise.resolve();
   } catch (e) {
+    /* Only when this call took the hold: a refusal before that leaves the page
+       exactly as it was. resetRace(true) is the title, as bench leaves it, and
+       it clears pendingResult and every car's finished flag, so nothing the
+       demo driver did can be posted by the frame loop or by a later sign in. */
+    if (held) {
+      this.photoHold = false;
+      this.hudCanvas.style.visibility = '';
+      var hidden = this.host.querySelectorAll('.scanlines, .glow');
+      for (var hi = 0; hi < hidden.length; hi++) hidden[hi].style.visibility = '';
+      try { this.resetRace(true); } catch (ignore) { /* report the first error, not this one */ }
+    }
     return Promise.reject(e);
   }
 };

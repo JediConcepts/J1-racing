@@ -5,7 +5,9 @@
  * For every .png file name present in both folders, prints the mean absolute
  * difference of each colour channel (R, G, B, on a scale of 0 to 255) and the
  * share of pixels where any channel differs by more than 24. Exits 1 if any
- * channel mean is above --max, or if a pair differs in size.
+ * channel mean is above --max, if a pair differs in size, or if no file name
+ * is common to both folders (nothing compared is not a pass). Files present
+ * on one side only are named, and do not by themselves fail the run.
  *
  * The decoding and the arithmetic run in a browser page through Playwright,
  * so no image library is needed. Needs Playwright on NODE_PATH; see
@@ -30,11 +32,19 @@ if (dirs.length !== 2 || !isFinite(max)) {
 
 const [dirA, dirB] = dirs.map((d) => path.resolve(d));
 const pngs = (d) => fs.readdirSync(d).filter((f) => f.endsWith('.png'));
+const inA = new Set(pngs(dirA));
 const inB = new Set(pngs(dirB));
 const names = pngs(dirA).filter((f) => inB.has(f)).sort();
+const onlyA = pngs(dirA).filter((f) => !inB.has(f)).sort();
+const onlyB = pngs(dirB).filter((f) => !inA.has(f)).sort();
+function nameMissing() {
+  for (const f of onlyA) console.log('only in A  ' + f);
+  for (const f of onlyB) console.log('only in B  ' + f);
+}
 if (!names.length) {
+  nameMissing();
   console.error('no file names in common between ' + dirA + ' and ' + dirB);
-  process.exit(2);
+  process.exit(1);
 }
 
 (async () => {
@@ -89,9 +99,8 @@ if (!names.length) {
       '  R ' + r.mean[0].toFixed(3) + '  G ' + r.mean[1].toFixed(3) + '  B ' + r.mean[2].toFixed(3) +
       '  >24: ' + (r.off * 100).toFixed(3) + '%');
   }
-  const onlyA = pngs(dirA).filter((f) => !inB.has(f)).length;
-  const onlyB = pngs(dirB).length - names.length;
-  console.log(names.length + ' compared' + (onlyA || onlyB ? ', ' + onlyA + ' only in A, ' + onlyB + ' only in B' : ''));
+  nameMissing();
+  console.log(names.length + ' compared' + (onlyA.length || onlyB.length ? ', ' + onlyA.length + ' only in A, ' + onlyB.length + ' only in B' : ''));
   await browser.close();
   process.exit(over ? 1 : 0);
 })();

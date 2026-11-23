@@ -31,7 +31,7 @@ function requirePlaywright() {
   try {
     return require('playwright');
   } catch (e) {
-    console.error('FATAL: playwright not found. Run with NODE_PATH pointing at a node_modules that has it, e.g. NODE_PATH=<scratchpad>/pw/node_modules node ' + path.relative(ROOT, process.argv[1]));
+    console.error('FATAL: playwright not found. Set NODE_PATH to a folder holding playwright (the node_modules it was installed into), then run this again: node ' + path.relative(ROOT, process.argv[1]));
     process.exit(2);
   }
 }

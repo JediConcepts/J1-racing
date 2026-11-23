@@ -8,10 +8,17 @@
  * combination. Defaults: every circuit, both tiers, time of day `midday`,
  * all six cameras, tick 900.
  *
- * Every still is taken headless at 1280 x 720 with a device pixel ratio of 1
- * and the launch arguments in tools/browser.js. The image is the game
- * screen (the #screen stage) with the HUD hidden; the scanline and glow
- * layers the player sees over the 3D are left in.
+ * Every still is taken headless in a 1280 x 720 viewport with a device pixel
+ * ratio of 1 and the launch arguments in tools/browser.js. The image is the
+ * game screen (the #screen stage: the viewport less the page's control bar,
+ * so shorter than 720; the size is printed for each still) and the game
+ * picture only: the hook hides the HUD and the page's scanline and glow
+ * layers for the photo frame, so a still measures the renderer and nothing
+ * the page lays over it.
+ *
+ * A camera that a circuit cannot place (stands at Monaco, which has no main
+ * grandstand) is skipped there, with a line saying so. A circuit with no
+ * still at all is an error.
  *
  * Needs Playwright on NODE_PATH; see tools/browser.js. */
 'use strict';
@@ -63,12 +70,22 @@ const list = (s) => s.split(',').map((x) => x.trim()).filter(Boolean);
     const circuits = args.circuit ? list(args.circuit) : allCircuits;
     const cams = args.cam ? list(args.cam) : allCams;
 
-    let count = 0;
+    let count = 0, skipped = 0;
     for (const circuit of circuits) {
       for (const quality of qualities) {
         for (const tod of tods) {
           for (const cam of cams) {
-            await callHook(page, 'photo', { circuit, tick, cam, quality, timeOfDay: tod });
+            try {
+              await callHook(page, 'photo', { circuit, tick, cam, quality, timeOfDay: tod });
+            } catch (e) {
+              /* The hook's own words for a camera this circuit cannot place
+                 (Game.prototype.photoCamMissing). Anything else is a failure. */
+              const why = /MCL64\.photo: ([^\n]* is not available at [^\n]*)/.exec(e && e.message ? e.message : '');
+              if (!why) throw e;
+              skipped++;
+              console.log('skipped ' + [circuit, quality, tod, cam].join('.') + '  (' + why[1] + ')');
+              continue;
+            }
             const rect = await page.evaluate(() => {
               const r = document.getElementById('screen').getBoundingClientRect();
               /* whole pixels: the stage is 622.5 px tall at 1280 x 720 */
@@ -82,7 +99,8 @@ const list = (s) => s.split(',').map((x) => x.trim()).filter(Boolean);
         }
       }
     }
-    console.log(count + ' stills in ' + path.relative(process.cwd(), out));
+    console.log(count + ' stills in ' + path.relative(process.cwd(), out) + (skipped ? ', ' + skipped + ' skipped' : ''));
+    if (!count) throw new Error('no still was taken');
   } catch (e) {
     console.error('FAIL: ' + (e && e.message ? e.message : e));
     failed = true;
