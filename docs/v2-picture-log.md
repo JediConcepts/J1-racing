@@ -8,17 +8,21 @@ Started 23 Nov 2026, on branch v2-upgrade, before the engine move (three.js r128
 
 Stills are taken with `node tools/stills.js` and compared with `node tools/stills-compare.js`. Frame times are taken with `node tools/bench.js`. The stills themselves are not committed; the numbers are recorded here.
 
+- A still is the game picture only: the HUD and the page's scanline and glow layers are hidden for the photo frame.
+- Stills are 1280 x 622, not 1280 x 720, because the game stage is the 720 viewport minus the control bar beneath it.
+- Changing circuit inside a hook reloads the page (a circuit is only built at boot); the hook rejects, and the tools wait for the circuit to load and call it again.
+
 ## Baseline
 
-`node tools/bench.js --quality <q> --circuit <id> --seconds 20`: the attract demo for 20 s after a 1 s warm up, in a 1728 x 1028 viewport at device pixel ratio 2. Frame time is the gap between animation frames.
+`node tools/bench.js --quality <q> --circuit <id> --seconds 20`: the attract demo for 20 s after a 1 s warm up, in a 1728 x 1028 viewport at device pixel ratio 2. Frame time is the gap between animation frames. Chrome is launched with `--disable-gpu-vsync --disable-frame-rate-limit`, so frames are not held to the display's 120 Hz refresh; fps is frames over seconds, and a capped run would show 120 (or 60) fps with a mean of 8.33 ms (or 16.67 ms).
 
-| circuit | tier | frames | mean ms | p95 ms |
-|---|---|---|---|---|
-| silverstone-v1 | modern | 2395 | 8.35 | 9.1 |
-| silverstone-v1 | retro | 2400 | 8.33 | 9.2 |
-| indianapolis-v1 | modern | 2400 | 8.34 | 9.2 |
+| circuit | tier | frames | fps | mean ms | p95 ms |
+|---|---|---|---|---|---|
+| silverstone-v1 | modern | 9448 | 472.4 | 2.12 | 6.7 |
+| silverstone-v1 | retro | 20230 | 1011.5 | 0.99 | 2.6 |
+| indianapolis-v1 | modern | 9230 | 461.5 | 2.17 | 6.5 |
 
-All three hold the display's 120 Hz refresh (8.33 ms), so today's engine has headroom on this machine that these figures cannot show. A later figure above 8.33 ms is a real loss; one at 8.33 ms only says the frame still fits.
+All three are uncapped. A repeat of Silverstone Modern gave 9460 frames, 473.0 fps, 2.11 ms mean, 6.8 ms p95, so run to run spread is about 1%.
 
 ## Repeatability
 

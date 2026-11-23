@@ -2812,7 +2812,12 @@ Game.prototype.photo = function (opts) {
     if (this.scenery && this.scenery.clouds) this.scenery.clouds.rotation.y = ticks * STEP * 0.004;
 
     this.syncUiState();
+    /* The game picture only: the HUD and the page's own scanline and glow
+       layers are hidden, so a still measures the renderer and nothing the
+       page lays over it. Not restored; see above. */
     this.hudCanvas.style.visibility = 'hidden';
+    var layers = this.host.querySelectorAll('.scanlines, .glow');
+    for (var li = 0; li < layers.length; li++) layers[li].style.visibility = 'hidden';
     this.renderer.setRenderTarget(this.rt);
     this.renderer.clear();
     this.renderer.render(this.scene, this.camera);

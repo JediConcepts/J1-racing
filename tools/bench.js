@@ -18,6 +18,7 @@
 const { CHROMIUM_ARGS, requirePlaywright, serveDist, localOnly, callHook } = require('./browser');
 
 const VIEWPORT = { width: 1728, height: 1028 };
+const BENCH_CHROME_ARGS = ['--disable-gpu-vsync', '--disable-frame-rate-limit'];
 
 const argv = process.argv.slice(2);
 const args = {};
@@ -36,7 +37,9 @@ if (!args.quality || !args.circuit || !(seconds > 0)) {
   const server = await serveDist();
   const browser = args.headless
     ? await chromium.launch({ headless: true, args: CHROMIUM_ARGS })
-    : await chromium.launch({ channel: 'chrome', headless: false });
+    /* Uncapped: without these the frame time is the display's refresh
+       interval, which says nothing about cost. */
+    : await chromium.launch({ channel: 'chrome', headless: false, args: BENCH_CHROME_ARGS });
   let code = 0;
   try {
     /* The display's own pixel ratio is part of what is being measured, and
@@ -57,7 +60,12 @@ if (!args.quality || !args.circuit || !(seconds > 0)) {
       return ext ? g.getParameter(ext.UNMASKED_RENDERER_WEBGL) : g.getParameter(g.RENDERER);
     });
     console.log(JSON.stringify(Object.assign({}, r, {
+      /* frames per second actually delivered. A run pinned to the display
+         comes out at its refresh rate (60 or 120) with avgMs at 16.67 or
+         8.33; an uncapped run lands wherever the cost puts it. */
+      fps: Math.round(r.frames / seconds * 10) / 10,
       circuit: args.circuit, quality: args.quality, seconds,
+      chromeArgs: args.headless ? CHROMIUM_ARGS : BENCH_CHROME_ARGS,
       browser: (args.headless ? 'headless chromium (swiftshader) ' : 'chrome ') + browser.version(),
       viewport: VIEWPORT.width + 'x' + VIEWPORT.height, dpr, gl
     })));
