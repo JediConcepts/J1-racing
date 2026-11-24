@@ -1566,3 +1566,87 @@ The real WebGPU backend, `node test/picture.js --webgpu`, the system Chrome 158.
 The three checks that take WebGPU or WebGL 2 away are about the fallback and are not run in that mode. The Chrome the run opened was closed by the run.
 
 Tests after B1 and B2: `node test/sim-parity.test.js` 4 passed; `node test/physics.test.js` 37 passed; `node test/fpmath.test.js` 3 passed; `node test/track-bake.test.js` 8 passed; `node test/music.test.js` 31 passed.
+
+### B3: the tools (`6063efa`)
+
+**`tools/stills.js` fails on what the console says.** It listened for page errors only. A node material that fails to build does not throw: the engine writes the failure on the console and draws the frame anyway, so the tool wrote the still and exited 0. The watch is now in the tool (`watchPage` in `tools/browser.js`), and the script kept outside the repo since stage A is no longer needed. A run fails on a page error, on a console error, and on any console warning the tool does not know by its exact text.
+
+The warnings it knows, each with its reason in a comment beside it:
+
+| warning, by exact text | when | why it is allowed |
+|---|---|---|
+| `No available adapters.` | every run | Chromium's answer when the page asks for a WebGPU adapter and headless SwiftShader has none. It is why every still shows the fallback |
+| `THREE.WebGPURenderer: WebGPU is not available, running under WebGL2 backend.` | every run | the engine saying it has taken the fallback by itself |
+| `GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels` | every screenshot | the driver, as the screenshot reads the canvas back |
+| `WebGL: CONTEXT_LOST_WEBGL: loseContext: context lost` | now and then, as a page goes away | the browser taking the old page's context down. It is in an r128 capture of fix round 1 as well |
+| `A valid external Instance reference no longer exists.` | the same | the same |
+
+The brief for this step named the last two and said to allow only those. The first three had to be listed as well: they are printed on every headless run, so a tool that failed on them could never pass. The address of the context at the front of a driver message, and the note at its end that it will not be repeated, are taken off before the comparison, because the browser adds them and they change from run to run. A context lost while the game is running is another matter: the engine reports that as an error, and an error always fails the run.
+
+Checked:
+
+- The 28 stills taken with the tool's own watch (`stills/stageB/tool-check`, the build `v0.134 dev 481f2df*`): three runs, each exit 0, nothing printed but the stills. 27 of the 28 are the same files, byte for byte, as `stills/after-tuning-3`. The 28th is the subject of the finding below.
+- In a copy outside the working tree, `console.error` and then `console.warn` with a line the tool has never seen, planted after the photo frame is drawn: each run writes the still, prints the line (`CONSOLE ERROR: ...`, `CONSOLE WARNING: ...`) and exits 1.
+- A node made to fail on purpose (the texture read through a property that does not exist): `CONSOLE ERROR: THREE.TSL: NodeError: THREE.TSL: texture( value ) function expects a valid instance of THREE.Texture()`, then page errors, exit 1.
+
+**`tools/stills-pin-check.js`** copied its context options and its clip from the stills tool. Both tools now read them from `tools/browser.js` (`STILL_CONTEXT`, `stillClip`), with the pin and the watch, so they cannot drift. A folder with no `index.html` is found before a browser is opened (exit 2); it used to be found with one open, which was left running. Checked with a folder that does not exist: `FATAL`, exit 2, no browser process before or after.
+
+Run again as its header says, on the build of `481f2df` and a copy of the tree with one unused `new THREE.Object3D();` as the first line of `Game.prototype.buildWorld`:
+
+```
+monaco-gp-v1.modern.midday.high at tick 600
+116a6b85558ece2cc048b5bf6f67827e5e038c887f7a1ee5c41d36b478b62f1d  1280 x 607  dist
+116a6b85558ece2cc048b5bf6f67827e5e038c887f7a1ee5c41d36b478b62f1d  1280 x 607  <the copy>/dist
+EQUAL
+```
+
+That hash is also the file in `stills/after-tuning-3`. With the pin as it was at `a4fad18` (one fixed stream, never started again) put in front of the same tool, the same two folders give `DIFFER` (`12cfa2b1...` and `48d3c020...`), so the check still tells the two apart on 0.187.
+
+**`tools/bench.js`** asked the renderer for a GL context, which a WebGPU canvas cannot give. It asks the backend. The line carries `backend` (`webgpu` or `webgl2`) and `gpu` in place of `gl`; the drawing buffer is the GL one on the fallback and the canvas's current texture on WebGPU; the three sizes stay. `--renderer webgl` loads the page with `?renderer=webgl`, and the run fails if the renderer then reports anything else. Run once on each backend, Modern at Silverstone for 5 seconds, ONLY to show the tool works. These are not bench figures: the bench is stage C's, at 20 seconds a row.
+
+```
+{"frames":3125,"avgMs":1.6,"p95Ms":4.2,"fps":625,"circuit":"silverstone-v1","quality":"modern","seconds":5,...,"browser":"chrome 158.0.8127.38","viewport":"1728x1028","dpr":2,"backend":"webgpu","renderTarget":"3072x1693","canvas":"6144x3386","drawingBuffer":"6144x3386","gpu":"apple metal-3"}
+{"frames":1998,"avgMs":2.5,"p95Ms":7.1,"fps":399.6,"circuit":"silverstone-v1","quality":"modern","seconds":5,...,"browser":"chrome 158.0.8127.38","viewport":"1728x1028","dpr":2,"backend":"webgl2","renderTarget":"3072x1693","canvas":"6144x3386","drawingBuffer":"6144x3386","gpu":"ANGLE (Apple, ANGLE Metal Renderer: Apple M2 Max, Unspecified Version)"}
+```
+
+`--headless` runs too (`backend` `webgl2`, SwiftShader).
+
+**`test/csp.js`** decided the game had booted partly by asking the game canvas for a `webgl2` context, which is false on a canvas that holds a WebGPU context. It asks the renderer which backend it has. `node test/csp.js` (headless): `booted (canvas + backend + motion): yes, on webgl2`, `Supabase origin reachable: yes`, `off-origin exfil blocked: yes`, `unexpected violations: 0`, `RESULT: PASS`. It read the public leaderboard, as it always has (two requests, both GET), and posted nothing. Shown on the other backend once, by running the same file in the system Chrome through a preload kept outside the repo: `booted (canvas + backend + motion): yes, on webgpu`, 0 unexpected violations, `RESULT: PASS`. The file as it was before this step, run the same way: `"webglContext": false`, `booted (canvas + webgl + motion): NO`, `RESULT: FAIL`.
+
+### B3: pinned against unpinned, again
+
+Why again: the stills page runs on a pinned `Math.random` that starts again at every 2D context, so the UUIDs three.js makes repeat there. On 0.187 a node's UUID is what a shader build tells its nodes apart by. Stage A showed the stills did not care, and fix round 2 then gave the game two long lived nodes of its own (the pair every canvas material shares). So it is shown again here: stills of the three older circuits, pinned and not pinned, must be the same byte for byte. (Monaco cannot be part of it. Its buildings are drawn with `Math.random`, which is what the pin is for.)
+
+"Not pinned" is the same tool with `pinRandom` replaced by a function that does nothing, through a preload kept outside the repo. That it really is unpinned: two such runs of Monaco's `high` view give two different files (`c766a23b...`, `36de5f78...`).
+
+| how | backend | shots | pinned against not pinned |
+|---|---|---|---|
+| `tools/stills.js`, screenshots: Silverstone all six cameras, Indianapolis and Brands Hatch `chase` and `high`, both tiers | fallback, headless | 20 | **20 of 20 the same file** (`stills/stageB/ctl-pinned`, `ctl-unpinned`) |
+| the same 20, the game canvas read back as a PNG in the task that drew it; three pages: pinned, pinned again, not pinned; each circuit loaded in Retro and switched to Modern | fallback, headless | 20 | **20 of 20 identical**, and 20 of 20 pinned against pinned again |
+| the same | WebGPU, the system Chrome 158, headed | 20 | **20 of 20 identical**, and 20 of 20 pinned against pinned again |
+
+No console error or unknown warning on any of those pages. So the pin still moves nothing on 0.187 with the game's own nodes in place, on either backend, and the stills tool still needs no UUID generator of its own.
+
+The third row first read 19 of 20, in the stills tool's own order of shots (Silverstone first), four runs out of four: Silverstone's `high` view in Retro was one file in the first page of a browser and another in the two pages after it, and those two, one pinned and one not, agreed with each other. So it was never the pin. What it was is the next section, and the table above is the control taken so that it cannot happen.
+
+### B3: a finding. The Silverstone Retro stills depend on where the sun was left
+
+One still of the 28 is not repeatable to the byte, and the cause is in the photo hook, not in the engine and not in the pin.
+
+What was seen. `silverstone-v1.retro.midday.stands.png` comes out as one of two files from run to run of the stills tool (and a third was seen twice). Over 12 pinned runs of Silverstone in Retro it was one file 4 times and the other 8; over 8 unpinned runs, 4 and 4. The other five Silverstone Retro stills were the same file in all 20 runs. The two files differ in 8 pixels of one 3 x 3 block on the infield grass, on red only, by 5 levels at most: one pixel of the Retro canvas, one step of the palette, spread over the pixels it is scaled up to. On the compare tool that is 0.000008 of a level, and it reads 0.000. On WebGPU the same thing showed in the control above: Silverstone's `high` view in Retro differed in ONE canvas pixel, by 7 levels on red, between the first page of a browser and the pages after it.
+
+The cause, proved. `updateCamera` moves the sun and its target along with the car only while the sun casts shadows, which is in Modern. In Retro the sun is left where it was. A new browser profile loads Silverstone in Modern (those are the game's defaults: `trackId: 'silverstone-v1'`, `quality: 'modern'`), so the stills tool's first Retro still of Silverstone is reached by a change of tier at run time, out of an attract loop that had been moving the sun with the demo car for as long as the page happened to have been open. The sun's direction is the same wherever it stands, but it is worked out from two positions, and its last bits depend on them. One pixel that sits exactly on a step of the Retro palette then falls one way or the other.
+
+- Read in the page, in the system Chrome: after the photo frame in Retro the sun stood at x, z of -1002.55, 557.59 in one page, -1001.76, 559.06 in the next and -1001.65, 559.28 in the third. In another run of three pages, a digest of every car's state and matrix and of the camera's two matrices was the same in all three, the digest of the lights was not, and the canvas differed where the lights did.
+- With the sun put back at the place it has in a page LOADED in Retro (-320, 420, 210, target at the origin) and the frame drawn again, the canvas is the same in every page: on WebGPU for the `high` view (three pages), and headless for the `stands` view (six pages), where the canvas as the hook left it had been one of two.
+- With each circuit loaded in Retro, which is what the second and third rows of the control do, the sun is at -320, 210 in every page and all 20 shots repeat.
+
+What it touches and what it does not:
+
+- Only the six Silverstone Retro stills. Indianapolis, Brands Hatch and Monaco are reached by a reload with Retro already saved, so they are loaded in Retro and the sun never moves. Every Modern still sets the sun from the player's car, which the hook places.
+- The gate: nothing. The largest difference seen is one palette step in one pixel.
+- Any statement that two sets are "the same files". Earlier entries of this log say that of sets that include this still. Where they were compared with the compare tool they are right to three decimals and may be wrong to the byte for this one still. One such statement is B0's own: `stills/after-tuning-3` is the same as `stills/fix2-filter` in 27 files, and differs from it in the 8 pixels described above in the 28th. It is corrected here and not in place, so that the entry reads as it was written.
+- The same code is on `main` (`if (this.sun && this.sun.castShadow)`), so r128 had the same dependence. Its reference stills did not show it: that still is the same file in `stills/before-main`, `main-a`, `main-b` and the rebuilt r128 of fix round 1. Whether r128 could not show it or only did not in four captures was not looked into.
+- The stage A statement that a change of tier at run time gives the same picture as loading in the tier "to the pixel" is true of what it measured (Monaco `high` and Silverstone `chase`) and is not true in general, by one pixel, for the same reason.
+
+NOT FIXED, on purpose. The fix is three lines in `Game.prototype.photo` (place the sun as a page loaded in that tier would have it, before the frame is drawn), and it would make the hook's own claim true that everything carrying history into the frame is pinned. It is a change to the camera every later picture is judged with, it is not in this stage's brief, and it would move one pixel of up to six stills. It needs a ruling.
