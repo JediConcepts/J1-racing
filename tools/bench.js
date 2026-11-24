@@ -50,6 +50,14 @@
  * tools/browser.js), except that a warning it does not know is printed and
  * does not fail the run.
  *
+ * NOR IS A ROW WITH NO FRAMES IN IT. A frame time is the gap between two
+ * frames, so a run in which fewer than two frames were drawn after the warm
+ * up second has timed nothing, and the hook hands back frames 0, avgMs 0 and
+ * p95Ms 0. Printed, that row reads as the best result there has ever been.
+ * It happens where a single frame takes longer than the run: Ultra on the
+ * software rasteriser of --headless on a busy machine did it in 8 seconds.
+ * That run also exits 1 with no JSON line, and says to ask for more seconds.
+ *
  * --headless uses Playwright's own Chromium instead, with the stills launch
  * arguments. That figure is a SwiftShader frame time, not a GPU one; it is
  * labelled as such in the output and is only a fallback.
@@ -121,6 +129,11 @@ if (badArgs || !args.quality || !args.circuit || !(seconds > 0) || (args.rendere
       return 'the game ended at its fallback panel: ' + f.textContent.replace(/\s+/g, ' ').trim();
     });
     if (panel) broken.push(panel);
+    /* see the header: no frames timed is no figure, and 0 ms would read as one */
+    if (!(r && r.frames > 0)) {
+      broken.push('no frame was timed in ' + seconds + ' s: fewer than two frames were drawn after the warm up second, ' +
+        'so there is no gap to measure. Ask for more seconds, or the frames of this tier never came.');
+    }
     if (broken.length) {
       throw new Error('NO FIGURE. The frames of this run cannot be trusted, so its frame times mean nothing and none are printed:\n  ' +
         broken.join('\n  '));
