@@ -3436,6 +3436,14 @@ Game.prototype.tierLost = function () {
    not take the key for a failure. */
 Game.prototype.carryTier = function () {
   if (!this.tierTimer && !(this.trialLeft > 0)) return;
+  /* THIS PAGE LIVES ON until the answer to the reload arrives, and that can
+     take longer than the wait of a tier that was clicked to. So the timer
+     of that tier is stopped here. Left running, it builds the tier on the
+     page that is being left, writes the plain key over the mark and saves,
+     and the load that follows finds a tier that "did not start". Nor may a
+     frame this page still draws end the trial and take the mark away. */
+  if (this.tierTimer) { clearTimeout(this.tierTimer); this.tierTimer = null; }
+  this.trialLeft = 0;
   var name = this.settings.quality;
   tierTrialWrite(TIERS[name].heavy ? name + ' untried' : null);
 };

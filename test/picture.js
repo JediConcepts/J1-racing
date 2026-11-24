@@ -712,8 +712,30 @@ function tamper(o) {
 
     /* The game's own reload is not a failure. Ultra is clicked to and a
        circuit picked before the clicks have settled: the page reloads with
-       Ultra saved and never yet built, and must come up in it, on trial. */
+       Ultra saved and never yet built, and must come up in it, on trial.
+
+       THE ANSWER TO THE RELOAD IS HELD BACK 600 ms, because the page being
+       left lives until it arrives, and the tier that was clicked to is
+       built 400 ms after the click. On a quiet machine the answer comes
+       first and the old page never gets that far; on a busy one it did,
+       built Ultra there, left the plain key, and the new page called it a
+       failure (this check failed two runs in eight for that reason, and
+       passed the rest by luck). Held back, the old page always outlives the
+       wait, so the tier's timer has to have been stopped. Every tier the
+       old page builds is reported here as well: it must build none. */
     await bootWithSettings({ quality: 'modern', trackId: 'silverstone-v1' });
+    const builtBehind = [];
+    let heldBack = 0;
+    await page.exposeFunction('__builtBehind', (tier) => { builtBehind.push(tier); });
+    await page.evaluate(() => {
+      const g = window.MCL64, real = g.applyQuality;
+      g.applyQuality = function () { window.__builtBehind(this.settings.quality); return real.apply(this, arguments); };
+    });
+    await page.route((u) => u.href.split('?')[0] === server.url, async (route) => {
+      heldBack++;
+      await new Promise((r) => setTimeout(r, 600));
+      await route.continue();
+    });
     await clickGraphics();
     await Promise.all([
       page.waitForEvent('load', { timeout: LOAD_MS }),
@@ -723,9 +745,10 @@ function tamper(o) {
     const carried = await tierState();
     await page.waitForFunction((key) => localStorage.getItem(key) === null, TRIAL_KEY, { timeout: LOAD_MS });
     check(carried.quality === 'ultra' && carried.on === 'ultra' && carried.shadows === 'cascades' && !carried.notice &&
-      uncaught.length === 0,
-      'Ultra clicked to and a circuit picked at once: the reload comes up in Ultra, with no word of a failure',
-      JSON.stringify(carried) + ', uncaught ' + JSON.stringify(uncaught));
+      carried.stored === 'ultra' && heldBack === 1 && builtBehind.length === 0 && uncaught.length === 0,
+      'Ultra clicked to and a circuit picked at once, with the reload slow to answer: the page being left builds nothing, and the reload comes up in Ultra with no word of a failure',
+      JSON.stringify(carried) + ', answers held back ' + heldBack + ', built on the page being left ' + JSON.stringify(builtBehind) +
+      ', uncaught ' + JSON.stringify(uncaught));
 
     /* THE CASCADES HOLD STILL ROUND A STEP. They are laid out for the field
        of view rounded up to 8 degrees, and the chase camera's stands at the
