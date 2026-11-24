@@ -75,9 +75,31 @@ var TIME_OF_DAY_NAMES = ['morning', 'midday', 'golden', 'dusk'];
    glowed. So the threshold stands just above sunlit white paint. If the
    lights are made brighter, this figure has to follow them.
 
+   MEASURED AGAIN UNDER THE PHYSICAL SKY, which sets its own lights for each
+   hour (TIME_OF_DAY in 32-sky.js). The same read of the render target, from
+   the chase, driver's eye and high cameras: white paint in the sun is 2.0 to
+   2.5 in the morning and at golden hour, 2.5 to 3.0 at midday, and under 2.5
+   at dusk. So 3.0 still stands just above it at all four hours and does not
+   have to follow the clock. One thing in the sky does pass it: at dusk the
+   few degrees of sky round the sun reach 4 to 7 in the red channel. That is
+   the sun's own aureole, and it is left to glow.
+
    `cap` is the most any one pixel may give the bloom, in the same units,
-   counted from the threshold up (see bloomHighPass). */
-var BLOOM = { strength: 0.35, radius: 0.6, threshold: 3.0, cap: 4.0 };
+   counted from the threshold up (see bloomHighPass). It was 4.0 while the
+   bloom stood alone. With a low sun the bar that carries a mirror takes a
+   long white highlight seen from the driver's eye, and at 4.0 its glow drew
+   the eye from the road; 2.5 leaves the highlight and takes back the haze
+   round it.
+
+   `sun` and `sunGive` are for the one true source of light in the frame.
+   The sky draws the sun's disc far brighter than anything else (SUN_DISC in
+   32-sky.js, 2000, where the strongest glint measured is under 100), and a
+   pixel over `sun` is taken to be that disc. It gives the bloom `sunGive`
+   on top of the cap, because the disc is a dozen pixels across and under
+   the cap its glow could not be seen: with it the disc has a white core and
+   a glow in its own colour, wide enough to spill over a tree in front. A
+   mirror that ever throws back more than `sun` would flare the same way. */
+var BLOOM = { strength: 0.35, radius: 0.6, threshold: 3.0, cap: 2.5, sun: 500.0, sunGive: 400.0 };
 
 /* How much brighter than its plain colour a lit start light is drawn while
    the full post pass is on. A lamp is a source of light and the brightest
@@ -100,11 +122,13 @@ var START_LIGHT_GLOW = 6.0;
    to 18, laid an orange haze over half the car. This one passes only what a
    pixel has ABOVE the threshold, in its own colour, and no more than
    BLOOM.cap of that: the glow grows from nothing as a surface brightens, and
-   a wide highlight cannot outshine the frame. */
+   a wide highlight cannot outshine the frame. The sun's disc alone is given
+   more (BLOOM.sun, BLOOM.sunGive). */
 function bloomHighPass(o) {
   var c = o.input.rgb;
   var v = c.r.max(c.g).max(c.b);
   var over = THREE.TSL.clamp(v.sub(o.threshold), 0.0, BLOOM.cap);
+  over = over.add(THREE.TSL.clamp(v.sub(BLOOM.sun), 0.0, 1.0).mul(BLOOM.sunGive));
   return THREE.TSL.vec4(c.mul(over.div(v.max(0.0001))), 1.0);
 }
 
@@ -119,12 +143,20 @@ function bloomHighPass(o) {
      saturation  1 leaves the colour alone.
 
    Midday is neutral: with it, the full pass differs from Modern's by the
-   bloom alone. */
+   bloom alone.
+
+   THE GRADE IS A FINISH, NOT THE HOUR. The physical sky changes the colour
+   and strength of the sun, the sky light and the fog for each hour, and that
+   is the main effect. These rows were first set with the dome's one white
+   light, where the grade had to do all of it; laid over the sky's own light
+   they tinted twice (golden hour went brown, dusk went dark and blue). So
+   each row was pulled most of the way back to neutral: golden's gain was
+   1.14, 0.98, 0.78 and dusk's 0.74, 0.78, 0.94. */
 var GRADES = {
-  morning: { gain: [0.97, 1.00, 1.05], lift: [0.000, 0.004, 0.012], saturation: 0.94 },
+  morning: { gain: [0.98, 1.00, 1.03], lift: [0.000, 0.003, 0.008], saturation: 0.96 },
   midday:  { gain: [1.00, 1.00, 1.00], lift: [0.000, 0.000, 0.000], saturation: 1.00 },
-  golden:  { gain: [1.14, 0.98, 0.78], lift: [0.012, 0.004, 0.000], saturation: 1.08 },
-  dusk:    { gain: [0.74, 0.78, 0.94], lift: [0.000, 0.006, 0.024], saturation: 0.88 }
+  golden:  { gain: [1.08, 1.00, 0.87], lift: [0.006, 0.002, 0.000], saturation: 1.05 },
+  dusk:    { gain: [0.94, 0.95, 1.02], lift: [0.000, 0.003, 0.012], saturation: 0.96 }
 };
 
 /* --- post-process: RGBA5551 quantise + ordered dither ------------------- */
@@ -465,6 +497,8 @@ Game.prototype.applySkyMode = function (mode) {
      environment once, for the right hour */
   this.skyRig.setTimeOfDay(this.settings.timeOfDay);
   this.skyRig.setMode(mode);
+  /* applyHaze has just written the dome's haze: see SkyRig.takeFog */
+  this.skyRig.takeFog();
   if (this.scenery && this.scenery.clouds) this.scenery.clouds.visible = mode !== 'physical';
   this.applyTimeOfDay();
 };

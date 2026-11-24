@@ -45,7 +45,7 @@ var TIME_OF_DAY = {
   morning: {
     elevation: 20, azimuth: 62,
     turbidity: 3.5, rayleigh: 1.3, mieCoefficient: 0.0005, mieDirectionalG: 0.82,
-    gain: 0.34, tint: [1.05, 0.99, 0.97], cloud: 0.34, haze: [220, 980],
+    gain: 0.34, tint: [1.05, 0.99, 0.97], cloud: 0.34, haze: [360, 980],
     sun: [1.00, 0.88, 0.72], sunK: 1.25,
     sky: [0.78, 0.88, 1.00], land: [0.40, 0.38, 0.28], skyK: 0.85,
     fill: [0.32, 0.36, 0.44], fillK: 0.30
@@ -80,13 +80,29 @@ var TIME_OF_DAY = {
    (-320, 420, 210) the dome's sun has always had. */
 var SUN_REACH = 568.2;
 
-/* The brightest the sky is allowed to be drawn, in linear light. The model's
-   sun disc comes out in the tens of thousands, which a half float target can
-   hold and a bloom pass would turn into a white screen. 24 is far past white
-   under the tone map. The disc itself is scaled so that its brightest channel
-   is this number (see setTimeOfDay), which leaves a low sun its colour where
-   a plain cap would have made every sun white. */
+/* The brightest the sky's horizon is taken to be when the fog is given its
+   colour, in linear light (see horizon). 24 is far past white under the tone
+   map. While the sky stood alone it was also the cap on the sky as drawn and
+   what the sun's disc was scaled to; both of those are SUN_DISC now. */
 var SKY_CAP = 24;
+
+/* What the sun's disc is drawn at: its brightest channel, in linear light,
+   and with it the cap on the sky as drawn. The model's disc comes out in the
+   tens of thousands, which a half float target can hold and a bloom pass
+   would turn into a white screen. So the disc is scaled to this number (see
+   setTimeOfDay), which leaves a low sun its colour where a plain cap would
+   have made every sun white.
+
+   It was 24 while the sky stood alone. On the screen the two look the same,
+   both being far past white, but the bloom has to be able to tell the disc
+   from a glint on paint, which it can only do by how bright a pixel is, and
+   a glint has been measured in the tens. So the disc stands well clear of
+   everything else in the frame, above BLOOM.sun (40-game.js), and the bloom
+   gives it the glow of a source of light. Nothing else in the sky comes
+   near either figure: worked out from skyLight, the sky beside the sun is
+   5.2 at its brightest (dusk, the red channel), so the cap of 24 only ever
+   held the disc. */
+var SUN_DISC = 2000;
 
 /* How much brighter than the rest of the horizon the fog may go when the
    camera looks towards the sun. See SkyRig.fogToward. */
@@ -289,7 +305,7 @@ SkyRig.prototype.setNorth = function (x, z) {
 SkyRig.prototype.makeSky = function () {
   var T = THREE.TSL;
   var sky = new THREE.SkyMesh();
-  sky.material.colorNode = T.vec4(T.clamp(sky.material.colorNode.rgb.mul(this.gain), 0.0, SKY_CAP), 1.0);
+  sky.material.colorNode = T.vec4(T.clamp(sky.material.colorNode.rgb.mul(this.gain), 0.0, SUN_DISC), 1.0);
   sky.cloudSpeed.value = 0;
   sky.frustumCulled = false;
   sky.renderOrder = -1;
@@ -416,11 +432,11 @@ SkyRig.prototype.setTimeOfDay = function (name) {
   }
   this.gain.value.set(row.gain * row.tint[0], row.gain * row.tint[1], row.gain * row.tint[2]);
 
-  /* The disc, scaled so that its brightest channel is SKY_CAP once the gain
+  /* The disc, scaled so that its brightest channel is SUN_DISC once the gain
      is on it. SkyMesh's showSunDisc is a plain multiplier on the disc. */
   var disc = [0, 0, 0];
   skyLight(sx, sy, sz, sx, sy, sz, row, disc);
-  this.sky.showSunDisc.value = SKY_CAP / Math.max(
+  this.sky.showSunDisc.value = SUN_DISC / Math.max(
     disc[0] * row.gain * row.tint[0], disc[1] * row.gain * row.tint[1], disc[2] * row.gain * row.tint[2]);
 
   /* The land in the environment: what the ground sends back up under this
@@ -494,6 +510,20 @@ SkyRig.prototype.fogToward = function (x, z) {
     r += c[0] * f / 5; g += c[1] * f / 5; b += c[2] * f / 5;
   }
   this.scene.fog.color.setRGB(r, g, b);
+};
+
+/* Puts the fog back in the rig's hands. Game.applyHaze writes the dome's
+   haze colour and the clear colour on every change of tier, before it knows
+   which sky the tier has, and setMode and setTimeOfDay do nothing when asked
+   for what they already hold. So whoever applies a tier calls this after
+   both: under the physical sky it writes the hour's fog again, and under the
+   dome it leaves what applyHaze wrote. */
+SkyRig.prototype.takeFog = function () {
+  if (this.mode !== 'physical' || !this.row) return;
+  this.scene.fog.near = this.row.haze[0];
+  this.scene.fog.far = this.row.haze[1];
+  this.fogToward(Math.sin(this.north), -Math.cos(this.north));
+  this.renderer.setClearColor(this.scene.fog.color, 1);
 };
 
 SkyRig.prototype.dispose = function () {
