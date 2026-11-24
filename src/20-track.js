@@ -1545,9 +1545,28 @@ function buildMonacoTunnelAndUrbanScenery(track, scene) {
   var buildingTex1 = texFromCanvas(makeBuildingTex('#dbd3c5', '#1a1f24'), 1, 1, true);
   var buildingTex2 = texFromCanvas(makeBuildingTex('#c9bba8', '#2a2f34'), 1, 1, true);
   var buildingTex3 = texFromCanvas(makeBuildingTex('#b0a18f', '#1a1f24'), 1, 1, true);
-  var buildingMat1 = new THREE.MeshStandardMaterial({ map: buildingTex1, roughness: 0.8 });
-  var buildingMat2 = new THREE.MeshStandardMaterial({ map: buildingTex2, roughness: 0.8 });
-  var buildingMat3 = new THREE.MeshStandardMaterial({ map: buildingTex3, roughness: 0.8 });
+  /* envMapIntensity 0.8 on the three building materials is a compensation
+     for the engine move and nothing else, and like the crowd's it does not
+     touch the cause. A building's texture is light walls and dark windows in
+     fine stripes. r128 smoothed the stored, encoded values of a texture and
+     turned the result into light; three.js 0.187 turns each texel into light
+     first and smooths that, which is brighter wherever the stripes run
+     together. So a tower seen from far off, or a face seen along its length,
+     is lighter than on the live game: the shaded face of the tower nearest
+     the high camera read 102,105,106 on r128 and 130,131,129 here, while the
+     face turned to the camera, with its stripes apart, is within 6 levels
+     (Modern, haze off on both).
+
+     Taking some of the sky's light off the buildings pulls the far ones back
+     toward the live picture and costs a little where they are close. At 0.8
+     six of the eight Monaco stills move toward the live picture, by up to 0.6
+     of a level, and the apex and grid views in Modern move away by 0.11 at
+     most. At 0.7 the apex view was out by more than the 0.2 allowed. The
+     numbers are in docs/v2-picture-log.md. Game's ownEnvironment is what
+     makes the number apply. */
+  var buildingMat1 = new THREE.MeshStandardMaterial({ map: buildingTex1, roughness: 0.8, envMapIntensity: 0.8 });
+  var buildingMat2 = new THREE.MeshStandardMaterial({ map: buildingTex2, roughness: 0.8, envMapIntensity: 0.8 });
+  var buildingMat3 = new THREE.MeshStandardMaterial({ map: buildingTex3, roughness: 0.8, envMapIntensity: 0.8 });
   var mats = [buildingMat1, buildingMat2, buildingMat3];
 
   var step = 6;
