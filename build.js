@@ -198,7 +198,8 @@ const SITE = {
   publisher: 'Jedi Concepts',
   description:
     'A Formula 1 racer built the way a 1997 console would have built it: 240p, a ' +
-    'five-bit dither, three laps of a stylised Silverstone against a full grid. ' +
+    'five-bit dither, three laps of a stylised Monaco against a full grid, and three ' +
+    'more circuits. ' +
     'Plays in a browser, on desktop or phone, with a global leaderboard.'
 };
 
