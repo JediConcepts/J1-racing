@@ -36,9 +36,23 @@ var STATE = { TITLE: 0, COUNTDOWN: 1, RACING: 2, FINISHED: 3 };
                   too slowly in a race (see watchPace), and is not offered
                   on a touch device (see tierCycle).
 
-   Ultra is Modern in every field but `canvas` for now: it is the place the
-   wide shadows, the real sky and the full post pass are switched on, one
-   field at a time. */
+   Retro and Modern are what main has always drawn, in every field, the two
+   layers over the page included: main lays them over both.
+
+   Ultra keeps Modern's target, tone mapping and exposure, and differs in
+   the rest:
+     shadows   'cascades'  four maps laid along the view, so everything the
+                           camera sees out to 700 m has a shadow
+                           (33-shadows.js)
+     sky       'physical'  the engine's clear sky at settings.timeOfDay,
+                           which sets the three lights and the haze for the
+                           hour (32-sky.js)
+     post      'full'      Modern's tone map with bloom in front of it and a
+                           grade for the time of day behind it
+     overlays  false       the picture is its own post pass, with no
+                           scanlines and no glow over it
+     canvas    'target'    no larger than the render target
+     heavy     true */
 var TIERS = {
   retro: {
     target: 'small', toneMapping: 'none', exposure: 1.0,
@@ -48,7 +62,7 @@ var TIERS = {
   modern: {
     target: 'super', toneMapping: 'aces', exposure: 1.12,
     shadows: 'single', sky: 'dome', post: 'grade',
-    overlays: false, canvas: 'device', heavy: false
+    overlays: true, canvas: 'device', heavy: false
   },
   ultra: {
     target: 'super', toneMapping: 'aces', exposure: 1.12,

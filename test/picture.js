@@ -390,6 +390,25 @@ function tamper(o) {
       'switched to Modern the sun is the dome\'s, and switched back to Ultra it is golden hour again',
       'Modern ' + JSON.stringify(left) + ', Ultra ' + JSON.stringify(again) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
 
+    /* The page's own two layers over the game, the scanlines and the glow.
+       main lays them over Retro and Modern alike, so both must have them,
+       at the opacity the page's stylesheet gives; Ultra has neither. No
+       still shows this: the stills tool hides both layers. */
+    const layers = () => page.evaluate(() => {
+      const of = (sel) => { const c = getComputedStyle(document.querySelector('#screen ' + sel)); return c.display + ' ' + c.opacity; };
+      return window.MCL64.settings.quality + ': scanlines ' + of('.scanlines') + ', glow ' + of('.glow');
+    });
+    await bootWithSettings({ quality: 'modern' });
+    const layersSeen = [await layers()];
+    for (const q of ['retro', 'ultra', 'modern']) {
+      await page.evaluate((name) => window.MCL64.hookSelect(null, name), q);
+      layersSeen.push(await layers());
+    }
+    check(layersSeen.join('; ') === 'modern: scanlines block 0.34, glow block 1; retro: scanlines block 0.34, glow block 1; ' +
+      'ultra: scanlines none 0.34, glow none 1; modern: scanlines block 0.34, glow block 1',
+      'Modern and Retro have the scanline and glow layers main lays over them, and Ultra has neither',
+      layersSeen.join('; '));
+
     /* THE GRAPHICS BUTTON. It steps through the tiers one way, so Modern to
        Retro passes Ultra. The button says the new tier at once and the tier
        is built only when the clicks have stopped, so two quick clicks must
