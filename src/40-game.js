@@ -3696,6 +3696,11 @@ Game.prototype.photo = function (opts) {
     this.updateCamera(0, true);
     if (cam !== 'chase' && cam !== 'helmet') this.placePhotoCamera(cam);
     this.camMode = keepMode;
+    /* The wide shadows hold a layout a little past the field of view it was
+       made for (SHADOW_FOV_HOLD in 33-shadows.js). A still lays them out
+       afresh, so that it shows the same shadows whatever camera the page
+       had before it. */
+    this.shadowRig.update(true);
 
     if (this.scenery && this.scenery.clouds) this.scenery.clouds.rotation.y = ticks * STEP * 0.004;
 

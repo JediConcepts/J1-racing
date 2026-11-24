@@ -63,6 +63,19 @@ var SHADOW_WIDE = {
    holds until the field of view crosses a step. */
 var SHADOW_FOV_STEP = 8;
 
+/* ...and holds a little longer on the way down. The chase camera's field of
+   view is 52 degrees plus 10 for speed, so it stands at the 56 degree step
+   at 132 km/h, a speed a car passes into and out of most corners and can
+   sit on through a long one; the driver's eye camera does the same at 72
+   degrees and 110 km/h. With one threshold for both directions a field of
+   view hovering there laid all four cascades out again and again, and each
+   time every shadow edge moved to a new grid of texels. So a layout is
+   taken up the moment the field of view passes its step, as it must be to
+   cover the view, and is only given up for the narrower one when the field
+   of view is this many degrees under the step: about 50 km/h of speed in
+   the chase camera, so 82 km/h on the way down against 132 on the way up. */
+var SHADOW_FOV_HOLD = 1.5;
+
 function ShadowRig(scene, camera, sun) {
   this.scene = scene;
   this.camera = camera;
@@ -166,7 +179,7 @@ ShadowRig.prototype.buildCascades = function () {
   csm.setup = function (builder) {
     var first = this.camera === null;
     var node = setup.call(this, builder);
-    if (first) rig.layOutCascades(true);
+    if (first) rig.layOutCascades(true);   /* afresh: see syncView */
     return node;
   };
 
@@ -197,12 +210,18 @@ ShadowRig.prototype.dropCascades = function () {
 };
 
 /* Copies the game camera into the stand in. True when the stand in's
-   projection changed, which is when the cascades have to be laid out again. */
-ShadowRig.prototype.syncView = function () {
+   projection changed, which is when the cascades have to be laid out again.
+
+   `afresh` rounds the field of view with no memory of the layout before
+   (see SHADOW_FOV_HOLD). The first layout of a set of cascades is made
+   that way, and so is a still's: what a still shows must depend on where
+   its camera is and not on where the camera was before it. */
+ShadowRig.prototype.syncView = function (afresh) {
   var cam = this.camera, view = this.view;
   cam.updateMatrixWorld();
   view.matrixWorld.copy(cam.matrixWorld);
   var fov = Math.min(170, Math.ceil(cam.fov / SHADOW_FOV_STEP) * SHADOW_FOV_STEP);
+  if (!afresh && fov < view.fov && cam.fov > view.fov - SHADOW_FOV_STEP - SHADOW_FOV_HOLD) fov = view.fov;
   if (fov === view.fov && cam.aspect === view.aspect && cam.far === view.far) return false;
   view.fov = fov;
   view.aspect = cam.aspect;
@@ -215,12 +234,13 @@ ShadowRig.prototype.syncView = function () {
 };
 
 /* Lays the cascades out from the stand in for the camera, when its
-   projection has changed (or `force`), and sets each cascade's own reach and
-   bias. Does nothing until the node has made its cascades. */
+   projection has changed (or `force`, which also lays them out afresh: see
+   syncView), and sets each cascade's own reach and bias. Does nothing until
+   the node has made its cascades. */
 ShadowRig.prototype.layOutCascades = function (force) {
   var csm = this.csm;
   if (!csm || csm.camera === null) return;
-  var moved = this.syncView();
+  var moved = this.syncView(force);
   if (csm.camera !== this.view) { csm.camera = this.view; moved = true; }
   if (moved || force) csm.updateFrustums();
 
@@ -262,8 +282,9 @@ ShadowRig.prototype.layOutCascades = function (force) {
   }
 };
 
-/* Once a frame, and again by whoever has just moved the sun. */
-ShadowRig.prototype.update = function () {
+/* Once a frame, and again by whoever has just moved the sun. `afresh` is
+   for a still (see syncView). */
+ShadowRig.prototype.update = function (afresh) {
   if (this.mode !== 'single' && this.mode !== 'cascades') return;
   var sun = this.sun;
   /* THE SUN'S DIRECTION IS READ FRESH, from the light itself, whenever the
@@ -285,7 +306,7 @@ ShadowRig.prototype.update = function () {
   this.sunAt.copy(sun.position);
   this.targetAt.copy(sun.target.position);
 
-  if (this.mode === 'cascades') this.layOutCascades(false);
+  if (this.mode === 'cascades') this.layOutCascades(!!afresh);
 };
 
 ShadowRig.prototype.dispose = function () {

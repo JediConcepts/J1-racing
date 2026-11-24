@@ -504,6 +504,38 @@ function tamper(o) {
       'Ultra clicked to and a circuit picked at once: the reload comes up in Ultra, with no word of a failure',
       JSON.stringify(carried) + ', uncaught ' + JSON.stringify(uncaught));
 
+    /* THE CASCADES HOLD STILL ROUND A STEP. They are laid out for the field
+       of view rounded up to 8 degrees, and the chase camera's stands at the
+       56 degree step at an ordinary corner speed. Hovering there must lay
+       them out once, on the way up, and not at every crossing; well under
+       the step they come back down; and a still lays them out afresh,
+       whatever was held. The engine's updateFrustums is counted: it is what
+       a new layout calls. */
+    await bootWithSettings({ quality: 'ultra' });
+    const hover = await page.evaluate(() => {
+      const g = window.MCL64, rig = g.shadowRig, cam = g.camera;
+      g.photoHold = true;
+      g.drawFrame(1);
+      const csm = rig.csm, real = csm.updateFrustums;
+      let laid = 0;
+      csm.updateFrustums = function () { laid++; return real.apply(this, arguments); };
+      const at = (fov, afresh) => { cam.fov = fov; cam.updateProjectionMatrix(); rig.update(afresh); return rig.view.fov; };
+      const r = { start: at(50, true) };
+      laid = 0;
+      for (let i = 0; i < 20; i++) { at(56.2); at(55.8); }
+      r.hoverLaid = laid; r.hoverAt = rig.view.fov;
+      r.justInside = at(54.6); r.under = at(54.4); r.laid = laid;
+      at(57);
+      r.heldAgain = at(55.8); r.still = at(55.8, true);
+      csm.updateFrustums = real;
+      g.photoHold = false;
+      return r;
+    });
+    check(hover.start === 56 && hover.hoverLaid === 1 && hover.hoverAt === 64 && hover.justInside === 64 && hover.under === 56 &&
+      hover.laid === 2 && hover.heldAgain === 64 && hover.still === 56 && consoleErrors.length === 0 && uncaught.length === 0,
+      'a field of view hovering at a step lays the cascades out once, and a still lays them out afresh',
+      JSON.stringify(hover) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+
     /* THE GUARD ON A SLOW DEVICE. In a race in Ultra the frame loop hands
        every frame gap to watchPace, and a mean over 25 ms for 3 seconds of
        racing gives Ultra up for Modern. The loop is held here and the gaps
