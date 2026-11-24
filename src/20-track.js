@@ -996,7 +996,25 @@ function buildScenery(track, scene) {
   /* grandstands and pit buildings clustered around the start line */
   var crowdTex = texFromCanvas(makeCrowdTex(), 3, 1);
   var standMat = new THREE.MeshStandardMaterial({ color: srgb(0x33353f), roughness: 0.82, metalness: 0.1 });
-  var crowdMat = new THREE.MeshStandardMaterial({ map: crowdTex, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0 });
+  /* envMapIntensity 0.6 is a compensation for the engine move and nothing
+     else. The crowd is a dark texture with bright specks. r128 smoothed a
+     texture's stored, encoded values and turned the result into light
+     afterwards; three.js 0.187 turns each texel into light first and smooths
+     that, and the average of the light is brighter than the light of the
+     average. So wherever the crowd is seen small enough for its specks to
+     run together, it comes out paler than on the live game: the far end of
+     the Indianapolis stands read 148,139,133 on r128 and 190,174,157 here
+     (Modern, the high camera, haze off on both).
+
+     Taking some of the sky's light off the crowd pulls that back toward the
+     live picture. It does not touch the cause, and it costs a little where
+     the crowd is seen close with its specks apart, which was right already:
+     at 0.6 the view from the Silverstone stands moves 0.17 of a level away
+     from the live picture, while the four Indianapolis views move 0.3 to 0.9
+     toward it. At 0.4 the close view was out by more than the 0.2 allowed.
+     The numbers are in docs/v2-picture-log.md. Game's ownEnvironment is what
+     makes the number apply. */
+  var crowdMat = new THREE.MeshStandardMaterial({ map: crowdTex, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0, envMapIntensity: 0.6 });
   var roofMat = new THREE.MeshStandardMaterial({ color: COL.papaya, roughness: 0.45, metalness: 0.2 });
   var pitMat = new THREE.MeshStandardMaterial({ map: texFromCanvas(makePitwallTex(), 4, 1, true),  });
 
