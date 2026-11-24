@@ -681,10 +681,10 @@ Read this first. The main finding of the round is not one of the rulings. Most o
 
 - Both engines were photographed the same way. r128 was built from commit `1308d33` in a copy under the scratchpad (`git archive`, so no `.git` and no stamp: the page reads `v0.0 dev nogit`). Its 28 stills against `stills/before-main`: 0.000 on every channel of every still. So that copy is the live picture, and it can be edited for a test.
 - 0.187 was built the same way from `e3f2dba` and then from each commit of this round. The stills of the `e3f2dba` copy are `stills/move-A7` again, 0.000 on all 28.
-- Every trial was an edit to a copy in the scratchpad, never to the working tree. Each line below says what the edit was.
+- Every trial was an edit to a copy in the scratchpad, never to the working tree. Each line below says what the edit was. (ADDED in fix round 2: this named no path. The copies, their stills and the output of every compare are kept; see "Where each round's evidence lives" under fix round 2.)
 - Fog off means `new THREE.Fog(SKY_HAZE, 1e7, 2e7)` in `buildWorld` on both engines: the fog object stays and nothing is ever inside it.
 - The stills are headless, so they show the fallback (WebGL 2). The real WebGPU backend was checked once at the end.
-- The console. Every capture ran with a script loaded in front of the stills tool (`node -r`, kept in the scratchpad, not in the repo) that prints every console error, every console warning and every page error of the page. 28 captures of the 28 stills were taken in this round, 22 of them of 0.187. Errors: none on any capture. Warnings on 0.187: three kinds and no other, `No available adapters.`, `THREE.WebGPURenderer: WebGPU is not available, running under WebGL2 backend.` and the driver's `GPU stall due to ReadPixels` (the screenshot). As the note above says, this cannot be checked from the repo until stage B puts it in the tool.
+- The console. Every capture ran with a script loaded in front of the stills tool (`node -r`, kept in the scratchpad, not in the repo) that prints every console error, every console warning and every page error of the page. 28 captures of the 28 stills were taken in this round, 22 of them of 0.187. Errors: none on any capture. Warnings on 0.187: three kinds and no other, `No available adapters.`, `THREE.WebGPURenderer: WebGPU is not available, running under WebGL2 backend.` and the driver's `GPU stall due to ReadPixels` (the screenshot). As the note above says, this cannot be checked from the repo until stage B puts it in the tool. (CORRECTED in fix round 2: "three kinds and no other" is wrong. Seven of this round's trial logs carry one or both of two more; see "The console" under fix round 2.)
 
 ### The true causes
 
@@ -786,7 +786,7 @@ Named surfaces, fog off on both engines, read off the stills as the mean colour 
 
 What the table says:
 
-- The crowd and the buildings differ by up to 42 levels as shipped and by 5 or less once r128 smooths as 0.187 does, and by 4 or less with nothing smoothed. Their difference is texture smoothing, all of it.
+- The crowd and the buildings differ by up to 42 levels as shipped and by 5 or less once r128 smooths as 0.187 does, and by 5 or less with nothing smoothed. Their difference is texture smoothing, all of it. (CORRECTED in fix round 2: this read "by 4 or less with nothing smoothed". The near tower's shaded face is 5 apart in red, 92,95,98 against 87,91,94; every crowd row is within 4.)
 - It grows with distance and with the angle, because that is when the pattern runs together: the near crowd at Indianapolis (`high`, Modern) is out by 11 and the far crowd by 42; the near tower's face turned to the camera by 5 and its shaded face, seen at a slant, by 28.
 - The grass does not respond to either smoothing test (Silverstone, chase, Modern: +15,+6,+27 as shipped, +15,+6,+26 with r128 smoothing in linear light). Its cause is another one.
 - The road, the quay and the far ground agree to within 4 levels in every case.
@@ -825,7 +825,7 @@ CORRECTIONS to stage A's record that follow from this (the original text is left
 | brands-hatch-v1.modern.high | 6.753 | 4.6 (to 2.138) | 0.5 (to 1.649) | 1.6 | a band of red across the far ground and the far loop of the track, which fades to orange sooner; the trees cast their outline, not a slab |
 | indianapolis-v1.retro.chase | 6.383 | none (6.400 without it) | 4.5 (to 1.885) | 1.9 | the stands on both sides are paler, close to the camera (left stand 123,120,116 on r128, 153,144,131 on 0.187, fog off); the grass a little paler; the sky is the same |
 
-So fog was the larger part of one of the four, about half of two, and no part of the fourth. The review's own estimate from the 350 m trial (about 2.0 of 7.1 at Monaco and 2.6 of 7.1 at Indianapolis) agrees with the 2.4 and 2.7 measured here with fog off on both engines.
+So fog was the larger part of one of the four, about a third of two, and no part of the fourth. (CORRECTED in fix round 2: this read "about half of two". Fog is 2.4 of 7.108 and 2.7 of 7.100.) The review's own estimate from the 350 m trial (about 2.0 of 7.1 at Monaco and 2.6 of 7.1 at Indianapolis) agrees with the 2.4 and 2.7 measured here with fog off on both engines.
 
 ### Ruling 1: where the haze starts
 
@@ -917,7 +917,7 @@ Kept: **0.6** (`beda014`). 0.4 fails: the view from the Silverstone stands, in M
 | silverstone-v1.retro.high | 1.780, 1.212, 1.531 | 1.722, 1.152, 1.467 | -0.058, -0.060, -0.064 |
 | silverstone-v1.retro.stands | 2.766, 2.189, 2.772 | 2.740, 2.162, 2.833 | -0.026, -0.027, +0.061 |
 
-The price, and it is the point of this entry. The crowd's difference is texture smoothing, which the number does not touch. Taking light off the whole crowd pulls the far crowd toward the live picture and pushes the near crowd, which was close to right, away from it. On the stills that nets out well under the rule. On the surfaces it looks like this (with the haze, as shipped):
+The price, and it is the point of this entry. The crowd's difference is texture smoothing, which the number does not touch. Taking light off the whole crowd pulls the far crowd toward the live picture and takes the same light off the near crowd. (CORRECTED in fix round 2: this said the near crowd "was close to right" and was pushed away. The table below says otherwise: the close crowd was 12 levels too light in red before the number, and at 0.6 it is nearer in red and green and 5 short in blue.) On the stills that nets out well under the rule. On the surfaces it looks like this (with the haze, as shipped):
 
 | surface | live (r128) | before the number | at 0.6 |
 |---|---|---|---|
@@ -992,6 +992,8 @@ Ruled: not compensated. On r128 the shadow pass ignored a material's alpha test,
 
 ### For Jamie, with the pairs
 
+(SUPERSEDED by the list of the same name under fix round 2.)
+
 Things that differ from the live game after this round and are for Jamie to see and accept or not:
 
 1. **Trees cast their own outline** and not a slab (ruling 4). Not compensated, by ruling. Seen in every view with a tree near the camera, most plainly at Silverstone from the chase camera.
@@ -1042,7 +1044,7 @@ Things that differ from the live game after this round and are for Jamie to see 
 |---|---|---|
 | indianapolis-v1.retro.chase | 5.489 | the crowd in the stands, paler than live: texture smoothing (6.4 as shipped at the end of stage A, 2.3 with the smoothing made equal) |
 | indianapolis-v1.modern.chase | 5.036 | the same |
-| monaco-gp-v1.retro.high | 4.908 | the buildings lighter (texture smoothing), with a little fog on the far ground |
+| monaco-gp-v1.retro.high | 4.908 | the buildings lighter (texture smoothing), with a little fog on the far ground, and the sea a shade less red than live: its light part by 4 levels here and by 6 in Modern (ADDED in fix round 2: the sea, about a quarter of the frame, was left out of this row and the next) |
 | monaco-gp-v1.modern.high | 4.727 | the same |
 | indianapolis-v1.modern.high | 4.211 | the far crowd pale pink (texture smoothing), with a little fog on the far ground |
 
@@ -1058,3 +1060,391 @@ The real WebGPU backend, checked once after the last change, on the same build (
 Both within 1 level on the worst cell. Nothing on the console of either page, on either backend. Every browser the check opened was closed.
 
 Tests after the last change: `node test/sim-parity.test.js` 4 passed; `node test/physics.test.js` 37 passed; `node test/fpmath.test.js` 3 passed; `node test/track-bake.test.js` 8 passed; `node test/music.test.js` 31 passed; `node build.js` invariants OK (`dist/index.html` 1,592,966 bytes, `dist/artifact.html` 1,588,343); then `git checkout -- dist`. Not run, as told: `tools/bench.js`, `test/csp.js`. Stage B and stage C are not started.
+
+## Task 6, stage A, fix round 2: canvas textures smoothed as r128 smoothed them
+
+Fix round 1 was reviewed. It had found that most of what still differed from the live picture was where a canvas texture is smoothed, and it had brought the stills under the gate with three numbers that worked on something else. This round takes those numbers out and puts the smoothing right at its cause. Nothing in the simulation changed: `node test/sim-parity.test.js` printed 4 passed before every commit.
+
+Read this first.
+
+1. **The fix works on both backends, and for the right reason.** A canvas texture is stored and smoothed as r128 stored and smoothed it, and turned into light in the shader afterwards. The far crowd at Indianapolis was 34 levels lighter than live in red at the end of fix round 1 and is within 2 levels now (150,141,133 live, 148,140,134 here). With the fix alone the 28 stills read 0.6 to 3.3, none over 6; the last round had measured 0.6 to 3.1 as the most an exact fix could reach.
+2. **The sea's `envMapIntensity` of 1.15 came out, by the letter of its test, and that is the one decision of this round that makes a figure worse.** It still helped, and one channel of one still rose by 0.309, over the 0.2 allowed. Without it the worst still of the set goes from 3.255 to 4.556. Whether the test was meant for each channel or for each still's figure is the controller's to say: see "Ruling 3 again".
+3. **No number stands in for a cause any more.** The one compensation left from the port is where the haze starts, 250 m, which the new rule keeps.
+
+| build | range | over 6 | worst | average of the channel means: Retro, Modern, all 28 | average of the highest channels, all 28 |
+|---|---|---|---|---|---|
+| end of fix round 1, `8b0e0e3` (`stills/after-tuning`) | 0.901 to 5.489 | 0 | 5.489 indianapolis-v1.retro.chase | 2.702, 2.797, 2.749 | 3.204 |
+| `2456c4e`, the three numbers out (`stills/fix2-reverted`) | 0.885 to 6.272 | 1 | 6.272 indianapolis-v1.retro.chase | 2.967, 3.018, 2.993 | 3.446 |
+| `34942be`, textures smoothed as r128 did (`stills/fix2-filter`) | 0.603 to 3.255 | 0 | 3.255 monaco-gp-v1.modern.high | 1.638, 1.970, 1.804 | 2.130 |
+| `f2aab8d`, the sea's number out | 0.603 to 4.556 | 0 | 4.556 monaco-gp-v1.modern.high | 1.681, 2.012, 1.847 | 2.222 |
+| `1028956`, the small things (`stills/after-tuning-2`) | 0.603 to 4.556 | 0 | 4.556 monaco-gp-v1.modern.high | 1.681, 2.012, 1.847 | 2.222 |
+
+The last two rows are the same 28 files: `1028956` changes comments and one line that never ran.
+
+### Where each round's evidence lives
+
+Neither `stills/` nor `.superpowers/` is in git. Both are folders in the repo on the machine the work was done on, and they are what the figures in this log were measured from. Fix round 1 kept its stills in a session scratchpad, which a restart can clear, and this log said "a copy in the scratchpad" with no path. That is put right here.
+
+- Stage A: `stills/move-A1` to `stills/move-A7`, with `stills/move-A5a`, `move-A5b`, `move-A6r`, `move-A6try` and `move-fogtry` from its trials.
+- Fix round 1, the sets it kept: `stills/fog-150`, `stills/fog-250`, `stills/fog-300`, `stills/after-tuning`.
+- Fix round 1, everything it measured in the scratchpad, copied in this round to `stills/fix1-evidence/<name>`: `r128-fog` (r128 rebuilt, the live picture), `r128-nofog` and `new-nofog` (fog off on each engine), `r128-linfilter` and `r128-nofog-linfilter` (r128 made to smooth in linear light), `r128-nofog-nearest` and `new-nofog-nearest` (nothing smoothed), `r128-noenv` and `new-noenv` (no environment), the nine trial sets of ruling 3 (`crowd-0.7`, `crowd-0.6`, `crowd-0.4`, `grass-0.75`, `grass-0.5`, `grassonly-0.9`, `build-0.8`, `build-0.7`, `build-0.4`), the sets taken after each commit (`step-crowd`, `step-grass`, `step-build`, `step-tidy`), `cur-fog250` and `final-fog300`. Its scripts, its edited copies of the source and the output of every compare are in `.superpowers/sdd/2026-11-23-mcl64-v2-picture-part1/t6af1-evidence/`.
+- Fix round 2: `stills/fix2-reverted`, `stills/fix2-filter`, `stills/fix2-fog-150`, `stills/fix2-fog-250`, `stills/fix2-fog-300`, `stills/after-tuning-2`, and under `stills/fix2-evidence/`: `grass-0.9` and `grass-0.75` (the grass trials), `grass-0.9-sea-1.15` and `grass-0.75-sea-1.15` (the same two, taken before the sea's number came out), `final-nofog`, `final-nofog-noenv` and `r128-nofog-noenv` (the switches thrown on the final build and on r128), `gpu-final-webgpu` and `gpu-final-webgl` (the system Chrome on each backend), `shimmer-r128-tick-900` to `902` and `shimmer-final-tick-900` to `902`, and `node-holding-one-texture`. The scripts, the diff of every edited copy and the output of every compare are in `.superpowers/sdd/2026-11-23-mcl64-v2-picture-part1/t6af2-evidence/`.
+
+As before, every trial was an edit to a copy outside the working tree, the stills are headless and so show the fallback, and fog off means `new THREE.Fog(SKY_HAZE, 1e7, 2e7)`.
+
+### Steps 1 and 2: the starting point, and the three numbers out
+
+- `node tools/stills-compare.js stills/before-main stills/after-tuning`: 28 compared, 0.901 to 5.489, none over 6, exit 0. That is the end of fix round 1, reproduced.
+- `2456c4e` takes out the crowd's 0.6, the grass's 0.9 and the buildings' 0.8 in one commit. Checked: `git diff f04d83c 2456c4e -- src/20-track.js` shows one hunk, the note `483eff1` added to the sea's comment, so the file is what it was before the three numbers went in; and the source named `envMapIntensity` only for the car paint and the sea.
+- `stills/fix2-reverted` against `stills/before-main`: 0.885 to 6.272, one over 6 (`indianapolis-v1.retro.chase`, 6.272), exit 1. The brief expected about 1.0 to 6.2, which was the figure with two of the three numbers out. With the grass's out as well the picture is that of `f04d83c` again: `stills/fix2-reverted` against `stills/fog-250` reads 0.000 on every channel of all 28.
+
+### The fix (`34942be`)
+
+**What was wrong.** r128 stored a canvas texture as `RGBA8`, the painted values as they were. The GPU built the mip chain from those values and smoothed between texels and between mip levels on them, and the shader turned the smoothed sample into light. three.js 0.187, handed a texture flagged sRGB, stores it as `SRGB8_ALPHA8` on the fallback and `rgba8unorm-srgb` on WebGPU, and the GPU then turns every texel into light before it smooths. The mean of the light is brighter than the light of the mean, so the crowd and Monaco's buildings came out lighter wherever their pattern ran together.
+
+**What was done.** Two halves, both in `src/10-core.js`, and one call.
+
+- `texFromCanvas` no longer flags the texture sRGB. A texture with no colour space is stored as `RGBA8` on the fallback and `rgba8unorm` on WebGPU, the GPU builds its mip chain from the painted values and smooths on them, and that is what r128's GPU did. Filters, wrap, repeat and anisotropy are untouched. The texture carries a mark, `userData.decodeInShader`.
+- `decodeCanvasMaps(root)`, beside it, gives every material whose map carries the mark two nodes. `colorNode` is the material's colour times the smoothed sample put through the engine's own `sRGBTransferEOTF`. `opacityNode` is the material's opacity times the sample's alpha. `sRGBTransferEOTF` is r128's `sRGBToLinear` constant for constant (0.9478672986, 0.0521327014, 2.4, 0.0773993808, 0.04045, read in both sources), so the shader does to the sample what r128's shader did to it, in the same order: map, then vertex colours, then the alpha test, then the lighting.
+- `Game.buildWorld` calls it once, after the scene is built. The cars carry no canvas texture that needs it (the blob under a car is black, was never flagged, and is untouched).
+
+**Why this mechanism and not the other.** The ruling named two and asked for the more exact one first. An explicit mip chain on a texture left in an sRGB format would have put right what each mip level holds and nothing else: between two texels of one level, and between two levels, the GPU would still have smoothed light and not painted values. This one leaves nothing for the GPU to do differently from r128: the same stored bytes, the same mip chain, the same filtering, and the same curve afterwards. It was tried first, it works on both backends, so the other was not built and nothing is lost.
+
+**Three things it took.** The first two were found by something failing; the third was read in the engine's source.
+
+- The nodes read the map, the colour and the opacity through the mesh being drawn (`reference('material.map', 'texture')` and so on), not through the material being drawn. The first try used the engine's `materialReference`. In Modern the shadow pass draws every mesh with the renderer's own shadow material and asks the mesh's material for the alpha of its colour node; the reference then looked for a map on the shadow material, found none, and the shader did not build. That was reported on the console and nowhere else (`THREE.TSL: NodeError: THREE.TSL: texture( value ) function expects a valid instance of THREE.Texture()`), which is what the console watch is for.
+- One pair of nodes serves every material. A node that holds one texture (`texture(material.map)`, made for each material) was tried to see what it does: it draws with no error and with the wrong texture. Monaco's quay took the road's (`stills/fix2-evidence/node-holding-one-texture`, 13.1 against the fixed build on red). The renderer shares one compiled shader between classic materials whose properties look alike to it, and what it compares does not look inside a node.
+- The sample's alpha goes on the opacity node and the colour node's own alpha is 1. The shadow pass multiplies the map's alpha in by itself, so alpha left on the colour node would be counted twice there, and a tree, which is cut out by an alpha test, could cast a thinner outline than it shows.
+
+A mesh that carries a list of materials cannot be read through the mesh. The game has none, and one that turned up with a canvas texture is an error in `decodeCanvasMaps`, not a pale texture later.
+
+**The bundle.** `tools/three-entry.webgpu.js` gained two names under `THREE.TSL`: `reference` and `sRGBTransferEOTF`. `node tools/vendor-three.js webgpu <workdir>` with the scratchpad workdir gave 853,426 bytes, SHA-256 `7fdd3961332e227708eb4e1b90660f7202b80d9c8d0a0409048bb6ef8087dd43` (853,393 bytes before). It is committed as `vendor/three.bundle.js` with the code that needs it, and `vendor/three.webgpu.js` was deleted. With the rebuilt bundle `node test/sim-parity.test.js` prints 4 passed. `src/10-core.js` still loads with no `THREE` (`node test/music.test.js`, 31 passed) and with r128 (`node test/track-bake.test.js`, 8 passed): `decodeCanvasMaps` needs the engine only when it is called.
+
+**The environment canvas does not need the same,** and is left flagged sRGB. Worked out on the canvas the game paints (256 x 128, a smooth sky with a soft sun): averaging a box of texels before turning it into light, against after, differs by 0.080 of a level at worst for a 2 x 2 box and 0.299 for a 4 x 4 box. Those are the sizes the GPU smooths the canvas over when the engine reads it. Wider blurs are the engine's own, for rough surfaces, and r128 made those in light as well (its prefilter turns each sample into light as it reads it: `inputEncoding` in `tools/vendor/three-r128.min.js`).
+
+**The cost at load.** Time from the start of navigation to the first frame, in the system Chrome, headed, Modern, a fresh browser for every run so that nothing compiled is carried over, the two builds taken turn about, seven runs each. Before is the build of `2456c4e`, after is the build with the fix. "Drawn" is the end of the first frame callback that drew; "GPU done" is when the GPU reports that frame's work finished.
+
+| circuit | backend | before: drawn, median of 7 (lowest to highest) | after: drawn | before: GPU done, median | after: GPU done |
+|---|---|---|---|---|---|
+| Silverstone | WebGPU | 243 ms (211 to 261) | 224 ms (216 to 394) | 264 ms | 264 ms |
+| Silverstone | fallback | 294 ms (265 to 366) | 307 ms (258 to 337) | 295 ms | 314 ms |
+| Monaco | WebGPU | 297 ms (269 to 388) | 293 ms (249 to 390) | 357 ms | 349 ms |
+| Monaco | fallback | 361 ms (323 to 444) | 346 ms (327 to 645) | 363 ms | 348 ms |
+
+The medians move by 19 ms at most, in either direction, and the seven runs of one build spread over 50 to 320 ms, so no cost shows. The shader does one more conversion for each sample and the GPU one fewer.
+
+**Seams and shimmer.** The pairs for Indianapolis `high`, Monaco `high` and the Silverstone `stands` view were looked at side by side: no seam at a texture's edge, and the three building textures are each on their own buildings. Shimmer was measured, not judged by eye: three ticks in a row (900, 901, 902) from the chase camera at Indianapolis, which moves past both stands, on r128 and on the final build, and the mean change of a surface from one tick to the next. A texture that shimmers changes more between ticks.
+
+| view | surface | r128: tick 900 to 901, 901 to 902 | final build: the same |
+|---|---|---|---|
+| retro chase | crowd, right stand | 35.88, 35.96 | 34.87, 34.96 |
+| retro chase | crowd, left stand | 34.12, 33.89 | 32.91, 32.75 |
+| retro chase | road, ahead | 5.33, 4.81 | 5.20, 4.60 |
+| modern chase | crowd, right stand | 47.01, 47.09 | 45.22, 45.31 |
+| modern chase | crowd, left stand | 51.32, 51.65 | 49.14, 49.43 |
+| modern chase | road, ahead | 11.38, 10.75 | 10.63, 10.10 |
+
+The crowd changes 3% to 4% less from tick to tick than it does on r128, and the road 2% to 7% less. Nothing shimmers that did not.
+
+**Both backends, after this commit.** The system Chrome 158, headed, WebGPU (`backend.isWebGPUBackend`, `backend.device` a `GPUDevice`) against the same Chrome with `?renderer=webgl`, the canvas reduced to a 32 x 18 grid of cell means: Silverstone `chase`, Indianapolis `high` and `chase`, Monaco `high`, each in Retro and in Modern. Worst cell 0.24 (Monaco `high`, Retro), the other seven 0.05 to 0.18, nothing on the console of any of the sixteen pages. The table for the final build is further down; the figures are the same.
+
+**The picture.** Highest channel mean of each still against `stills/before-main`:
+
+| still | end of fix round 1 | the three numbers out | textures smoothed as r128 did | final |
+|---|---|---|---|---|
+| brands-hatch-v1.modern.chase | 3.056 | 3.306 | 2.940 | 2.940 |
+| brands-hatch-v1.modern.high | 2.855 | 3.135 | 2.712 | 2.712 |
+| brands-hatch-v1.retro.chase | 2.475 | 2.596 | 2.106 | 2.106 |
+| brands-hatch-v1.retro.high | 1.806 | 1.916 | 1.503 | 1.503 |
+| indianapolis-v1.modern.chase | 5.036 | 5.740 | 2.735 | 2.735 |
+| indianapolis-v1.modern.high | 4.211 | 4.609 | 2.394 | 2.394 |
+| indianapolis-v1.retro.chase | 5.489 | 6.272 | 2.262 | 2.262 |
+| indianapolis-v1.retro.high | 4.081 | 4.650 | 1.438 | 1.438 |
+| monaco-gp-v1.modern.apex | 3.841 | 3.811 | 1.882 | 1.882 |
+| monaco-gp-v1.modern.chase | 3.852 | 4.160 | 2.486 | 2.694 |
+| monaco-gp-v1.modern.grid | 2.918 | 2.889 | 1.971 | 2.019 |
+| monaco-gp-v1.modern.high | 4.727 | 5.138 | 3.255 | 4.556 |
+| monaco-gp-v1.retro.apex | 3.568 | 3.912 | 1.836 | 1.836 |
+| monaco-gp-v1.retro.chase | 3.762 | 4.203 | 2.213 | 2.378 |
+| monaco-gp-v1.retro.grid | 3.563 | 3.695 | 1.838 | 1.896 |
+| monaco-gp-v1.retro.high | 4.908 | 5.432 | 2.712 | 3.511 |
+| silverstone-v1.modern.apex | 2.254 | 2.327 | 1.875 | 1.875 |
+| silverstone-v1.modern.chase | 2.910 | 3.118 | 2.717 | 2.717 |
+| silverstone-v1.modern.grid | 2.922 | 3.160 | 2.192 | 2.192 |
+| silverstone-v1.modern.helmet | 2.385 | 2.391 | 2.033 | 2.033 |
+| silverstone-v1.modern.high | 2.407 | 2.659 | 2.248 | 2.248 |
+| silverstone-v1.modern.stands | 2.718 | 2.788 | 2.143 | 2.143 |
+| silverstone-v1.retro.apex | 2.079 | 2.119 | 1.513 | 1.513 |
+| silverstone-v1.retro.chase | 2.374 | 2.507 | 1.950 | 1.950 |
+| silverstone-v1.retro.grid | 2.750 | 2.994 | 1.767 | 1.767 |
+| silverstone-v1.retro.helmet | 2.399 | 2.403 | 1.920 | 1.920 |
+| silverstone-v1.retro.high | 1.668 | 1.780 | 1.373 | 1.373 |
+| silverstone-v1.retro.stands | 2.705 | 2.772 | 1.621 | 1.621 |
+| worst / average of the channel means / over 6 | 5.489 / 2.749 / 0 | 6.272 / 2.993 / 1 | 3.255 / 1.804 / 0 | 4.556 / 1.847 / 0 |
+
+So the fix takes the average from 2.993 to 1.804 and the worst from 6.272 to 3.255. The last round's measured ceiling (r128 made to smooth as 0.187 did, against the build with the haze from 250 m) was 0.593 to 3.085 with an average of 1.774. The fix reads 0.603 to 3.255 with an average of 1.804. The last column is after the sea's number came out, which moves six Monaco stills and no other.
+
+### Ruling 3 again: the sea and the grass
+
+Ruled: the grass's number comes out unless one value for the whole family, every circuit, passes the same test as before; the sea's 1.15 is tested again after the fix and is kept only if it still helps and harms nothing by more than 0.2.
+
+The test is the one fix round 1 applied, and it is applied to both in the same way. A family's stills are those the number moves by more than 0.05 on any channel. Over those stills the average of the channel means must fall, and so must the worst. No channel of any of the 28 stills may rise by more than 0.2.
+
+**The sea.** The sea at 1 (the number out) against the sea at 1.15, on the build with the fix. It moves six stills:
+
+| still | sea at 1: R, G, B | sea at 1.15: R, G, B | change |
+|---|---|---|---|
+| monaco-gp-v1.modern.chase | 2.694, 2.288, 2.322 | 2.486, 2.141, 2.198 | -0.208, -0.147, -0.124 |
+| monaco-gp-v1.modern.grid | 1.777, 2.019, 2.010 | 1.710, 1.971, 1.969 | -0.067, -0.048, -0.041 |
+| monaco-gp-v1.modern.high | 4.556, 2.341, 2.445 | 3.255, 2.189, 2.754 | -1.301, -0.152, +0.309 |
+| monaco-gp-v1.retro.chase | 2.362, 2.378, 2.367 | 2.178, 2.213, 2.197 | -0.184, -0.165, -0.170 |
+| monaco-gp-v1.retro.grid | 1.660, 1.885, 1.896 | 1.600, 1.832, 1.838 | -0.060, -0.053, -0.058 |
+| monaco-gp-v1.retro.high | 3.511, 2.067, 1.872 | 2.712, 1.739, 1.872 | -0.799, -0.328, +0.000 |
+
+It still helps: over the six, the average of the channel means falls from 2.358 to 2.159 and the worst from 4.556 to 3.255. One channel rises by more than 0.2: blue in Monaco's `high` view in Modern, by 0.309. On the surfaces (Modern, the `high` view): the light part of the sea reads 99,164,190 live, 84,157,185 at 1 and 93,163,190 at 1.15; its middle reads 1,131,175 live, 0,130,174 at 1 and 0,135,179 at 1.15. So the number brings the light part 9 levels nearer in red and pushes the dark middle 4 to 5 levels too far in green and blue, and the sea is 27% of that frame (by a colour mask on the live still).
+
+**Taken out** (`f2aab8d`): the line is as `main` has it. This is the letter of the test and it has a price. Read by each still's own figure, its highest channel, which is what the gate reads, 1.15 harms nothing: no still's figure rises, and the worst of the set is 1.3 lower with it. Read for each channel, as every number of fix round 1 was read and as the grass is read below, it fails on one channel of one still by 0.109. The stricter reading was used so that both halves of one ruling are held to one test. If the looser reading was meant, the change is one line (`envMapIntensity: 1.15` on `seaMat`), and the set is then `stills/fix2-filter`: 0.6 to 3.3.
+
+**The grass.** One value on the whole family: the `grass` mesh of `buildTrackMeshes` on every circuit, Monaco's city ground with it. Two values, both chosen before either was read. Measured on the build with the sea's number out:
+
+| value | stills moved | average of their channel means | their worst | largest rise of any channel on any of the 28 | stills with a channel up by more than 0.2 | all 28: worst | verdict |
+|---|---|---|---|---|---|---|---|
+| 1 (the build as it is) | | | 4.556 | none | 0 | 4.556 (monaco.modern.high) | |
+| 0.9 | 25 | 1.866 to 1.823 | 4.556 to 4.664 | +0.238 (monaco.modern.high B) | 2 (Monaco `high`, both tiers) | 4.664 | fails |
+| 0.75 | 26 | 1.845 to 1.822 | 4.556 to 4.892 | +0.754 (monaco.modern.high B) | 9 | 4.892 | fails |
+
+Both fail twice over: the family's worst rises, and Monaco's `high` views rise by more than 0.2. They had been measured first with the sea's number still in, and failed in the same way (0.9: worst 3.255 to 3.363, +0.237; 0.75: worst 3.255 to 3.591, +0.753). A third value was not spent. The family's worst still is Monaco's `high` view in Modern, which shows no grass, only the city ground the same mesh carries; its red rose by 0.108 at 0.9 and by 0.336 at 0.75, so any value under 1 raises it and none can meet "the worst must fall". The three circuits with grass do move toward the live picture (Silverstone `chase` in Modern, blue: 2.717 to 2.509 at 0.9), which is what the number with a condition on the circuit had used. That number stays out, as ruled (`2456c4e`).
+
+### Ruling 4: where the haze starts, by the new rule
+
+A RULED CHANGE OF RULE. Fix round 1 was told to keep the start with the lowest worst mean, and on a tie the nearer to 150. That rule picked on a still that fog does not govern, by 0.008, and the round kept 250 against its letter. The controller changed the rule for this round:
+
+> After the fix, capture the 28 at 150, 250 and 300 and keep the one with the lowest average of the 28 means; if two are within 0.02 of each other, keep the nearer to 150. One value for both tiers unless the tiers differ by more than 0.2 on their own averages.
+
+The three sets are `stills/fix2-fog-150`, `stills/fix2-fog-250` and `stills/fix2-fog-300`: the build of `f2aab8d` (the fix in, the sea's number out), with the one number changed for 150 and 300. Each against `stills/before-main`. A still's mean is taken as the mean of its three channel means; the average of the highest channels is given beside it so that the choice can be seen not to hang on that reading.
+
+| still | 150 m: R, G, B | 250 m: R, G, B | 300 m: R, G, B |
+|---|---|---|---|
+| brands-hatch-v1.modern.chase | 2.756, 1.691, 2.984 | 2.169, 1.618, 2.940 | 2.066, 1.640, 2.941 |
+| brands-hatch-v1.modern.high | 6.315, 1.082, 1.896 | 2.712, 0.603, 1.925 | 2.388, 0.898, 2.005 |
+| brands-hatch-v1.retro.chase | 1.839, 1.505, 2.213 | 1.586, 1.462, 2.106 | 1.694, 1.520, 2.090 |
+| brands-hatch-v1.retro.high | 2.720, 1.210, 1.670 | 1.503, 1.083, 1.098 | 2.349, 1.602, 1.042 |
+| indianapolis-v1.modern.chase | 2.530, 2.313, 2.736 | 2.309, 2.285, 2.735 | 2.347, 2.308, 2.738 |
+| indianapolis-v1.modern.high | 4.943, 1.294, 1.407 | 2.394, 0.736, 1.640 | 2.190, 0.939, 1.800 |
+| indianapolis-v1.retro.chase | 2.000, 1.981, 2.264 | 1.978, 1.991, 2.262 | 2.027, 2.019, 2.270 |
+| indianapolis-v1.retro.high | 2.176, 1.324, 1.358 | 1.438, 1.073, 1.087 | 2.122, 1.477, 1.066 |
+| monaco-gp-v1.modern.apex | 1.765, 1.784, 1.814 | 1.595, 1.882, 1.866 | 1.686, 1.908, 1.875 |
+| monaco-gp-v1.modern.chase | 3.245, 2.393, 2.202 | 2.694, 2.288, 2.322 | 2.585, 2.398, 2.391 |
+| monaco-gp-v1.modern.grid | 1.840, 2.025, 1.991 | 1.777, 2.019, 2.010 | 1.776, 2.027, 2.019 |
+| monaco-gp-v1.modern.high | 6.182, 2.381, 1.889 | 4.556, 2.341, 2.445 | 4.590, 2.588, 2.685 |
+| monaco-gp-v1.retro.apex | 1.724, 1.679, 1.722 | 1.836, 1.793, 1.789 | 1.888, 1.820, 1.802 |
+| monaco-gp-v1.retro.chase | 2.501, 2.366, 2.316 | 2.362, 2.378, 2.367 | 2.551, 2.512, 2.439 |
+| monaco-gp-v1.retro.grid | 1.671, 1.890, 1.891 | 1.660, 1.885, 1.896 | 1.672, 1.894, 1.903 |
+| monaco-gp-v1.retro.high | 3.525, 1.854, 1.781 | 3.511, 2.067, 1.872 | 4.179, 2.435, 1.948 |
+| silverstone-v1.modern.apex | 1.549, 1.623, 1.848 | 1.360, 1.599, 1.875 | 1.352, 1.616, 1.896 |
+| silverstone-v1.modern.chase | 2.215, 1.638, 2.680 | 2.030, 1.627, 2.717 | 2.033, 1.638, 2.736 |
+| silverstone-v1.modern.grid | 1.820, 1.790, 2.184 | 1.717, 1.773, 2.192 | 1.695, 1.780, 2.202 |
+| silverstone-v1.modern.helmet | 1.936, 2.023, 2.022 | 1.829, 2.020, 2.033 | 1.824, 2.027, 2.042 |
+| silverstone-v1.modern.high | 5.209, 0.853, 2.007 | 2.248, 0.610, 2.058 | 1.992, 0.816, 2.151 |
+| silverstone-v1.modern.stands | 1.904, 1.241, 2.062 | 1.634, 1.185, 2.143 | 1.636, 1.211, 2.175 |
+| silverstone-v1.retro.apex | 1.150, 1.372, 1.507 | 1.103, 1.375, 1.513 | 1.155, 1.405, 1.527 |
+| silverstone-v1.retro.chase | 1.517, 1.379, 1.954 | 1.481, 1.373, 1.950 | 1.527, 1.393, 1.955 |
+| silverstone-v1.retro.grid | 1.462, 1.573, 1.780 | 1.418, 1.564, 1.767 | 1.444, 1.583, 1.769 |
+| silverstone-v1.retro.helmet | 1.594, 1.801, 1.927 | 1.563, 1.802, 1.920 | 1.588, 1.816, 1.924 |
+| silverstone-v1.retro.high | 2.360, 0.979, 1.665 | 1.373, 0.919, 1.212 | 2.046, 1.310, 1.129 |
+| silverstone-v1.retro.stands | 1.466, 1.212, 1.627 | 1.399, 1.160, 1.621 | 1.496, 1.211, 1.619 |
+| **Retro, 14 stills** | average of the means 1.798; average of the highest channels 2.155; worst 3.525 (monaco.retro.high); over 6: 0 | average of the means 1.681; average of the highest channels 1.934; worst 3.511 (monaco.retro.high); over 6: 0 | average of the means 1.815; average of the highest channels 2.157; worst 4.179 (monaco.retro.high); over 6: 0 |
+| **Modern, 14 stills** | average of the means 2.335; average of the highest channels 3.304; worst 6.315 (brands-hatch.modern.high); over 6: 2 | average of the means 2.012; average of the highest channels 2.510; worst 4.556 (monaco.modern.high); over 6: 0 | average of the means 2.038; average of the highest channels 2.469; worst 4.590 (monaco.modern.high); over 6: 0 |
+| **all 28** | average of the means 2.066; average of the highest channels 2.729; worst 6.315 (brands-hatch.modern.high); over 6: 2 | average of the means 1.847; average of the highest channels 2.222; worst 4.556 (monaco.modern.high); over 6: 0 | average of the means 1.927; average of the highest channels 2.313; worst 4.590 (monaco.modern.high); over 6: 0 |
+
+By the rule: 2.066 at 150, 1.847 at 250, 1.927 at 300. **250 is kept**, by 0.080 over 300, which is not within 0.02. Each tier taken alone chooses 250 as well (Retro 1.798, 1.681, 1.815; Modern 2.335, 2.012, 2.038), so the question of a value for each tier does not arise. Read by the highest channels the answer is the same for the 28 and for Retro; Modern alone would gain 0.041 from 300, far under the 0.2 that would give a tier its own value. No number changed in the code. The comment beside it, which said the fog start "is what makes the picture match the live one again", now says what it does (`1028956`).
+
+### The small things (`1028956`)
+
+- The colour management guard at the top of `src/10-core.js`: its comment now says outright that the guard is silent in exactly two cases, no `THREE` at all and r128, why each is silent, and that r128 is known by `THREE.REVISION === '128'` and by nothing looser. The code is unchanged.
+- `ownEnvironment`'s check for a scene with no environment was dead: `buildEnvironment` always sets one since its try and catch went, and nothing in the source sets `scene.environment` again. It is removed, with a note in the comment.
+- The haze comment, as above.
+
+### Where it stands after fix round 2
+
+`stills/after-tuning-2`, taken from the repo's own build of `1028956` with a clean tree: `v0.130 dev 1028956`. It is the same 28 files as `stills/fix2-fog-250` (0.000 on every channel). Against `stills/before-main` (`node tools/stills-compare.js stills/before-main stills/after-tuning-2`, which exits 0):
+
+| still | R | G | B | pixels off by more than 24 | gate | highest channel at the end of fix round 1 | change |
+|---|---|---|---|---|---|---|---|
+| brands-hatch-v1.modern.chase | 2.169 | 1.618 | 2.940 | 5.984% | ok | 3.056 | -0.116 |
+| brands-hatch-v1.modern.high | 2.712 | 0.603 | 1.925 | 2.009% | ok | 2.855 | -0.143 |
+| brands-hatch-v1.retro.chase | 1.586 | 1.462 | 2.106 | 0.388% | ok | 2.475 | -0.369 |
+| brands-hatch-v1.retro.high | 1.503 | 1.083 | 1.098 | 0.055% | ok | 1.806 | -0.303 |
+| indianapolis-v1.modern.chase | 2.309 | 2.285 | 2.735 | 2.770% | ok | 5.036 | -2.301 |
+| indianapolis-v1.modern.high | 2.394 | 0.736 | 1.640 | 2.042% | ok | 4.211 | -1.817 |
+| indianapolis-v1.retro.chase | 1.978 | 1.991 | 2.262 | 0.459% | ok | 5.489 | -3.227 |
+| indianapolis-v1.retro.high | 1.438 | 1.073 | 1.087 | 0.341% | ok | 4.081 | -2.643 |
+| monaco-gp-v1.modern.apex | 1.595 | 1.882 | 1.866 | 0.544% | ok | 3.841 | -1.959 |
+| monaco-gp-v1.modern.chase | 2.694 | 2.288 | 2.322 | 4.011% | ok | 3.852 | -1.158 |
+| monaco-gp-v1.modern.grid | 1.777 | 2.019 | 2.010 | 2.070% | ok | 2.918 | -0.899 |
+| monaco-gp-v1.modern.high | 4.556 | 2.341 | 2.445 | 1.193% | ok | 4.727 | -0.171 |
+| monaco-gp-v1.retro.apex | 1.836 | 1.793 | 1.789 | 0.296% | ok | 3.568 | -1.732 |
+| monaco-gp-v1.retro.chase | 2.362 | 2.378 | 2.367 | 2.585% | ok | 3.762 | -1.384 |
+| monaco-gp-v1.retro.grid | 1.660 | 1.885 | 1.896 | 1.240% | ok | 3.563 | -1.667 |
+| monaco-gp-v1.retro.high | 3.511 | 2.067 | 1.872 | 0.177% | ok | 4.908 | -1.397 |
+| silverstone-v1.modern.apex | 1.360 | 1.599 | 1.875 | 1.865% | ok | 2.254 | -0.379 |
+| silverstone-v1.modern.chase | 2.030 | 1.627 | 2.717 | 4.302% | ok | 2.910 | -0.193 |
+| silverstone-v1.modern.grid | 1.717 | 1.773 | 2.192 | 2.315% | ok | 2.922 | -0.730 |
+| silverstone-v1.modern.helmet | 1.829 | 2.020 | 2.033 | 1.341% | ok | 2.385 | -0.352 |
+| silverstone-v1.modern.high | 2.248 | 0.610 | 2.058 | 2.142% | ok | 2.407 | -0.159 |
+| silverstone-v1.modern.stands | 1.634 | 1.185 | 2.143 | 0.299% | ok | 2.718 | -0.575 |
+| silverstone-v1.retro.apex | 1.103 | 1.375 | 1.513 | 0.125% | ok | 2.079 | -0.566 |
+| silverstone-v1.retro.chase | 1.481 | 1.373 | 1.950 | 0.255% | ok | 2.374 | -0.424 |
+| silverstone-v1.retro.grid | 1.418 | 1.564 | 1.767 | 0.293% | ok | 2.750 | -0.983 |
+| silverstone-v1.retro.helmet | 1.563 | 1.802 | 1.920 | 0.669% | ok | 2.399 | -0.479 |
+| silverstone-v1.retro.high | 1.373 | 0.919 | 1.212 | 0.048% | ok | 1.668 | -0.295 |
+| silverstone-v1.retro.stands | 1.399 | 1.160 | 1.621 | 0.059% | ok | 2.705 | -1.084 |
+
+**Stills over 6: none.** The range is 0.6 to 4.6; the average of the channel means is 1.681 in Retro, 2.012 in Modern and 1.847 over the 28 (2.749 at the end of fix round 1). Every still is lower than it was at the end of fix round 1. The one that gained least is Monaco's `high` view in Modern, 0.171 lower, with the sea's number out.
+
+**The five highest, and what each is made of.** Three switches were thrown on both engines for this: fog off, fog and environment off, and (0.187 only) the sea at 1.15. r128 with fog off is `stills/fix1-evidence/r128-nofog`; the rest is under `stills/fix2-evidence/`.
+
+| still | as shipped: R, G, B | fog off on both engines | fog and environment off on both engines | with the sea at 1.15 |
+|---|---|---|---|---|
+| monaco-gp-v1.modern.high | 4.556, 2.341, 2.445 | 3.640, 2.229, 1.915 | 1.992, 3.275, 3.446 | 3.255, 2.189, 2.754 |
+| monaco-gp-v1.retro.high | 3.511, 2.067, 1.872 | 2.791, 1.701, 1.776 | 1.615, 2.486, 2.102 | 2.712, 1.739, 1.872 |
+| brands-hatch-v1.modern.chase | 2.169, 1.618, 2.940 | 2.079, 1.710, 3.035 | 1.510, 1.773, 1.570 | no sea |
+| indianapolis-v1.modern.chase | 2.309, 2.285, 2.735 | 2.299, 2.282, 2.744 | 1.937, 2.102, 2.049 | no sea |
+| silverstone-v1.modern.chase | 2.030, 1.627, 2.717 | 2.010, 1.641, 2.688 | 1.727, 1.879, 1.754 | no sea |
+
+| still | figure | what it is, and what a person looking at the pair sees |
+|---|---|---|
+| monaco-gp-v1.modern.high | 4.556 (red) | Fog is 0.9 of it (3.640 with fog off on both engines). The sea is the largest part: with its number back the figure is 3.255, so 1.3 of the 4.556 is the sea's reflection, duller here than live (its light part reads 99,164,190 live and 84,157,185 here). With fog and environment both off, red is 1.992. The far ground and the far towers are a little redder through the haze; the towers are a shade darker than live (shaded face 102,105,106 live, 97,100,102 here), where they were 23 levels lighter at the end of fix round 1 |
+| monaco-gp-v1.retro.high | 3.511 (red) | The same: fog 0.7 (2.791 with fog off), the sea 0.8 (2.712 with its number back), 1.615 on red with fog and environment both off |
+| brands-hatch-v1.modern.chase | 2.940 (blue) | Not fog (3.035 with fog off). Light from the environment on grass seen along the ground: blue is 1.570 with the environment off on both engines. The grass is paler and less green than live from the chase camera |
+| indianapolis-v1.modern.chase | 2.735 (blue) | Not fog (2.744 with fog off). The same grass (infield 89,145,63 live, 96,146,78 here); blue is 2.049 with the environment off. The crowd, which was this still's whole story, is within 3 levels |
+| silverstone-v1.modern.chase | 2.717 (blue) | Not fog (2.688 with fog off). The same grass (92,159,73 live, 106,164,99 here; 81,143,59 against 82,141,61 with the environment off on both); blue is 1.754 with the environment off |
+
+With fog and environment both off the 28 stills read 1.0 to 3.4, average 1.713. That remainder was not broken down further in this round; fix round 1 named what is in it (the trees' own outline as a shadow, the car body, and the quarter of a level a screenshot carries).
+
+**Named surfaces, on both engines.** The mean colour of a small rectangle, the same rectangle in every set. "Live" is `stills/before-main`; "now" is `stills/after-tuning-2`; the last three columns are the same with fog off on both engines (`stills/fix1-evidence/r128-nofog` and `stills/fix2-evidence/final-nofog`).
+
+| still | surface | live | now | difference | r128, fog off | now, fog off | difference |
+|---|---|---|---|---|---|---|---|
+| indianapolis.modern.high | crowd, right, far | 150,141,133 | 148,140,134 | -2,-1,+1 | 148,139,133 | 148,140,134 | +0,+1,+1 |
+| indianapolis.modern.high | crowd, left, near | 149,141,130 | 149,141,128 | +0,+0,-2 | 149,141,130 | 149,141,128 | +0,+0,-2 |
+| indianapolis.modern.high | grass verge | 69,152,48 | 72,152,54 | +3,+0,+6 | 69,152,48 | 72,152,54 | +3,+0,+6 |
+| indianapolis.modern.high | road | 120,124,162 | 121,125,162 | +1,+1,+0 | 120,124,162 | 121,125,162 | +1,+1,+0 |
+| indianapolis.modern.high | far ground, left | 150,153,160 | 150,154,161 | +0,+1,+1 | 149,153,160 | 150,154,161 | +1,+1,+1 |
+| indianapolis.retro.high | crowd, right, far | 131,123,116 | 128,122,115 | -3,-1,-1 | 129,122,115 | 128,122,115 | -1,+0,+0 |
+| indianapolis.retro.high | crowd, left, near | 142,129,110 | 141,128,108 | -1,-1,-2 | 142,129,110 | 141,128,108 | -1,-1,-2 |
+| indianapolis.retro.high | grass verge | 72,124,58 | 73,124,62 | +1,+0,+4 | 72,124,58 | 73,124,62 | +1,+0,+4 |
+| indianapolis.retro.high | road | 103,107,132 | 104,107,132 | +1,+0,+0 | 103,107,132 | 104,107,132 | +1,+0,+0 |
+| indianapolis.retro.high | far ground, left | 120,123,127 | 120,123,127 | +0,+0,+0 | 120,122,127 | 120,123,127 | +0,+1,+0 |
+| indianapolis.modern.chase | crowd, right stand | 124,119,119 | 125,120,121 | +1,+1,+2 | 124,119,119 | 125,120,121 | +1,+1,+2 |
+| indianapolis.modern.chase | crowd, left stand | 134,131,135 | 136,134,137 | +2,+3,+2 | 134,131,135 | 136,134,137 | +2,+3,+2 |
+| indianapolis.modern.chase | infield grass, right | 89,145,63 | 96,146,78 | +7,+1,+15 | 89,145,63 | 96,146,78 | +7,+1,+15 |
+| indianapolis.modern.chase | road, ahead | 128,132,170 | 130,135,171 | +2,+3,+1 | 128,132,170 | 130,135,171 | +2,+3,+1 |
+| indianapolis.retro.chase | crowd, right stand | 114,109,104 | 114,110,105 | +0,+1,+1 | 114,109,104 | 114,110,105 | +0,+1,+1 |
+| indianapolis.retro.chase | crowd, left stand | 123,120,116 | 124,121,117 | +1,+1,+1 | 123,120,116 | 124,121,117 | +1,+1,+1 |
+| indianapolis.retro.chase | infield grass, right | 88,123,70 | 92,124,79 | +4,+1,+9 | 88,123,70 | 92,124,79 | +4,+1,+9 |
+| indianapolis.retro.chase | road, ahead | 111,115,141 | 114,116,142 | +3,+1,+1 | 111,115,141 | 114,116,142 | +3,+1,+1 |
+| silverstone.modern.stands | crowd, close | 95,90,90 | 92,88,88 | -3,-2,-2 | 95,90,90 | 92,88,88 | -3,-2,-2 |
+| silverstone.retro.stands | crowd, close | 91,88,85 | 89,86,83 | -2,-2,-2 | 91,88,85 | 89,86,83 | -2,-2,-2 |
+| monaco.modern.high | near tower, shaded face | 102,105,106 | 97,100,102 | -5,-5,-4 | 102,105,106 | 97,100,102 | -5,-5,-4 |
+| monaco.modern.high | near tower, lit face | 77,82,81 | 75,80,79 | -2,-2,-2 | 77,82,81 | 75,80,79 | -2,-2,-2 |
+| monaco.modern.high | small block by the hairpin | 94,96,97 | 88,92,94 | -6,-4,-3 | 91,94,96 | 88,92,94 | -3,-2,-2 |
+| monaco.modern.high | far tower, top left | 86,84,82 | 79,79,78 | -7,-5,-4 | 81,81,80 | 78,79,78 | -3,-2,-2 |
+| monaco.modern.high | roof, bottom right | 222,220,216 | 222,219,216 | +0,-1,+0 | 222,220,216 | 222,219,216 | +0,-1,+0 |
+| monaco.modern.high | quay ground beside the road | 210,190,174 | 210,190,172 | +0,+0,-2 | 210,190,174 | 210,190,172 | +0,+0,-2 |
+| monaco.modern.high | sea, light part | 99,164,190 | 84,157,185 | -15,-7,-5 | 99,164,190 | 84,157,185 | -15,-7,-5 |
+| monaco.modern.high | sea, middle | 1,131,175 | 0,130,174 | -1,-1,-1 | 1,131,175 | 0,130,174 | -1,-1,-1 |
+| monaco.modern.high | road | 120,124,161 | 120,123,159 | +0,-1,-2 | 120,124,161 | 120,123,159 | +0,-1,-2 |
+| monaco.retro.high | near tower, shaded face | 97,99,99 | 93,95,96 | -4,-4,-3 | 97,99,99 | 93,95,96 | -4,-4,-3 |
+| monaco.retro.high | near tower, lit face | 80,83,82 | 78,82,81 | -2,-1,-1 | 80,83,82 | 78,82,81 | -2,-1,-1 |
+| monaco.retro.high | small block by the hairpin | 92,94,94 | 88,90,91 | -4,-4,-3 | 90,92,93 | 88,90,91 | -2,-2,-2 |
+| monaco.retro.high | far tower, top left | 79,78,77 | 74,74,74 | -5,-4,-3 | 76,76,75 | 74,74,74 | -2,-2,-1 |
+| monaco.retro.high | roof, bottom right | 165,160,155 | 164,159,153 | -1,-1,-2 | 165,160,155 | 164,159,153 | -1,-1,-2 |
+| monaco.retro.high | quay ground beside the road | 191,161,143 | 190,161,142 | -1,+0,-1 | 191,161,143 | 190,161,142 | -1,+0,-1 |
+| monaco.retro.high | sea, light part | 93,136,157 | 85,131,151 | -8,-5,-6 | 93,135,157 | 85,131,151 | -8,-4,-6 |
+| monaco.retro.high | sea, middle | 33,106,137 | 27,106,136 | -6,+0,-1 | 33,106,137 | 27,106,136 | -6,+0,-1 |
+| monaco.retro.high | road | 103,106,131 | 103,105,130 | +0,-1,-1 | 103,106,131 | 103,105,130 | +0,-1,-1 |
+| silverstone.modern.chase | grass, left | 92,159,73 | 106,164,99 | +14,+5,+26 | 92,159,73 | 106,164,99 | +14,+5,+26 |
+| silverstone.modern.chase | grass, right | 103,157,77 | 113,159,96 | +10,+2,+19 | 103,157,77 | 113,159,96 | +10,+2,+19 |
+| silverstone.modern.chase | road | 117,120,151 | 118,122,152 | +1,+2,+1 | 117,120,151 | 118,122,152 | +1,+2,+1 |
+| silverstone.retro.chase | grass, left | 85,131,76 | 92,134,89 | +7,+3,+13 | 85,131,76 | 92,134,89 | +7,+3,+13 |
+| silverstone.retro.chase | grass, right | 107,138,83 | 113,139,94 | +6,+1,+11 | 107,138,83 | 113,139,94 | +6,+1,+11 |
+| silverstone.retro.chase | road | 101,102,123 | 101,103,123 | +0,+1,+0 | 101,102,123 | 101,103,123 | +0,+1,+0 |
+
+What the table says:
+
+- **The crowd** agrees to within 3 levels in every view: far (150,141,133 against 148,140,134), near, and close from the stands (95,90,90 against 92,88,88). At the end of fix round 1 the far crowd was 34 levels lighter in red, the stands from the chase camera 9 to 25 lighter, and the close crowd 5 short in blue. It matches at every distance now, which a number on the whole surface could not do.
+- **Monaco's buildings** are 2 to 7 levels darker than live with the haze and 2 to 5 with fog off, on every face read. At the end of fix round 1 the shaded face of the near tower was 23 lighter and the small block by the hairpin 21 lighter. The roof at the bottom right in Retro, 25 lighter with the smoothing wrong, is within 2.
+- **The grass** is where it was, because its cause is another one: seen along the ground it is up to 14 levels redder and 26 bluer than live (Silverstone `chase`, Modern), seen from above within 6.
+- **The sea** is less red than live in its light part, by 15 levels in Modern and 8 in Retro, with its number out.
+- **The road, the quay and the far ground** agree to within 3 levels in every view.
+
+The grass, the sea and one tower face again with the environment switched off on both engines as well (`stills/fix2-evidence/r128-nofog-noenv` and `final-nofog-noenv`), beside the fog off figures from the table above:
+
+| still | surface | r128, fog off | now, fog off | difference | r128, fog and environment off | now, fog and environment off | difference |
+|---|---|---|---|---|---|---|---|
+| indianapolis.modern.high | crowd, right, far | 148,139,133 | 148,140,134 | +0,+1,+1 | 128,116,100 | 125,113,97 | -3,-3,-3 |
+| indianapolis.modern.high | grass verge | 69,152,48 | 72,152,54 | +3,+0,+6 | 53,134,27 | 51,131,26 | -2,-3,-1 |
+| indianapolis.retro.high | crowd, right, far | 129,122,115 | 128,122,115 | -1,+0,+0 | 115,104,91 | 113,102,89 | -2,-2,-2 |
+| indianapolis.retro.high | grass verge | 72,124,58 | 73,124,62 | +1,+0,+4 | 65,111,46 | 64,109,46 | -1,-2,+0 |
+| indianapolis.modern.chase | infield grass, right | 89,145,63 | 96,146,78 | +7,+1,+15 | 69,122,38 | 66,118,36 | -3,-4,-2 |
+| indianapolis.retro.chase | infield grass, right | 88,123,70 | 92,124,79 | +4,+1,+9 | 75,104,51 | 73,102,51 | -2,-2,+0 |
+| monaco.modern.high | near tower, shaded face | 102,105,106 | 97,100,102 | -5,-5,-4 | 69,70,68 | 66,67,65 | -3,-3,-3 |
+| monaco.modern.high | sea, light part | 99,164,190 | 84,157,185 | -15,-7,-5 | 29,104,128 | 28,97,121 | -1,-7,-7 |
+| monaco.modern.high | sea, middle | 1,131,175 | 0,130,174 | -1,-1,-1 | 0,88,120 | 0,85,117 | +0,-3,-3 |
+| monaco.retro.high | near tower, shaded face | 97,99,99 | 93,95,96 | -4,-4,-3 | 75,75,74 | 73,74,73 | -2,-1,-1 |
+| monaco.retro.high | sea, light part | 93,135,157 | 85,131,151 | -8,-4,-6 | 30,96,107 | 30,90,103 | +0,-6,-4 |
+| monaco.retro.high | sea, middle | 33,106,137 | 27,106,136 | -6,+0,-1 | 2,83,99 | 2,79,98 | +0,-4,-1 |
+| silverstone.modern.chase | grass, left | 92,159,73 | 106,164,99 | +14,+5,+26 | 81,143,59 | 82,141,61 | +1,-2,+2 |
+| silverstone.modern.chase | grass, right | 103,157,77 | 113,159,96 | +10,+2,+19 | 87,136,52 | 85,132,50 | -2,-4,-2 |
+| silverstone.retro.chase | grass, left | 85,131,76 | 92,134,89 | +7,+3,+13 | 81,119,68 | 80,116,67 | -1,-3,-1 |
+| silverstone.retro.chase | grass, right | 107,138,83 | 113,139,94 | +6,+1,+11 | 96,120,66 | 95,117,65 | -1,-3,-1 |
+
+With no environment the grass agrees to within 4 levels, the tower to within 3 and the sea's red to within 1. So what is left on the grass and on the sea is light from the environment, as fix round 1 found for the grass, and no smoothing is in it. (With the environment off the sea is up to 7 levels lower in green and blue than on r128. That is the water under direct light alone, a picture the game never shows, and it was not looked into.)
+
+**The real WebGPU backend,** checked after the last change on the build of `1028956` (`v0.130`): the system Chrome 158, headed, WebGPU (`backend.isWebGPUBackend`, `backend.device` a `GPUDevice`) against the same Chrome with `?renderer=webgl`, the canvas read back in the task that drew it and reduced to the 32 x 18 grid of cell means.
+
+| shot | tier | it draws (cell means) | mean difference | worst cell |
+|---|---|---|---|---|
+| Silverstone, chase, tick 900 | Retro | 50 to 230 | 0.002 | 0.09 |
+| Silverstone, chase, tick 900 | Modern | 40 to 234 | 0.002 | 0.05 |
+| Indianapolis, high, tick 900 | Retro | 52 to 231 | 0.002 | 0.18 |
+| Indianapolis, high, tick 900 | Modern | 43 to 240 | 0.001 | 0.05 |
+| Indianapolis, chase, tick 900 | Retro | 37 to 231 | 0.007 | 0.13 |
+| Indianapolis, chase, tick 900 | Modern | 15 to 229 | 0.005 | 0.17 |
+| Monaco, high, tick 600 | Retro | 17 to 207 | 0.003 | 0.24 |
+| Monaco, high, tick 600 | Modern | 0 to 223 | 0.004 | 0.11 |
+
+All eight within 1 level on the worst cell; the worst is 0.24. Nothing on the console of any of the sixteen pages. The far crowd and the far buildings were read on both backends from the screenshots of the same pages (`stills/fix2-evidence/gpu-final-webgpu` and `gpu-final-webgl`), with the rectangles of the table above: every crowd rectangle at Indianapolis and every building rectangle at Monaco reads the same on WebGPU as on the fallback, to the level, in both tiers (far crowd 151,143,134 on both in Modern; far tower 82,82,82 on both). The one Chrome the check opened was closed.
+
+**The console.** Every capture ran with the same script in front of the stills tool as in fix round 1 (`node -r`, kept outside the repo), which prints every console error, console warning and page error. In this round: 14 captures of the 28 stills on 0.187, one on r128, and 9 smaller ones. Errors: none, on any capture of a build that was kept. The one build that failed is the first try described above, and its errors are how it was found. Warnings on 0.187: the three kinds of fix round 1, and two more that came once each in three of the captures, as a run of the stills tool ends and its page goes away: `WebGL: CONTEXT_LOST_WEBGL: loseContext: context lost` and `A valid external Instance reference no longer exists.` The first is in an r128 capture of fix round 1 as well (`r128-noenv`), so it is the page going away and not the engine move. The stills of a capture that carried them are the same files as those of one that did not.
+
+CORRECTION to fix round 1 on that point: it reported three kinds of warning and no other. Seven of its own trial logs carry one or both of the two above (a capture counts 24 warnings with them or without).
+
+### Corrections made in this round to the record of fix round 1
+
+Each is marked where it stands in the text above this section.
+
+- "About half of two" of the four stills over 6 was fog: about a third (2.4 of 7.108 and 2.7 of 7.100).
+- The crowd and the buildings agreed "by 4 or less with nothing smoothed": 5 for one surface, the near tower's shaded face.
+- "The near crowd, which was close to right": its own table gave the close crowd as 12 levels too light in red before the number.
+- The table of the five highest left the sea out of the two Monaco `high` stills.
+- "A copy in the scratchpad" named no path: see "Where each round's evidence lives".
+- Three kinds of console warning "and no other": five, as above.
+
+### For Jamie, with the pairs
+
+This replaces the list of fix round 1. Things that differ from the live game after this round:
+
+1. **Trees cast their own outline** and not a slab. Not compensated, by ruling 4 of fix round 1.
+2. **The grass is paler and less green seen along the ground** on the three circuits that have grass. It is light from the environment and no number is on it now. It is the largest thing left in the chase views.
+3. **The sea at Monaco is less red in its light part,** by 15 levels in Modern. The number that took 9 of them back is out, by the letter of its test; see "Ruling 3 again".
+4. **The haze starts at 250 m, not 150 m.** A compensation, kept by the new rule.
+5. **Monaco's buildings are a shade darker,** by 2 to 7 levels. They were up to 26 lighter.
+6. **The car body** is still a little darker than live at its own 1.15 (stage A). Not touched in this round.
+
+The crowd and the far buildings washing out, which was item 2 of the earlier list, is gone.
+
+### Tests
+
+After the last change: `node test/sim-parity.test.js` 4 passed (and before every commit); `node test/physics.test.js` 37 passed; `node test/fpmath.test.js` 3 passed; `node test/track-bake.test.js` 8 passed; `node test/music.test.js` 31 passed; `node build.js` invariants OK (`dist/index.html` 1,593,262 bytes and `dist/artifact.html` 1,588,640 on the clean build of `1028956`); then `git checkout -- dist`. No warning in any test's output. Not run, as told: `tools/bench.js`, `test/csp.js`. Stage B and stage C are not started.
