@@ -68,11 +68,12 @@ function buildPostNode(frame, uRes, uFade, retro) {
     c = c.mul(255.0).add(0.5).floor().div(255.0);
 
     if (retro) {
-      /* the console path: dither into a 5-bit-per-channel palette. uv() on a
-         full screen pass has its origin at the TOP on this renderer, on both
-         backends, where the old vUv had it at the bottom, so y is turned over
-         before it indexes the matrix. Left as it comes, the pattern would be
-         upside down and nearly every pixel a palette step out. */
+      /* the console path: dither into a palette of 5 bits for each channel.
+         uv() on a full screen pass has its origin at the TOP on this renderer,
+         on both backends, where the old vUv had it at the bottom, so y is
+         turned over before it indexes the matrix. Left as it comes, the
+         pattern would be upside down and nearly every pixel a palette step
+         out. */
       var px = T.vec2(vUv.x, vUv.y.oneMinus()).mul(uRes).floor();
       var d = bayer4(px).sub(0.5);
       c = c.add(d.mul(1.0 / 52.0));
@@ -256,43 +257,48 @@ Game.prototype.drawFrame = function (fade) {
    this way because the artifact CSP blocks every external host, so an HDR file
    could never be fetched — and a 2 KB shader beats a 4 MB download regardless. */
 Game.prototype.buildEnvironment = function (scene) {
-  try {
-    /* Painted as an EQUIRECTANGULAR canvas rather than rendered from a shader
-       dome. The dome version prefiltered to solid black — and because a
-       Standard material takes its whole indirect term from the environment,
-       a black one does not soften the scene, it extinguishes it. A canvas goes
-       through the engine's well-worn equirect path instead, and its
-       contents can be inspected, which a shader baked inside PMREM cannot. */
-    var cv = makeCanvas(256, 128), ctx = cv.getContext('2d');
-    var g = ctx.createLinearGradient(0, 0, 0, 128);
-    g.addColorStop(0.00, '#6f9ede');    /* zenith */
-    g.addColorStop(0.42, '#c4d3e8');
-    g.addColorStop(0.50, '#d8d2c4');    /* haze band at the horizon */
-    g.addColorStop(0.58, '#8d8578');
-    g.addColorStop(1.00, '#3f3c37');    /* ground bounce */
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 256, 128);
+  /* NO TRY AND CATCH HERE ANY MORE, because nothing in here can fail by
+     itself. On r128 one wrapped this function, with "no environment is a
+     flatter look, never a broken one" in its catch: PMREMGenerator ran inside
+     it, on the GPU, and a prefilter that failed left the scene without an
+     environment and the game still drawing. Now the function only paints a
+     2D canvas, as every texture in the game is painted, and hands it over.
+     The engine filters it inside the first frame it draws, which no catch in
+     here could reach: a failure there is the renderer failing to draw, and
+     that belongs to whoever called for the frame, not to this function. */
 
-    /* A sun disc, which is what actually puts a moving highlight along the
-       bodywork. Placed to match the directional light's bearing. */
-    var sg = ctx.createRadialGradient(74, 34, 1, 74, 34, 26);
-    sg.addColorStop(0, 'rgba(255,252,242,1)');
-    sg.addColorStop(0.25, 'rgba(255,238,206,0.85)');
-    sg.addColorStop(1, 'rgba(255,238,206,0)');
-    ctx.fillStyle = sg;
-    ctx.fillRect(48, 8, 52, 52);
+  /* Painted as an EQUIRECTANGULAR canvas rather than rendered from a shader
+     dome. The dome version prefiltered to solid black, and because a
+     Standard material takes its whole indirect term from the environment,
+     a black one does not soften the scene, it extinguishes it. A canvas goes
+     through the engine's well worn equirect path instead, and its
+     contents can be inspected, which a shader baked inside PMREM cannot. */
+  var cv = makeCanvas(256, 128), ctx = cv.getContext('2d');
+  var g = ctx.createLinearGradient(0, 0, 0, 128);
+  g.addColorStop(0.00, '#6f9ede');    /* zenith */
+  g.addColorStop(0.42, '#c4d3e8');
+  g.addColorStop(0.50, '#d8d2c4');    /* haze band at the horizon */
+  g.addColorStop(0.58, '#8d8578');
+  g.addColorStop(1.00, '#3f3c37');    /* ground bounce */
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 256, 128);
 
-    var tex = new THREE.CanvasTexture(cv);
-    tex.mapping = THREE.EquirectangularReflectionMapping;
-    tex.colorSpace = THREE.SRGBColorSpace;
+  /* A sun disc, which is what actually puts a moving highlight along the
+     bodywork. Placed to match the directional light's bearing. */
+  var sg = ctx.createRadialGradient(74, 34, 1, 74, 34, 26);
+  sg.addColorStop(0, 'rgba(255,252,242,1)');
+  sg.addColorStop(0.25, 'rgba(255,238,206,0.85)');
+  sg.addColorStop(1, 'rgba(255,238,206,0)');
+  ctx.fillStyle = sg;
+  ctx.fillRect(48, 8, 52, 52);
 
-    /* Kept, not disposed: the renderer filters it when it first draws and
-       reads it again if the scene's environment is ever set anew. */
-    scene.environment = tex;
-  } catch (e) {
-    /* No environment is a flatter look, never a broken one. */
-    scene.environment = null;
-  }
+  var tex = new THREE.CanvasTexture(cv);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+
+  /* Kept, not disposed: the renderer filters it when it first draws and
+     reads it again if the scene's environment is ever set anew. */
+  scene.environment = tex;
 };
 
 /* THE HAZE COLOUR, IN THE FORM THIS ENGINE WANTS IT.
@@ -401,7 +407,8 @@ Game.prototype.buildWorld = function () {
   /* SHADOWS. A tight ortho box that FOLLOWS THE CAR rather than one big enough
      to cover the circuit: Silverstone is 1.8 km across, and a shadow map
      stretched over that has metre-wide texels and casts nothing you would
-     recognise. 70 m around the player at 2048 gives roughly 3 cm per texel. */
+     recognise. 70 m around the player at 2048 gives roughly 7 cm per texel
+     (the box is 140 m across). */
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   var sc = sun.shadow.camera;
@@ -417,10 +424,10 @@ Game.prototype.buildWorld = function () {
      shadow.radius is the size of that disc in texels. It is left at the
      engine's 1: at 0, 0.5 and 2 the picture is as far from r128's as at 1, to
      within 0.02 of a level, because a texel here is under 7 cm and the edge
-     is thinner than a pixel from any camera the game has. shadow.intensity stays at 1
-     too: lowering it only lightens the shadow, which moves it away from
-     r128's. The two bias values above carried over unchanged, with no acne
-     and no detached shadow.
+     is thinner than a pixel from any camera the game has. shadow.intensity
+     stays at 1 too: lowering it only lightens the shadow, which moves it
+     away from r128's. The two bias values above carried over unchanged, with
+     no acne and no detached shadow.
 
      One thing did change and is not a setting. A caster with an alpha test
      (the trees) now casts its own outline. On r128 the shadow pass ignored
@@ -465,10 +472,11 @@ Game.prototype.buildWorld = function () {
    was tuned to be.
 
    Every material under `root` that asks for a strength other than 1 (the car
-   paint, and the sea at Monaco) is given the scene's environment as its own
-   map, which is all it takes for its number to apply again. The renderer filters the one texture once, whoever
-   holds it. Materials that leave the strength at 1 are not touched: for them
-   the scene's environment already does the same thing. */
+   paint, the sea and the buildings at Monaco, the crowd and the grass) is
+   given the scene's environment as its own map, which is all it takes for
+   its number to apply again. The renderer filters the one texture once,
+   whoever holds it. Materials that leave the strength at 1 are not touched:
+   for them the scene's environment already does the same thing. */
 Game.prototype.ownEnvironment = function (root) {
   var env = this.scene.environment;
   if (!env) return;
@@ -3253,14 +3261,14 @@ Game.prototype.bench = function (opts) {
       if (game.photoHold) { last = now; return; }
       var dt = (now - last) / 1000;
       last = now;
-      if (dt > 0.25) dt = 0.25;          /* tab was backgrounded — don't fast-forward */
+      if (dt > 0.25) dt = 0.25;          /* tab was backgrounded: don't fast forward */
       acc += dt;
       var guard = 0;
       while (acc >= STEP && guard < 6) { game.tick(STEP); acc -= STEP; guard++; }
       if (acc > STEP * 6) acc = 0;
       /* Whatever is left in the accumulator is how far this frame sits past the
          last physics step. Feeding it to sync() is what lets the cars move on
-         frames where no step ran — without it they only advance at 60Hz while
+         frames where no step ran: without it they only advance at 60Hz while
          the camera glides on every frame, and the chase car twitches. */
       var alpha = acc / STEP;
       for (var i = 0; i < game.cars.length; i++) game.cars[i].sync(dt, alpha);

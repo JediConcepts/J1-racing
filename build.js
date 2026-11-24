@@ -348,7 +348,7 @@ if (standalone.indexOf(CLOUD.key) === -1) problems.push('index.html is missing t
    minifier or a vendor bump that quietly drops a header is exactly how a project
    ends up distributing an unattributed dependency, so fail the build here. */
 if (three.indexOf('Three.js Authors') === -1) {
-  problems.push('vendor/three.bundle.js has lost its own @license header — check the vendored file');
+  problems.push('vendor/three.bundle.js has lost its own @license header: check the vendored file');
 }
 if (fragment.indexOf(NOTICE.three) === -1) problems.push('artifact.html is missing the three.js notice');
 if (standalone.indexOf(NOTICE.three) === -1) problems.push('index.html is missing the three.js notice');

@@ -1381,7 +1381,12 @@ function buildMonacoTunnelAndUrbanScenery(track, scene) {
      At 1.15 it reads 87,158,189, and every Monaco still that shows the sea
      moved toward the r128 picture. At 1.3 the darker water overshot. Game's
      ownEnvironment is what makes the number apply (it does nothing on a
-     material that takes its light from scene.environment). */
+     material that takes its light from scene.environment).
+
+     RULED in fix round 1 of the move's stage A: the 1.15 is accepted, as a
+     compensation toward the live picture. It is a number of the port, not of
+     the game's look, and it goes if the engine ever shades the reflection as
+     r128 did. */
   var seaMat = new THREE.MeshStandardMaterial({ color: srgb(0x005f73), roughness: 0.25, metalness: 0.6, envMapIntensity: 1.15 });
   var sea = new THREE.Mesh(seaGeo, seaMat);
   var harbourY = track.p[700].y; // use track elevation at the harbour

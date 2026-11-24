@@ -11,12 +11,19 @@
  *   THREE.TSL, the name three.js itself uses for them. They cannot sit flat
  *   on THREE: `log` is a console helper in `three/webgpu` and a logarithm in
  *   `three/tsl`, and one global cannot hold both.
- * - ShaderMaterial is exported so the source still loads, but this renderer
- *   does not draw it. A pass written in GLSL has to become a node material. */
+ * - This renderer does not draw ShaderMaterial. The post pass, which was
+ *   GLSL in a ShaderMaterial on r128, is a node material in the source now
+ *   (buildPostNode in src/40-game.js). */
 
-/* 1. Every THREE.<Name> the source uses today (see the WebGL entry for the
- *    grep), less sRGBEncoding, which is gone from 0.187, and WebGLRenderer,
- *    which this build does not have. */
+/* 1. Every THREE.<Name> the source used while it drew through r128 (see the
+ *    WebGL entry for the grep), less sRGBEncoding, which is gone from 0.187,
+ *    and WebGLRenderer, which this build does not have.
+ *
+ *    Since the game moved to this bundle the source no longer names five of
+ *    them: OrthographicCamera, PCFSoftShadowMap, PMREMGenerator,
+ *    ShaderMaterial and WebGLRenderTarget. They are still exported and
+ *    nothing reads them. Taking them out means building the bundle again,
+ *    which is left for a later change. */
 export {
   ACESFilmicToneMapping,
   AmbientLight,
@@ -61,12 +68,14 @@ export {
   WebGLRenderTarget
 } from 'three/webgpu';
 
-/* 2. What the move to 0.187 needs that the source does not name yet. The
- *    same seven names as in the WebGL entry, for the same reasons, and two
- *    more that only this flavour needs. ColorManagement, because the game
- *    switches colour management off (it converts its own colours, as it did
- *    for r128). UnsignedByteType, for the 8 bit render target that Retro
- *    draws into. */
+/* 2. What the move to 0.187 needed beyond the r128 list. The same seven
+ *    names as in the WebGL entry, for the same reasons, and two more that
+ *    only this flavour needs. ColorManagement, because the game switches
+ *    colour management off (it converts its own colours, as it did for
+ *    r128). UnsignedByteType, for the 8 bit render target that Retro draws
+ *    into. The source names seven of the nine now (REVISION is read by the
+ *    colour management guard at the top of src/10-core.js); MathUtils and
+ *    Object3D are for the tools, as the WebGL entry says. */
 export {
   ColorManagement,
   HalfFloatType,
@@ -83,7 +92,11 @@ export {
  *    chain (it was called PostProcessing in older releases). RenderTarget is
  *    the plain target this renderer takes. NodeMaterial, MeshBasicNodeMaterial
  *    and QuadMesh are for a post pass drawn by hand. The renderer uses all
- *    three inside itself, so naming them adds nothing to the file. */
+ *    three inside itself, so naming them adds nothing to the file.
+ *
+ *    The source draws its post pass by hand, with NodeMaterial and QuadMesh
+ *    into a RenderTarget. It names neither RenderPipeline nor
+ *    MeshBasicNodeMaterial. */
 export {
   MeshBasicNodeMaterial,
   NodeMaterial,
@@ -93,12 +106,18 @@ export {
   WebGPURenderer
 } from 'three/webgpu';
 
-/* 4. The `three/tsl` functions used, as THREE.TSL.<name>. The list is what
- *    the Retro and Modern post pass (POST_FRAG in src/40-game.js) needs when
- *    it is written as nodes, function for function, plus `pass` (the scene
- *    as an input to the post chain) and `renderOutput` (tone mapping and the
- *    output colour space, done in the post chain). Most arithmetic is also a
- *    method on a node (`a.mul(b)`, `a.floor()`), so the list stays short. */
+/* 4. The `three/tsl` functions, as THREE.TSL.<name>. The list was drawn up
+ *    from the GLSL post pass r128 had (POST_FRAG, which is gone) for writing
+ *    it as nodes, function for function, plus `pass` (the scene as an input
+ *    to the post chain) and `renderOutput` (tone mapping and the output
+ *    colour space). Most arithmetic is also a method on a node (`a.mul(b)`,
+ *    `a.floor()`), so the list stays short.
+ *
+ *    The pass as it is written now (buildPostNode in src/40-game.js) uses
+ *    Fn, clamp, dot, float, mix, renderOutput, texture, uniform, uv, vec2,
+ *    vec3 and vec4. It does not use If, floor, mod or pass: the arithmetic
+ *    went to node methods, and the scene is drawn into a target the game
+ *    owns. Those four are still exported and nothing reads them. */
 import {
   Fn,
   If,

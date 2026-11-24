@@ -47,7 +47,14 @@ const path = require('path');
 const REPO = path.join(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(REPO, p), 'utf8');
 
-/* THREE ships as a UMD bundle that wants a global to attach to. */
+/* The bundle is one IIFE: `var THREE = (() => { ... })();` followed by
+   `globalThis.THREE = THREE;` as its last statement. Run inside new Function
+   that `var` is local to the function and gone when it returns, so the last
+   statement is the only reason global.THREE exists afterwards. A bundle
+   rebuilt without that footer would leave it undefined and every line below
+   would fail on it. (`window` and `self` were set for r128, a UMD file that
+   attached itself to one of them. This bundle loads without either; the two
+   lines are left as they were.) */
 global.window = global;
 global.self = global;
 new Function(read('vendor/three.bundle.js'))();

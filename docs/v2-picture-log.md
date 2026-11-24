@@ -320,6 +320,8 @@ How each step was measured. `node build.js`, then the three capture commands of 
 
 The console of the stills page was watched on every capture (a preloaded script outside the repo that prints console errors and changes nothing else), because the stills tool reports page errors but not console errors, and a node material that fails to build is a console error. None was printed on any capture recorded below.
 
+Added in fix round 1: that claim rests on a script that is not in the repo, so it cannot be checked again from the repo. `tools/stills.js` as committed listens for page errors only, and would pass a still taken over a broken material. Stage B puts the console check into the tool. Until it does, "no console error" in this log means "none seen by a script kept in the scratchpad".
+
 | step | build | range of means | over 6 | what the step did |
 |---|---|---|---|---|
 | reference | `stills/before-main`, r128 | 0 | 0 | the merged main |
@@ -327,7 +329,7 @@ The console of the stills page was watched on every capture (a preloaded script 
 | A2 | `v0.114 dev c33c599*` | 6.0 to 29.9 | 28 | colour management off, as the first statement of the game. Lit surfaces come back up: nothing is converted twice any more |
 | A3 | `v0.115 dev 20abfe9*` | 11.6 to 35.4 | 28 | canvas textures and the environment canvas flagged sRGB. The means go UP: the textures stop reading too bright, and the lights are still short by a factor of pi (step A4) |
 | A4 | `v0.116 dev c9cd75b*` | 1.7 to 14.0 | 10 | the hemisphere, directional and ambient lights multiplied by pi, which r128 did inside its shaders |
-| A5 | `v0.117 dev 11a8615*` | 1.2 to 8.4 | 6 | the haze colour handed over as the linear colour the output step turns back into the hex: the plain conversion for Retro, run backwards through ACES for Modern |
+| A5 | `v0.117 dev 11a8615*` | 1.2 to 8.4 | 6 | the haze colour handed over as the linear colour the output step turns back into the hex: the plain conversion for Retro, run backwards through ACES for Modern. (Noted in fix round 1: the body of this step's commit, a13deb3, says the stands at Indianapolis are a case of fog part way into the haze. That claim was retracted at A6, in the body of 2faa079 and under "A6: where the rest comes from". The commit message stands as written.) |
 | A6 | `v0.118 dev a13deb3*` | 1.2 to 7.1 | 4 | `envMapIntensity` made to apply again (0.187 ignores it for `scene.environment`): the car paint's 1.15 is back, and the sea at Monaco is given 1.15 |
 | A7 | `v0.119 dev 2faa079*` | 1.2 to 7.1 | 4 | `PCFShadowMap` asked for by name (the picture is A6's to the last digit: 0.187 was already drawing it in place of `PCFSoftShadowMap`). Radius and intensity tried, neither moves the picture, both left at the engine's values |
 
@@ -594,6 +596,8 @@ At 250 m or 300 m every Modern still is under 6 (the highest is 5.7) and one sti
 ### Stage A as it stands
 
 The build is `v0.119 dev 2faa079*` (the working tree of the A7 commit). 28 stills against `stills/before-main`, headless, the fallback: channel means from 1.2 to 7.1, four over 6. The spike had 1.4 to 7.4 and seven over 6.
+
+Added in fix round 1: the count of four rested on one still that was 0.04 under the gate. `monaco-gp-v1.retro.high` reads 5.964 in the table below. It was 6.758 at A5 and came under through the sea's `envMapIntensity` of 1.15, a number tuned in this stage. A still carries about a quarter of a level that is not the game's picture (step A2), so "four over 6" and "five over 6" were the same result here, and the stage should have said so.
 
 | still | R | G | B | pixels off by more than 24 | gate | highest channel with fog from 250 m | with fog from 300 m |
 |---|---|---|---|---|---|---|---|
