@@ -590,8 +590,42 @@ Game.prototype.buildTarget = function (modern, full) {
 
 /* The two draws of a frame: the scene into the target, then the post pass
    on to the canvas. The renderer clears the target by itself before the
-   first. `fade` is 1 for a full picture and 0 for black. */
+   first. `fade` is 1 for a full picture and 0 for black.
+
+   THE FIRST FRAME OF A TIER BUILDS ALL OF IT (`buildAll`, set by
+   applyQuality). The engine makes a material's shader and pipeline, and each
+   object's own share of them, in the first frame that draws the object, and
+   it draws only what the camera can see. Left to that, a tier is built a
+   piece at a time: the title's first cut to a camera in another part of the
+   town, or the first run into Monaco's tunnel, stops the picture while the
+   pieces it needs are made, for half a second and more on a phone.
+
+   So that one frame is drawn with nothing culled. Every visible object goes
+   through the main pass and through each shadow map's pass, and everything
+   is built there: under the loading panel at boot (see boot), and in the
+   frame a change of tier stalls on already. What is out of view leaves no
+   pixel, so the frame is the picture it would have been. An object that is
+   hidden at the time (`visible` false) is still built when it is first shown.
+
+   The engine's own compileAsync does not do this, read in 0.187: it culls
+   with the camera exactly as a frame does (StandardDrawingPipeline.project),
+   and it leaves the shadow maps out (ShadowNode.updateBefore returns at once
+   during a precompile), so the cascades' depth passes are not built by it.
+   An engine update has to look at both again. */
 Game.prototype.drawFrame = function (fade) {
+  if (this.buildAll) {
+    this.buildAll = false;
+    var lifted = [];
+    this.scene.traverse(function (o) {
+      if (o.frustumCulled) { o.frustumCulled = false; lifted.push(o); }
+    });
+    try {
+      this.drawFrame(fade);
+    } finally {
+      for (var li = 0; li < lifted.length; li++) lifted[li].frustumCulled = true;
+    }
+    return;
+  }
   this.renderer.setRenderTarget(this.rt);
   this.renderer.render(this.scene, this.camera);
   this.renderer.setRenderTarget(null);
@@ -3449,6 +3483,8 @@ Game.prototype.applyQuality = function () {
   for (var li = 0; li < layers.length; li++) layers[li].style.display = tier.overlays ? '' : 'none';
 
   this.resize();
+  /* the next frame builds the whole tier: see drawFrame */
+  this.buildAll = true;
 };
 
 /* The tiers the Graphics button steps through, in order, on every device:
@@ -4165,17 +4201,20 @@ Game.prototype.bench = function (opts) {
   renderer.init().then(start, cannotStart);
 
   function start() {
+    /* EVERYTHING IS BUILT BEFORE THE TITLE APPEARS. The first frame is drawn
+       here, under the loading panel, and it is the frame that builds the
+       whole tier (see drawFrame), so that nothing is left to be built when
+       the title cuts to its next camera. A frame that will not draw ends at
+       the panel like a game that will not build. */
     var game;
     try {
       game = new Game(host, renderer);
+      game.render(0);
     } catch (err) {
       fail(err && err.message ? err.message : String(err));
       if (window.console) console.error(err);
       return;
     }
-
-    var loading = document.getElementById('loading');
-    if (loading) loading.style.display = 'none';
 
     /* THE GPU CAN BE TAKEN AWAY MID RACE: the driver restarts, the laptop
        changes graphics card, the browser reclaims a context it thinks is
@@ -4262,7 +4301,33 @@ Game.prototype.bench = function (opts) {
         window.updateMonacoLiveStreetView(game.playerCar, game.track);
       }
     }
-    requestAnimationFrame(frame);
+
+    /* The loading panel comes down, and the frame loop starts, once the
+       frame drawn above is finished. On the WebGL 2 backend that is when
+       render returned: its shaders are compiled inside the call. On WebGPU
+       the pipelines are compiled away from this thread, so the device is
+       asked to say when the work it was sent is done; a panel hidden sooner
+       would only uncover a canvas that is still waiting for them. The timer
+       is there so that no device can keep the panel up for good. */
+    var loading = document.getElementById('loading');
+    var shown = false;
+    function show() {
+      if (shown) return;
+      shown = true;
+      if (loading) loading.style.display = 'none';
+      /* The game is handed to the page here and not before: MCL64 is what
+         the tools wait for, and a photo taken while the panel was still up
+         was a picture of the panel. */
+      window.MCL64 = game;
+      last = performance.now();
+      requestAnimationFrame(frame);
+    }
+    if (device && device.queue && device.queue.onSubmittedWorkDone) {
+      device.queue.onSubmittedWorkDone().then(show, show);
+      setTimeout(show, 10000);
+    } else {
+      requestAnimationFrame(show);
+    }
 
     var resizeTimer = null;
     function scheduleResize(delay) {
@@ -4285,7 +4350,6 @@ Game.prototype.bench = function (opts) {
       acc = 0;
     });
 
-    window.MCL64 = game;
     /* The circuit registry, for the selector UI and for poking at in a console. */
     game.tracks = TRACKS;
     game.trackById = trackById;
