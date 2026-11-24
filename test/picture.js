@@ -51,6 +51,7 @@ const { CHROMIUM_ARGS, requirePlaywright, serveDist, localOnly } = require('../t
 
 const WEBGPU = process.argv.includes('--webgpu');
 const VIEWPORT = { width: 1280, height: 720 };
+const TRIAL_KEY = 'mcl64.tierTrial.v1';
 
 let pass = 0, fail = 0;
 function check(ok, name, detail) {
@@ -111,13 +112,22 @@ function tamper(o) {
   /* A fresh context for every boot, so nothing a boot was denied, and no
      setting it saved, reaches the next one. Waits until the page has either
      a game or the fallback panel: one of the two is how every boot ends. */
-  async function bootWith(opts, query, saved, scale) {
+  async function bootWith(opts, query, saved, scale, more) {
     if (context) await context.close();
     context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: scale || 1, reducedMotion: 'no-preference' });
     await context.addInitScript(tamper, opts || {});
     /* `saved` is what a player's browser would hold from an earlier visit:
-       it is in storage before the page's first script reads it */
-    if (saved) await context.addInitScript((s) => { localStorage.setItem('mcl64.settings.v1', JSON.stringify(s)); }, saved);
+       it is in storage before the page's first script reads it. It is put
+       there once, on the first load of the context, so that a reload later
+       in the same context finds what the game itself left. `more.trial` is
+       the same for the key a tier on trial leaves (TIER_TRIAL_KEY in
+       src/40-game.js). */
+    const held = { 'mcl64.settings.v1': saved ? JSON.stringify(saved) : null, [TRIAL_KEY]: (more && more.trial) || null };
+    await context.addInitScript((h) => {
+      if (sessionStorage.getItem('picture.seeded')) return;
+      sessionStorage.setItem('picture.seeded', '1');
+      for (const k in h) if (h[k] != null) localStorage.setItem(k, h[k]);
+    }, held);
     page = await context.newPage();
     consoleErrors = [];
     uncaught = [];
@@ -129,7 +139,7 @@ function tamper(o) {
   }
   const boot = (query) => bootWith({}, query);
   /* a boot with settings already saved, at a device pixel ratio of `scale` */
-  const bootWithSettings = (saved, scale) => bootWith({}, WEBGPU ? '' : '?renderer=webgl', saved, scale);
+  const bootWithSettings = (saved, scale, more) => bootWith({}, WEBGPU ? '' : '?renderer=webgl', saved, scale, more);
   const setting = (key) => page.evaluate((k) => window.MCL64.settings[k], key);
 
   async function settled(circuit) {
@@ -376,6 +386,101 @@ function tamper(o) {
       again.shadows === 'cascades' && consoleErrors.length === 0 && uncaught.length === 0,
       'switched to Modern the sun is the dome\'s, and switched back to Ultra it is golden hour again',
       'Modern ' + JSON.stringify(left) + ', Ultra ' + JSON.stringify(again) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+
+    /* THE GRAPHICS BUTTON. It steps through the tiers one way, so Modern to
+       Retro passes Ultra. The button says the new tier at once and the tier
+       is built only when the clicks have stopped, so two quick clicks must
+       end in Retro with Ultra never built. Every call of applyQuality is
+       written down with the tier it was called for. */
+    const tierState = () => page.evaluate((key) => {
+      const g = window.MCL64;
+      let stored = null;
+      try { stored = JSON.parse(localStorage.getItem('mcl64.settings.v1')).quality; } catch (e) {}
+      return {
+        quality: g.settings.quality, on: g.tierOn, shadows: g.shadowRig.mode, built: g.__built || null,
+        label: document.getElementById('set-quality').textContent, stored, trial: localStorage.getItem(key), notice: g.notice
+      };
+    }, TRIAL_KEY);
+    const watchBuilds = () => page.evaluate(() => {
+      const g = window.MCL64, real = g.applyQuality;
+      g.__built = [];
+      g.applyQuality = function () { g.__built.push(this.settings.quality); return real.apply(this, arguments); };
+    });
+    const clickGraphics = () => page.evaluate(() => {
+      const b = document.getElementById('set-quality');
+      b.click();
+      return b.textContent;
+    });
+    await bootWithSettings({ quality: 'modern' });
+    await watchBuilds();
+    const said1 = await clickGraphics(), said2 = await clickGraphics();
+    const atOnce = await tierState();
+    await page.waitForTimeout(1200);
+    const landed = await tierState();
+    check(said1 === 'ULTRA' && said2 === 'RETRO 240p' && atOnce.built.length === 0 && atOnce.on === 'modern' &&
+      landed.built.join() === 'retro' && landed.quality === 'retro' && landed.on === 'retro' && landed.shadows === 'blob' &&
+      landed.stored === 'retro' && landed.trial === null && consoleErrors.length === 0 && uncaught.length === 0,
+      'two quick clicks on Graphics go from Modern to Retro, and Ultra is never built',
+      'the button said ' + said1 + ' then ' + said2 + '; straight after ' + JSON.stringify(atOnce) + '; once settled ' + JSON.stringify(landed) +
+      ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+
+    /* One click, left alone: Ultra is built after the wait, it is on trial
+       while it draws its first frames, and the key goes once it has drawn
+       them. */
+    await bootWithSettings({ quality: 'modern' });
+    await watchBuilds();
+    await clickGraphics();
+    await page.waitForFunction(() => window.MCL64.tierOn === 'ultra', null, { timeout: 10000 });
+    const onTrial = await tierState();
+    await page.waitForFunction((key) => localStorage.getItem(key) === null, TRIAL_KEY, { timeout: 60000 });
+    const trusted = await tierState();
+    check(onTrial.built.join() === 'ultra' && onTrial.shadows === 'cascades' && onTrial.trial === 'ultra' && onTrial.stored === 'ultra' &&
+      trusted.trial === null && trusted.on === 'ultra' && consoleErrors.length === 0 && uncaught.length === 0,
+      'one click from Modern builds Ultra after the wait, on trial until it has drawn its frames',
+      'when built ' + JSON.stringify(onTrial) + '; later ' + JSON.stringify(trusted) +
+      ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+
+    /* A load that finds the key: the tier never got through its trial. */
+    await bootWithSettings({ quality: 'ultra' }, 1, { trial: 'ultra' });
+    const fell = await tierState();
+    check(fell.quality === 'modern' && fell.on === 'modern' && fell.shadows === 'single' && fell.trial === null &&
+      fell.stored === 'modern' && /ULTRA OFF/.test(fell.notice) && /DID NOT START/.test(fell.notice) &&
+      consoleErrors.length === 0 && uncaught.length === 0,
+      'loaded with ULTRA saved and the trial key still set, the page comes up in Modern, clears the key and says why',
+      JSON.stringify(fell) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+
+    /* The graphics device goes while Ultra is on: the load after it must not
+       walk straight back into Ultra. */
+    await bootWithSettings({ quality: 'ultra' });
+    const beforeLoss = await tierState();
+    await loseContext();
+    const lostKey = await page.evaluate((key) => localStorage.getItem(key), TRIAL_KEY);
+    const lostPanel = await isVisible('#fallback');
+    await page.reload({ waitUntil: 'load', timeout: 60000 });
+    await settled();
+    const afterLoss = await tierState();
+    check(beforeLoss.on === 'ultra' && lostKey === 'ultra lost' && lostPanel && afterLoss.quality === 'modern' && afterLoss.on === 'modern' &&
+      afterLoss.trial === null && afterLoss.stored === 'modern' && /DEVICE WAS LOST/.test(afterLoss.notice) && uncaught.length === 0,
+      'a ' + (WEBGPU ? 'device' : 'context') + ' lost in Ultra leaves the key, and the reload comes up in Modern and says why',
+      'key after the loss ' + JSON.stringify(lostKey) + ', panel ' + lostPanel + ', after the reload ' + JSON.stringify(afterLoss) +
+      ', uncaught ' + JSON.stringify(uncaught));
+
+    /* The game's own reload is not a failure. Ultra is clicked to and a
+       circuit picked before the clicks have settled: the page reloads with
+       Ultra saved and never yet built, and must come up in it, on trial. */
+    await bootWithSettings({ quality: 'modern', trackId: 'silverstone-v1' });
+    await clickGraphics();
+    await Promise.all([
+      page.waitForEvent('load', { timeout: 60000 }),
+      page.evaluate(() => window.MCL64.selectTrack('brands-hatch-v1'))
+    ]);
+    await settled('brands-hatch-v1');
+    const carried = await tierState();
+    await page.waitForFunction((key) => localStorage.getItem(key) === null, TRIAL_KEY, { timeout: 60000 });
+    check(carried.quality === 'ultra' && carried.on === 'ultra' && carried.shadows === 'cascades' && !carried.notice &&
+      uncaught.length === 0,
+      'Ultra clicked to and a circuit picked at once: the reload comes up in Ultra, with no word of a failure',
+      JSON.stringify(carried) + ', uncaught ' + JSON.stringify(uncaught));
 
     /* NOTHING IS LEFT BEHIND by a change of tier or of hour. The renderer is
        asked what it holds: its textures and geometries, its uniform buffers,
