@@ -95,7 +95,14 @@ var TIER_TRIAL_FRAMES = 60;
    never got that far (see loadSettings). What the key holds:
 
      'ultra'           being tried now. Found at load: it did not start.
-     'ultra lost'      the graphics device was lost while it was on.
+     'ultra lost'      the graphics device was lost while it was on, for
+                       the first time. Found at load: that load is in
+                       TIER_SAFE, and the key becomes 'ultra again'.
+     'ultra again'     one loss behind it, and owed a second chance (with
+                       ' chosen' after it for a tier the player picked).
+                       Found at load: the tier is on again, on trial.
+     'ultra lost twice'  lost again in the load that was its second chance.
+                       Found at load: the tier is off, and saved as off.
      'ultra untried'   the page was left before the trial was over, and
                        nothing had gone wrong on it: the game reloaded it
                        itself (a change of circuit), or the player closed
@@ -116,7 +123,20 @@ function tierTrialWrite(value) {
   } catch (e) {}
 }
 
-/* What the player is told when a load finds the key, by how it was left.
+/* ONE LOST DEVICE DOES NOT TURN A TIER OFF FOR GOOD. Devices are lost for
+   reasons that have nothing to do with the tier on the screen: a driver
+   restarts, a browser takes back a context. (Measured in review: headless
+   Chromium lost its context within two seconds of starting in 1 start of
+   3 in Modern, where no heavy tier was on to blame.) So a first loss costs
+   the tier one load and no more: the load after the loss is in TIER_SAFE,
+   and the one after that tries the tier again, on trial. A device that
+   loses it in that load as well has lost it twice running, and the tier is
+   turned off until the player picks it again. The key carries all of it
+   (see above), with the word 'chosen' to say whose tier it was, because
+   any setting saved in the load between writes the settings out whole with
+   TIER_SAFE in them.
+
+   What the player is told when a load finds the key, by how it was left.
    Only a player who picked the tier is told: one who was given it as the
    default never asked for it, and comes up in TIER_SAFE with no word. */
 var TIER_FELL = {
@@ -399,6 +419,9 @@ function Game(host, renderer) {
   this.tierTimer = null;
   this.trialLeft = 0;
   this.tierFell = null;
+  /* whether a heavy tier has one lost device behind it already, so that a
+     loss in this load is the second running (see TIER_FELL) */
+  this.tierAgain = false;
   /* whether something has gone wrong on this page that the tier on the
      screen may be to blame for: a lost graphics device, or an error nobody
      caught (see leaveTier) */
@@ -1874,19 +1897,45 @@ Game.prototype.loadSettings = function () {
   /* A TIER LEFT ON TRIAL (see TIER_TRIAL_KEY). The key is taken away
      whatever it says, so one failure is acted on once. If it names the tier
      of this load, that tier either never drew its frames or lost the
-     graphics device: the load goes to TIER_SAFE instead, and that is saved
-     here and now, or the next load would try the same tier again. The
-     constructor tells a player who had picked the tier; one who was given it
-     is told nothing. A key marked untried is the game's own reload, and the
-     trial starts again. */
+     graphics device: the load goes to TIER_SAFE instead. The constructor
+     tells a player who had picked the tier; one who was given it is told
+     nothing. A key marked untried is a page that was left with nothing
+     wrong on it, and the trial starts again.
+
+     A tier that never drew its frames, or lost the device twice running, is
+     off, and that is saved here and now, or the next load would try the
+     same tier again. A FIRST lost device is not saved (see TIER_FELL): what
+     storage holds is left alone, and the key is written again to say the
+     tier is owed a second chance. The load that finds that puts the tier
+     back, on trial, as the player's own or the game's as it was. It does so
+     whether storage still holds the tier or holds TIER_SAFE as the game's
+     pick, which is what a setting saved in the load between leaves there.
+     A player who picked a tier in that load has no such key: commitTier
+     wrote over it. */
   var trial = tierTrialRead();
   if (trial) {
     tierTrialWrite(null);
     var parts = trial.split(' ');
-    if (parts[0] === s.quality && TIERS[s.quality].heavy) {
-      if (parts[1] === 'untried') {
-        tierTrialWrite(s.quality);
+    var named = TIERS.hasOwnProperty(parts[0]) && TIERS[parts[0]].heavy ? parts[0] : null;
+    if (named && parts[1] === 'again') {
+      if (s.quality === named || (s.quality === TIER_SAFE && !s.tierChosen)) {
+        s.quality = named;
+        s.tierChosen = parts[2] === 'chosen';
+        tierTrialWrite(named);
         this.trialLeft = TIER_TRIAL_FRAMES;
+        this.tierAgain = true;
+        write = true;
+      }
+    } else if (named && named === s.quality) {
+      if (parts[1] === 'untried') {
+        tierTrialWrite(named);
+        this.trialLeft = TIER_TRIAL_FRAMES;
+      } else if (parts[1] === 'lost' && parts[2] !== 'twice') {
+        if (s.tierChosen) this.tierFell = 'lost';
+        tierTrialWrite(named + ' again' + (s.tierChosen ? ' chosen' : ''));
+        this.tierAgain = true;
+        s.quality = TIER_SAFE;
+        s.tierChosen = false;
       } else {
         if (s.tierChosen) this.tierFell = parts[1] === 'lost' ? 'lost' : 'failed';
         s.quality = TIER_SAFE;
@@ -3431,11 +3480,13 @@ Game.prototype.watchPace = function (gapMs) {
 };
 
 /* The graphics device has gone (boot's onDeviceLost). If a heavy tier was on,
-   the next load must not go straight back into it. */
+   the next load must not go straight back into it. Whether this is the
+   first loss or the second running is for the load that finds the key to
+   act on (see TIER_FELL). */
 Game.prototype.tierLost = function () {
   this.tierBroke = true;
   if (this.tierTimer) { clearTimeout(this.tierTimer); this.tierTimer = null; }
-  if (this.tierOn && TIERS[this.tierOn].heavy) tierTrialWrite(this.tierOn + ' lost');
+  if (this.tierOn && TIERS[this.tierOn].heavy) tierTrialWrite(this.tierOn + (this.tierAgain ? ' lost twice' : ' lost'));
 };
 
 /* THE PLAYER LEAVES THE PAGE (boot's pagehide: the tab is closed, reloaded

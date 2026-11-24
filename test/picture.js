@@ -770,20 +770,53 @@ function tamper(o) {
       JSON.stringify(fell) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
 
     /* The graphics device goes while Ultra is on: the load after it must not
-       walk straight back into Ultra. */
+       walk straight back into Ultra. It comes up in Modern and says why.
+       BUT ONE LOSS DOES NOT TURN ULTRA OFF FOR GOOD: devices are lost for
+       reasons that have nothing to do with the tier. What storage holds is
+       left alone, an Ultra the player picked, and the key says a second
+       chance is owed. The player then changes a setting, which writes the
+       settings out whole with Modern in them; that must not cost the
+       chance. The load after is in Ultra again, the player's own, on trial,
+       with nothing said.
+
+       LOST AGAIN IN THAT LOAD, it is lost twice running, and Ultra is off:
+       Modern, saved as the game's pick, the player told why, and the load
+       after that is Modern still with nothing left to say. */
     await bootWithSettings({ quality: 'ultra' });
     const beforeLoss = await tierState();
     await loseContext();
     const lostKey = await page.evaluate((key) => localStorage.getItem(key), TRIAL_KEY);
     const lostPanel = await isVisible('#fallback');
-    await page.reload({ waitUntil: 'load', timeout: LOAD_MS });
-    await settled();
-    const afterLoss = await tierState();
+    await reloaded();
+    const afterLoss = await tierState(), afterLossSaved = await storedSettings();
+    await page.evaluate(() => { const g = window.MCL64; g.settings.musicVol = 3; g.saveSettings(); });
+    const resaved = await storedSettings();
+    await reloaded();
+    const chance = await tierState(), chanceSaved = await storedSettings();
+    const chanceTried = (await writes()).some((w) => !w.game && w.key === TRIAL_KEY && w.value === 'ultra');
     check(beforeLoss.on === 'ultra' && lostKey === 'ultra lost' && lostPanel && afterLoss.quality === 'modern' && afterLoss.on === 'modern' &&
-      afterLoss.trial === null && afterLoss.stored === 'modern' && /DEVICE WAS LOST/.test(afterLoss.notice) && uncaught.length === 0,
-      'a ' + (WEBGPU ? 'device' : 'context') + ' lost in Ultra leaves the key, and the reload comes up in Modern and says why',
+      afterLoss.trial === 'ultra again chosen' && afterLossSaved.quality === 'ultra' && afterLossSaved.tierChosen === true &&
+      /DEVICE WAS LOST/.test(afterLoss.notice) && resaved.quality === 'modern' && resaved.musicVol === 3 &&
+      chance.quality === 'ultra' && chance.on === 'ultra' && chance.shadows === 'cascades' && chanceTried &&
+      !chance.notice && chanceSaved.quality === 'ultra' && chanceSaved.tierChosen === true && chanceSaved.musicVol === 3 && uncaught.length === 0,
+      'a ' + (WEBGPU ? 'device' : 'context') + ' lost in Ultra: the reload comes up in Modern and says why, and the load after it tries Ultra again, on trial',
       'key after the loss ' + JSON.stringify(lostKey) + ', panel ' + lostPanel + ', after the reload ' + JSON.stringify(afterLoss) +
+      ', storage ' + JSON.stringify(afterLossSaved) + ', after a setting was saved ' + JSON.stringify(resaved) + '; the load after ' +
+      JSON.stringify(chance) + ', put on trial before the world was built ' + chanceTried + ', storage ' + JSON.stringify(chanceSaved) +
       ', uncaught ' + JSON.stringify(uncaught));
+
+    await loseContext();
+    const lostTwiceKey = await page.evaluate((key) => localStorage.getItem(key), TRIAL_KEY);
+    await reloaded();
+    const off = await tierState(), offSaved = await storedSettings();
+    await reloaded();
+    const offStill = await tierState();
+    check(lostTwiceKey === 'ultra lost twice' && off.quality === 'modern' && off.on === 'modern' && off.trial === null &&
+      offSaved.quality === 'modern' && offSaved.tierChosen === false && /DEVICE WAS LOST/.test(off.notice) &&
+      offStill.quality === 'modern' && offStill.on === 'modern' && offStill.trial === null && !offStill.notice && uncaught.length === 0,
+      'lost again in the load that was its second chance, Ultra is off: Modern, saved, the player told why, and it stays off',
+      'key after the second loss ' + JSON.stringify(lostTwiceKey) + ', after the reload ' + JSON.stringify(off) + ', storage ' +
+      JSON.stringify(offSaved) + '; the load after ' + JSON.stringify(offStill) + ', uncaught ' + JSON.stringify(uncaught));
 
     /* The game's own reload is not a failure. Ultra is clicked to and a
        circuit picked before the clicks have settled: the page reloads with
