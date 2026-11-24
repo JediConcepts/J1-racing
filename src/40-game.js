@@ -182,6 +182,7 @@ Game.prototype.buildRenderer = function (renderer) {
   this.renderer.toneMapping = THREE.NoToneMapping;
   this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
   this.renderer.setPixelRatio(window.devicePixelRatio || 1);
+  /* a first value only: applyHaze sets the clear colour for the tier */
   this.renderer.setClearColor(SKY_HAZE, 1);
   this.renderer.shadowMap.enabled = true;
   this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -291,8 +292,77 @@ Game.prototype.buildEnvironment = function (scene) {
   }
 };
 
+/* THE HAZE COLOUR, IN THE FORM THIS ENGINE WANTS IT.
+
+   SKY_HAZE is a colour as it should look on the screen. r128 mixed fog in
+   AFTER tone mapping and encoding, so a fully fogged surface read as that hex
+   in either tier. 0.187 mixes fog in linear light, BEFORE the output step, so
+   what is handed over has to be the linear colour that the output step turns
+   back into the hex:
+
+     Retro   has no tone mapping, so it is the plain sRGB to linear conversion.
+     Modern  the output step is ACES at the tier's exposure and then the
+             encode, so the hex is run backwards through both (see
+             hazeUnderToneMapping). The plain conversion reads 224,208,183
+             there, where r128 read the hex itself, 233,195,154.
+
+   This is exact only where a surface is FULLY fogged. Part way into the haze
+   the two engines mix in different spaces (r128 in encoded values, this one
+   in linear light), and a dark surface comes out paler than it did: the
+   stands at Indianapolis are the plainest case. No choice of colour puts
+   that right.
+
+   The clear colour is the same hex, handed over the same way, so it gets the
+   same treatment. The sky dome covers it in every frame the game draws.
+
+   Called by applyQuality, because the answer depends on the tier. */
+Game.prototype.applyHaze = function (modern) {
+  var c = modern ? hazeUnderToneMapping(SKY_HAZE, this.renderer.toneMappingExposure) : srgb(SKY_HAZE);
+  this.scene.fog.color.copy(c);
+  this.renderer.setClearColor(c, 1);
+};
+
+/* The linear colour that ACES Filmic tone mapping at `exposure`, followed by
+   the sRGB encode, turns into `hex`. It is the engine's ACESFilmicToneMapping
+   run backwards, step for step:
+
+     forward   c * exposure / 0.6  ->  input matrix  ->  the curve
+               (v*(v + 0.0245786) - 0.000090537) / (v*(0.983729*v + 0.4329510) + 0.238081)
+               ->  output matrix
+     backward  inverse output matrix  ->  the curve solved for v (a quadratic,
+               the positive root)  ->  inverse input matrix  ->  * 0.6 / exposure
+
+   The matrices and the curve's constants are the ones in three.js, the same
+   in r128 and in 0.187. A Matrix4 holds each 3 x 3 so the engine can invert
+   it. Good for any colour the tone mapper can reach without clamping, which
+   the haze is. */
+function hazeUnderToneMapping(hex, exposure) {
+  var acesIn = new THREE.Matrix4().set(
+    0.59719, 0.35458, 0.04823, 0,
+    0.07600, 0.90834, 0.01566, 0,
+    0.02840, 0.13383, 0.83777, 0,
+    0, 0, 0, 1);
+  var acesOut = new THREE.Matrix4().set(
+    1.60475, -0.53108, -0.07367, 0,
+    -0.10208, 1.10813, -0.00605, 0,
+    -0.00327, -0.07276, 1.07602, 0,
+    0, 0, 0, 1);
+  function uncurve(y) {
+    var a = 1 - 0.983729 * y;
+    var b = 0.0245786 - 0.4329510 * y;
+    var c = -(0.000090537 + 0.238081 * y);
+    return (-b + Math.sqrt(b * b - 4 * a * c)) / (2 * a);
+  }
+  var want = srgb(hex);
+  var v = new THREE.Vector3(want.r, want.g, want.b).applyMatrix4(acesOut.invert());
+  v.set(uncurve(v.x), uncurve(v.y), uncurve(v.z));
+  v.applyMatrix4(acesIn.invert()).multiplyScalar(0.6 / exposure);
+  return new THREE.Color(v.x, v.y, v.z);
+}
+
 Game.prototype.buildWorld = function () {
   var scene = this.scene = new THREE.Scene();
+  /* the colour here is a first value only: applyHaze sets it for the tier */
   scene.fog = new THREE.Fog(SKY_HAZE, 150, 980);
 
   this.camera = new THREE.PerspectiveCamera(64, 4 / 3, 0.6, 3400);
@@ -2621,6 +2691,7 @@ Game.prototype.applyQuality = function () {
     if (this.cars[ci].shadow) this.cars[ci].shadow.visible = !modern;
   }
 
+  this.applyHaze(modern);
   this.buildTarget(modern);
   this.resize();
 };

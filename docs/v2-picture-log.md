@@ -327,6 +327,7 @@ The console of the stills page was watched on every capture (a preloaded script 
 | A2 | `v0.114 dev c33c599*` | 6.0 to 29.9 | 28 | colour management off, as the first statement of the game. Lit surfaces come back up: nothing is converted twice any more |
 | A3 | `v0.115 dev 20abfe9*` | 11.6 to 35.4 | 28 | canvas textures and the environment canvas flagged sRGB. The means go UP: the textures stop reading too bright, and the lights are still short by a factor of pi (step A4) |
 | A4 | `v0.116 dev c9cd75b*` | 1.7 to 14.0 | 10 | the hemisphere, directional and ambient lights multiplied by pi, which r128 did inside its shaders |
+| A5 | `v0.117 dev 11a8615*` | 1.2 to 8.4 | 6 | the haze colour handed over as the linear colour the output step turns back into the hex: the plain conversion for Retro, run backwards through ACES for Modern |
 
 ### A1: the bundle, and a game that draws through it
 
@@ -380,3 +381,75 @@ Checked by measurement, the spike's way: maps and vertex colours switched off on
 | lit ground, far | 251,251,251 | 251,251,251 | 252,253,253 | 252,252,253 |
 
 Over all 576 cells, with fog also off: mean difference 0.23 of a level in Retro (worst cell 9.0) and 0.23 in Modern (worst cell 3.2). With the materials white the lit ground is near the top of the range, so this shows the lights are right and says little about dark surfaces. (The cells differ from the spike's 245,245,246 and 211,221,229 because the spike read other cells in a headed window; the point is that the two engines agree, cell for cell.)
+
+### A5: fog
+
+r128 mixed fog in after tone mapping and encoding, so a fully fogged surface read as the haze hex (`SKY_HAZE`, `0xe9c39a`) in either tier. 0.187 mixes it in linear light before the output step. `applyHaze`, called from `applyQuality`, now sets the fog colour for the tier.
+
+Retro has no tone mapping, so the colour is `srgb(SKY_HAZE)`, the plain conversion. That is the only candidate and it is exact where a surface is fully fogged.
+
+Modern had two candidates, both measured on the 14 Modern stills (the Retro stills are the same in both runs, to the last digit):
+
+- (a) the plain linear conversion, as the spike had it. A fully fogged surface then reads 224,208,183 after ACES and the encode, where r128 read 233,195,154.
+- (b) the hex run backwards through the output step (the inverse of the engine's ACES at the exposure of 1.12, then of the encode), which gives the linear colour 0.947, 0.412, 0.192. A fully fogged surface reads 233,195,154 again.
+
+| Modern, 14 stills | (a) plain linear | (b) backwards through ACES |
+|---|---|---|
+| average of the channel means, R G B | 4.18, 3.55, 4.42 | 4.48, 2.89, 3.21 |
+| average over all three channels | 4.05 | 3.52 |
+| range of channel means | 1.9 to 7.4 | 1.2 to 8.4 |
+| stills over 6 | 5 | 4 |
+| pixels off by more than 24, average | 7.83% | 6.28% |
+| all 28 stills: range, over 6 | 1.4 to 7.4, 7 | 1.2 to 8.4, 6 |
+
+(b) is kept: the lower means on the Modern stills, which is the rule the brief set. It is not better on every figure. Green and blue come down a great deal on the far views, red goes up a little (Monaco `high` 7.4 to 8.4, Indianapolis `high` 6.2 to 7.1), and so the highest single figure in the set is higher than with (a). (a) is the spike's result exactly: 1.4 to 7.4, seven over 6, the same seven stills.
+
+| still | A4, R G B | (a), R G B | (b), R G B |
+|---|---|---|---|
+| brands-hatch-v1.modern.chase | 3.2, 2.8, 5.0 | 3.1, 2.4, 4.1 | 3.2, 2.1, 3.5 |
+| brands-hatch-v1.modern.high | 6.5, 7.4, 14.0 | 5.9, 4.1, 7.3 | 6.8, 1.4, 2.2 |
+| indianapolis-v1.modern.chase | 6.4, 5.6, 5.0 | 6.4, 5.5, 4.9 | 6.5, 5.5, 4.8 |
+| indianapolis-v1.modern.high | 6.7, 7.8, 11.2 | 6.2, 5.2, 6.4 | 7.1, 3.1, 2.7 |
+| monaco-gp-v1.modern.apex | 3.7, 3.7, 4.3 | 3.6, 3.6, 4.0 | 3.7, 3.5, 3.8 |
+| monaco-gp-v1.modern.chase | 5.1, 5.0, 5.4 | 5.0, 4.7, 4.8 | 5.2, 4.4, 4.4 |
+| monaco-gp-v1.modern.grid | 2.8, 2.9, 3.0 | 2.8, 2.9, 3.0 | 2.8, 2.8, 2.9 |
+| monaco-gp-v1.modern.high | 7.9, 7.2, 8.1 | 7.4, 5.7, 5.5 | 8.4, 4.5, 3.9 |
+| silverstone-v1.modern.apex | 1.9, 2.2, 2.9 | 1.9, 2.1, 2.6 | 2.0, 1.9, 2.3 |
+| silverstone-v1.modern.chase | 2.7, 2.3, 3.7 | 2.6, 2.2, 3.4 | 2.7, 2.1, 3.2 |
+| silverstone-v1.modern.grid | 3.3, 3.1, 3.5 | 3.2, 3.0, 3.3 | 3.3, 2.9, 3.1 |
+| silverstone-v1.modern.helmet | 2.6, 3.0, 3.4 | 2.6, 2.9, 3.2 | 2.6, 2.9, 3.1 |
+| silverstone-v1.modern.high | 5.5, 5.7, 11.4 | 5.0, 3.2, 6.2 | 5.6, 1.2, 2.3 |
+| silverstone-v1.modern.stands | 2.9, 2.6, 3.7 | 2.8, 2.3, 3.1 | 3.0, 2.0, 2.7 |
+
+The Retro stills, before and after (the plain conversion):
+
+| still | A4, R G B | A5, R G B |
+|---|---|---|
+| brands-hatch-v1.retro.chase | 2.6, 2.4, 3.7 | 2.3, 1.9, 2.8 |
+| brands-hatch-v1.retro.high | 5.3, 6.4, 9.4 | 3.2, 1.6, 2.0 |
+| indianapolis-v1.retro.chase | 6.7, 5.7, 5.1 | 6.7, 5.6, 5.0 |
+| indianapolis-v1.retro.high | 7.0, 7.4, 8.5 | 5.5, 3.9, 3.1 |
+| monaco-gp-v1.retro.apex | 4.0, 3.7, 4.2 | 3.9, 3.6, 4.0 |
+| monaco-gp-v1.retro.chase | 5.0, 4.8, 5.1 | 4.8, 4.5, 4.6 |
+| monaco-gp-v1.retro.grid | 3.8, 3.5, 3.6 | 3.8, 3.5, 3.5 |
+| monaco-gp-v1.retro.high | 7.4, 6.5, 6.7 | 6.8, 4.8, 4.3 |
+| silverstone-v1.retro.apex | 1.7, 1.9, 2.5 | 1.6, 1.7, 2.1 |
+| silverstone-v1.retro.chase | 2.0, 2.0, 2.9 | 1.9, 1.8, 2.6 |
+| silverstone-v1.retro.grid | 3.1, 2.9, 3.1 | 3.0, 2.7, 2.8 |
+| silverstone-v1.retro.helmet | 2.2, 2.5, 3.0 | 2.2, 2.4, 2.9 |
+| silverstone-v1.retro.high | 4.4, 5.0, 7.6 | 2.8, 1.4, 2.0 |
+| silverstone-v1.retro.stands | 3.0, 2.7, 3.5 | 2.8, 2.2, 2.8 |
+
+Checked in the running game, headless, Silverstone, both engines side by side, a 16 x 16 block of the canvas read back:
+
+| case | Retro, r128 | Retro, 0.187 | Modern, r128 | Modern, 0.187 |
+|---|---|---|---|---|
+| fully fogged ground (fog pulled in to the camera), lower centre | 224,190,150 | 224,190,150 | 242,196,146 | 242,196,146 |
+| the same, near the centre | 232,196,155 | 232,196,155 | 246,199,148 | 246,199,148 |
+| the clear colour (sky dome hidden) | 213,179,142 | 213,179,142 | 237,191,142 | 237,191,142 |
+
+(The cells are not the hex itself because the grade and the vignette of the post pass come after, the same on both engines.) The clear colour is the same hex handed over the same way, so `applyHaze` sets it too. It is never seen in play: the sky dome covers it.
+
+A tier change at run time still gives the same stills as loading in the tier, byte for byte, in both directions at Monaco and Silverstone, so the fog colour follows the tier.
+
+What this step cannot close. It is exact only where a surface is fully fogged. Part way into the haze, r128 mixed encoded values and 0.187 mixes linear light, and a dark surface half way in comes out much paler than it did. The stands at Indianapolis are the plainest case (dark seats, 150 to 400 m off): the chase view there is 6.7 in Retro and 6.5 in Modern, did not move at this step, and no fog colour moves it. See "What is left over 6" at the end of this stage.
