@@ -451,6 +451,11 @@ Game.prototype.buildWorld = function () {
   /* after everything above is in the scene, so the sweep sees all of it;
      the cars come later and are done one by one in buildGrid */
   this.ownEnvironment(scene);
+  /* a second sweep, here for the same reason: every canvas texture in the
+     scene is turned into light in the shader, after the GPU has smoothed it
+     (see texFromCanvas and decodeCanvasMaps in 10-core.js). The cars carry
+     no such texture. */
+  decodeCanvasMaps(scene);
 
   /* minimap path, precomputed once in normalised space */
   var i, minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;

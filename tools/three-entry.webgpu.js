@@ -117,7 +117,14 @@ export {
  *    Fn, clamp, dot, float, mix, renderOutput, texture, uniform, uv, vec2,
  *    vec3 and vec4. It does not use If, floor, mod or pass: the arithmetic
  *    went to node methods, and the scene is drawn into a target the game
- *    owns. Those four are still exported and nothing reads them. */
+ *    owns. Those four are still exported and nothing reads them.
+ *
+ *    Two names are here for the canvas textures and not for the post pass
+ *    (decodeCanvasMaps in src/10-core.js): `reference`, which reads a
+ *    property of the mesh being drawn, and `sRGBTransferEOTF`, the engine's
+ *    own conversion from sRGB values to light. r128 made that conversion in
+ *    the shader after the GPU had smoothed the texture, and the game does
+ *    so again. */
 import {
   Fn,
   If,
@@ -128,7 +135,9 @@ import {
   mix,
   mod,
   pass,
+  reference,
   renderOutput,
+  sRGBTransferEOTF,
   texture,
   uniform,
   uv,
@@ -147,7 +156,9 @@ export const TSL = {
   mix: mix,
   mod: mod,
   pass: pass,
+  reference: reference,
   renderOutput: renderOutput,
+  sRGBTransferEOTF: sRGBTransferEOTF,
   texture: texture,
   uniform: uniform,
   uv: uv,

@@ -224,12 +224,94 @@ function texFromCanvas(cv, repX, repY, nearest) {
   else { t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; }
   t.generateMipmaps = true;
   t.anisotropy = 1;
-  /* These canvases are painted in sRGB — that is what a 2D context gives you.
-     Flagging it lets the renderer decode to linear before lighting, which is
-     the half of colour management that happens on the way IN. Skip it and
-     every texture reads too bright and too contrasty under PBR. */
-  t.colorSpace = THREE.SRGBColorSpace;
+  /* NO COLOUR SPACE ON THE TEXTURE, ON PURPOSE.
+
+     These canvases are painted in sRGB, which is what a 2D context gives,
+     and the painted values have to be turned into light before the lighting
+     uses them. What matters is WHERE that happens. r128 stored the painted
+     values as they were (RGBA8), let the GPU build the mip chain from them
+     and smooth between texels and between mip levels on them, and turned
+     the smoothed sample into light in the shader. three.js 0.187, handed a
+     texture flagged sRGB, stores it in an sRGB format (SRGB8_ALPHA8 on the
+     fallback, rgba8unorm-srgb on WebGPU), and the GPU then turns every
+     texel into light BEFORE it smooths. The mean of the light is brighter
+     than the light of the mean, so every texture of strong contrast came
+     out lighter wherever its pattern ran together: the crowd in the far
+     stands by up to 42 levels, Monaco's buildings by up to 33.
+
+     So the texture is left with no colour space. That stores it as r128
+     stored it, and the GPU smooths the painted values as r128's did. The
+     mark below asks decodeCanvasMaps for the other half: the shader turns
+     the smoothed sample into light, where r128's shader did. A texture
+     made here and put on a material that decodeCanvasMaps never sees would
+     be lit as if its painted values were light, and read far too bright. */
+  t.userData.decodeInShader = true;
   return t;
+}
+
+/* THE OTHER HALF OF texFromCanvas: the shader turns the sample into light.
+
+   Every material under `root` whose map came from texFromCanvas is given
+   two nodes. Its colour becomes the material's colour times the smoothed
+   sample turned into light (the engine's own sRGBTransferEOTF, which is the
+   curve r128's shader used, constant for constant). Its opacity becomes the
+   material's opacity times the sample's alpha. That is what r128 computed,
+   in the order r128 computed it; the vertex colours, the alpha test and the
+   lighting follow as they did.
+
+   The renderer turns a MeshStandardMaterial or a MeshBasicMaterial into a
+   node material each time it builds a shader, by copying every property
+   across, which is how a node set on one of them comes to apply.
+
+   ONE PAIR OF NODES SERVES EVERY MATERIAL, and reads the map, the colour and
+   the opacity through the mesh that is being drawn (`material.map` of the
+   mesh, and so on). Both halves of that matter:
+
+   - The renderer shares one compiled shader between materials that look
+     alike to it, and it does not look inside a node. A node that held one
+     texture was tried: Monaco's quay was drawn with the road's texture,
+     and nothing on the console said so.
+   - The shadow pass draws every mesh with the renderer's own shadow
+     material and asks the mesh's material for the alpha of its colour node.
+     A reference that went through the material being drawn would find the
+     shadow material there, which has no map, and the shader would not
+     build. Through the mesh it finds the same material in every pass.
+
+   The sample's alpha goes on the opacity and the colour node's own alpha is
+   1, because the shadow pass multiplies the map's alpha in by itself. Left
+   on the colour it would be counted twice there, and a tree, which is cut
+   out by an alpha test, would cast a thinner outline than it shows.
+
+   Not served: a mesh that carries a list of materials, where `material.map`
+   cannot be read through the mesh. The game has none. One that turned up
+   with a canvas texture is an error here, not a pale texture later.
+
+   This lives beside texFromCanvas so the two halves are read together. It
+   needs THREE only when it is called. */
+var _canvasMapNodes = null;
+function decodeCanvasMaps(root) {
+  function marked(m) { return !!(m && m.map && m.map.userData.decodeInShader); }
+  if (!_canvasMapNodes) {
+    var T = THREE.TSL, texel = T.reference('material.map', 'texture');
+    _canvasMapNodes = {
+      color: T.vec4(T.sRGBTransferEOTF(texel.rgb).mul(T.reference('material.color', 'color')), 1),
+      opacity: T.reference('material.opacity', 'float').mul(texel.a)
+    };
+  }
+  root.traverse(function (o) {
+    var m = o.material;
+    if (!m) return;
+    if (m.length) {
+      for (var i = 0; i < m.length; i++) {
+        if (marked(m[i])) throw new Error('MCL-64: a mesh with a list of materials carries a canvas texture, which decodeCanvasMaps cannot serve.');
+      }
+      return;
+    }
+    if (marked(m) && !m.colorNode) {
+      m.colorNode = _canvasMapNodes.color;
+      m.opacityNode = _canvasMapNodes.opacity;
+    }
+  });
 }
 
 function noiseFill(ctx, w, h, base, amp, rnd, density) {
