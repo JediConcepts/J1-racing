@@ -96,9 +96,12 @@ var TIER_TRIAL_FRAMES = 60;
 
      'ultra'           being tried now. Found at load: it did not start.
      'ultra lost'      the graphics device was lost while it was on.
-     'ultra untried'   the game reloaded the page itself (a change of
-                       circuit) before the trial was over. Found at load: no
-                       failure, the trial starts again from the first frame.
+     'ultra untried'   the page was left before the trial was over, and
+                       nothing had gone wrong on it: the game reloaded it
+                       itself (a change of circuit), or the player closed
+                       or reloaded the tab (see leaveTier). Found at load:
+                       no failure, the trial starts again from the first
+                       frame.
 
    Storage that is blocked reads as no key and writes nothing, which is the
    game as it was before there was a trial. */
@@ -396,6 +399,10 @@ function Game(host, renderer) {
   this.tierTimer = null;
   this.trialLeft = 0;
   this.tierFell = null;
+  /* whether something has gone wrong on this page that the tier on the
+     screen may be to blame for: a lost graphics device, or an error nobody
+     caught (see leaveTier) */
+  this.tierBroke = false;
   /* the running mean of the frame gap in a heavy tier, how long it has
      stood over the limit, both in milliseconds, how many gaps too long to
      be a frame have come in a row, and whether this load has already
@@ -3426,8 +3433,47 @@ Game.prototype.watchPace = function (gapMs) {
 /* The graphics device has gone (boot's onDeviceLost). If a heavy tier was on,
    the next load must not go straight back into it. */
 Game.prototype.tierLost = function () {
+  this.tierBroke = true;
   if (this.tierTimer) { clearTimeout(this.tierTimer); this.tierTimer = null; }
   if (this.tierOn && TIERS[this.tierOn].heavy) tierTrialWrite(this.tierOn + ' lost');
+};
+
+/* THE PLAYER LEAVES THE PAGE (boot's pagehide: the tab is closed, reloaded
+   or sent somewhere else) while a heavy tier is still on trial. That is not
+   a failure. Read as one, it costs every new player who looks and leaves
+   inside the first 60 frames the tier they were given: Ultra is everyone's
+   default, and the next visit would come up in TIER_SAFE without a word.
+   So the tier is marked untried, as carryTier marks it, and the load that
+   follows starts its trial again from the first frame.
+
+   Only a page on which nothing went wrong may say so. One that lost its
+   graphics device, or had an error nobody caught, leaves the key as it
+   stands: something did fail there, and the tier may be why. And a tab
+   the system kills gets no pagehide at all, so a tier that takes its tab
+   down with it is caught as before.
+
+   A tier that was clicked to and not yet built is dropped, on any page.
+   Its timer can fire while the page waits to be replaced (see carryTier),
+   and it was never saved, so what is saved stays as it was. The button
+   goes back to the tier on the screen, for a page the browser keeps and
+   brings back. */
+Game.prototype.leaveTier = function () {
+  if (this.tierTimer) {
+    clearTimeout(this.tierTimer);
+    this.tierTimer = null;
+    this.settings.quality = this.tierOn;
+    this.applySettings();
+  }
+  if (this.tierBroke || !(this.trialLeft > 0)) return;
+  tierTrialWrite(TIERS[this.tierOn].heavy ? this.tierOn + ' untried' : null);
+};
+
+/* The browser kept the page that was left and has brought it back (boot's
+   pageshow). Its trial carries on where it stopped, so the key says once
+   more that the tier is being tried now. */
+Game.prototype.returnTier = function () {
+  if (this.tierBroke || !(this.trialLeft > 0) || !TIERS[this.tierOn].heavy) return;
+  tierTrialWrite(this.tierOn);
 };
 
 /* The game is about to reload the page itself. A tier that is clicked to
@@ -4048,6 +4094,15 @@ Game.prototype.bench = function (opts) {
         });
       });
     }
+
+    /* A PAGE LEFT EARLY IS NOT A TIER THAT FAILED (see leaveTier). The two
+       listeners for errors are what lets a page say nothing went wrong on
+       it: an exception nobody caught, and a promise that was rejected with
+       nobody waiting on it. */
+    window.addEventListener('error', function () { game.tierBroke = true; });
+    window.addEventListener('unhandledrejection', function () { game.tierBroke = true; });
+    window.addEventListener('pagehide', function () { game.leaveTier(); });
+    window.addEventListener('pageshow', function (e) { if (e.persisted) game.returnTier(); });
 
     var last = performance.now();
     var acc = 0;

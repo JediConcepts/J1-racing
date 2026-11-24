@@ -133,6 +133,28 @@ function tamper(o) {
       }
     });
   }
+  if (o.holdAfter) {
+    /* The game is held (its own photoHold, which stops the frame loop
+       before it draws or counts) once it has drawn this many frames, so a
+       check can find a page a known number of frames into its trial on any
+       machine. boot assigns window.MCL64 before the first frame is drawn,
+       and that is where the count is hung on it. */
+    let game;
+    Object.defineProperty(window, 'MCL64', {
+      configurable: true, enumerable: true,
+      get() { return game; },
+      set(v) {
+        game = v;
+        if (!v || !v.countFrame) return;
+        const count = v.countFrame;
+        let drawn = 0;
+        v.countFrame = function () {
+          count.apply(this, arguments);
+          if (++drawn >= o.holdAfter) this.photoHold = true;
+        };
+      }
+    });
+  }
   if (o.failInit) {
     /* The bundle is `var THREE = ...` in a classic script, so it lands on a
        property of window that is already there, through this setter. That
@@ -174,14 +196,16 @@ function tamper(o) {
     context = await browser.newContext({
       viewport: VIEWPORT, deviceScaleFactor: scale || 1, reducedMotion: 'no-preference', hasTouch: !!(more && more.touch)
     });
-    await context.addInitScript(tamper, opts || {});
+    await context.addInitScript(tamper, Object.assign({}, opts, more && more.holdAfter ? { holdAfter: more.holdAfter } : null));
     /* `saved` is what a player's browser would hold from an earlier visit:
        it is in storage before the page's first script reads it. It is put
        there once, on the first load of the context, so that a reload later
        in the same context finds what the game itself left. `more.trial` is
        the same for the key a tier on trial leaves (TIER_TRIAL_KEY in
        src/40-game.js). `more.touch` makes the browser one with a touch
-       screen, which is what the game's touchLikely() asks about. */
+       screen, which is what the game's touchLikely() asks about.
+       `more.holdAfter` holds every load of the context once it has drawn
+       that many frames (see tamper). */
     const held = { [SETTINGS_KEY]: saved ? JSON.stringify(saved) : null, [TRIAL_KEY]: (more && more.trial) || null };
     await context.addInitScript((h) => {
       if (!sessionStorage.getItem('picture.seeded')) {
@@ -532,6 +556,57 @@ function tamper(o) {
       'a first load that died in the default Ultra is followed by one in Modern, saved, with nothing said',
       'nothing saved: ' + JSON.stringify(died) + ', storage ' + JSON.stringify(diedSaved) + '; the default saved: ' + JSON.stringify(died2) +
       ', storage ' + JSON.stringify(died2Saved) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+
+    /* LEAVING EARLY IS NOT A FAILURE. A new player's page is reloaded
+       when it has drawn 3 of the 60 frames of its trial. The key is still
+       there, and until 24 Nov 2026 the next load took it for an Ultra that
+       had died: Modern, saved, for every first visit that was cut short.
+       The page being left now marks the tier untried (Game.leaveTier, on
+       pagehide), so the load that follows is in Ultra again, as the game's
+       pick, with its trial started afresh.
+
+       BUT ONLY A PAGE NOTHING WENT WRONG ON may say that. The same again
+       with the context lost inside the trial, and again with an error
+       nobody caught: each of those pages is reloaded just the same, and the
+       load that follows must NOT be in Ultra. Nobody picked the tier, so
+       nothing is said. */
+    const trialLeft = () => page.evaluate(() => window.MCL64.trialLeft);
+    const reloaded = async () => {
+      await page.reload({ waitUntil: 'load', timeout: LOAD_MS });
+      await settled();
+      await page.evaluate(() => { window.MCL64.paceDone = true; });
+    };
+    await bootFresh({ holdAfter: 3 });
+    await page.waitForFunction(() => window.MCL64.photoHold, null, { timeout: LOAD_MS });
+    const early = await tierState(), earlyLeft = await trialLeft();
+    await reloaded();
+    await page.waitForFunction(() => window.MCL64.photoHold, null, { timeout: LOAD_MS });
+    const cameBack = await tierState(), cameBackLeft = await trialLeft(), cameBackSaved = await storedSettings();
+    check(early.on === 'ultra' && early.trial === 'ultra' && earlyLeft === 57 && cameBack.quality === 'ultra' && cameBack.on === 'ultra' &&
+      cameBack.shadows === 'cascades' && cameBack.trial === 'ultra' && cameBackLeft === 57 && !cameBack.notice &&
+      cameBackSaved.quality === 'ultra' && cameBackSaved.tierChosen === false && consoleErrors.length === 0 && uncaught.length === 0,
+      'a new player\'s page left 3 frames into its trial is not an Ultra that failed: the next load is in Ultra again, on trial',
+      'left with ' + earlyLeft + ' frames to draw, ' + JSON.stringify(early) + '; the load after, with ' + cameBackLeft + ' to draw, ' +
+      JSON.stringify(cameBack) + ', storage ' + JSON.stringify(cameBackSaved) + ', console errors ' + JSON.stringify(consoleErrors) +
+      ', uncaught ' + JSON.stringify(uncaught));
+
+    await loseContext();
+    const lostEarlyKey = await page.evaluate((key) => localStorage.getItem(key), TRIAL_KEY);
+    await reloaded();
+    const lostEarly = await tierState();
+    await bootFresh({ holdAfter: 3 });
+    await page.waitForFunction(() => window.MCL64.photoHold, null, { timeout: LOAD_MS });
+    await page.evaluate(() => { setTimeout(() => { throw new Error('test/picture.js threw this inside the trial'); }, 0); });
+    await page.waitForTimeout(200);
+    const threw = uncaught.slice(), threwLeft = await trialLeft();
+    await reloaded();
+    const threwEarly = await tierState();
+    check(/^ultra lost/.test(lostEarlyKey) && lostEarly.quality === 'modern' && lostEarly.on === 'modern' && !lostEarly.notice &&
+      threw.length === 1 && /inside the trial/.test(threw[0]) && threwLeft === 57 && threwEarly.quality === 'modern' &&
+      threwEarly.on === 'modern' && threwEarly.stored === 'modern' && threwEarly.trial === null && !threwEarly.notice,
+      'but a page that lost its ' + (WEBGPU ? 'device' : 'context') + ' inside the trial, or had an error nobody caught, is one: the next load is not in Ultra',
+      'key after the loss ' + JSON.stringify(lostEarlyKey) + ', the load after ' + JSON.stringify(lostEarly) + '; uncaught on the other page ' +
+      JSON.stringify(threw) + ' with ' + threwLeft + ' frames to draw, the load after ' + JSON.stringify(threwEarly));
 
     /* SAVED BEFORE THE DEFAULTS CHANGED, and picked: Retro was never the
        default, so a saved Retro is the player's own. It stays, and so does a
