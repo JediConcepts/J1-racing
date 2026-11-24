@@ -3206,31 +3206,64 @@ Game.prototype.bench = function (opts) {
   var host = document.getElementById('screen');
   var fallback = document.getElementById('fallback');
 
-  function fail(msg) {
+  /* Every way the picture can fail ends here: the panel, with a sentence a
+     player can act on. `lead` replaces the panel's own first line, which
+     says the game could not start, for the one case where it had started. */
+  function fail(msg, lead) {
     if (fallback) {
       fallback.style.display = 'flex';
       var d = document.getElementById('fallback-detail');
-      if (d) d.textContent = msg;
+      if (d) {
+        d.textContent = msg;
+        var first = d.parentNode && d.parentNode.firstChild;
+        if (lead && first && first.nodeType === 3) first.nodeValue = lead + ' ';
+      }
     }
   }
 
   if (!window.THREE) { fail('The 3D library did not load.'); return; }
 
-  /* probe WebGL before we build anything, so the failure is a message and
-     not a stack trace */
-  try {
-    var probe = document.createElement('canvas');
-    var gl = probe.getContext('webgl') || probe.getContext('experimental-webgl');
-    if (!gl) { fail('WebGL is unavailable in this browser. Try enabling hardware acceleration.'); return; }
-  } catch (e) {
-    fail('WebGL could not be initialised: ' + e.message);
-    return;
-  }
-
   /* `?renderer=webgl` in the address forces the WebGL 2 backend, for testing
      the fallback on a machine that has WebGPU. Left alone, the renderer picks
      WebGPU where the browser has it and the fallback where it does not. */
   var forceWebGL = /[?&]renderer=webgl(&|$)/.test(location.search || '');
+
+  /* Probe before anything is built, so the failure is a message and not a
+     stack trace. The game draws through WebGPU, or through WebGL 2 where
+     there is none, so WebGL 2 is asked for only when it is going to be
+     needed: the browser has no WebGPU, or the address forces the fallback. A
+     browser that has WebGPU is not asked, because a context made here would
+     only be thrown away.
+
+     A browser can have navigator.gpu and still hand out no adapter (a GPU on
+     its block list, or headless Chromium). The renderer finds that out
+     inside init() and tries WebGL 2 by itself; if that is missing as well,
+     init() rejects and the message comes from `cannotStart` below. */
+  var hasWebGPU = typeof navigator !== 'undefined' && !!navigator.gpu;
+  if (forceWebGL || !hasWebGPU) {
+    try {
+      var probe = document.createElement('canvas');
+      if (!probe.getContext('webgl2')) {
+        fail(hasWebGPU
+          ? 'WebGL 2 is unavailable in this browser. Try enabling hardware acceleration.'
+          : 'This browser has neither WebGPU nor WebGL 2. Try enabling hardware acceleration, or a newer browser.');
+        return;
+      }
+    } catch (e) {
+      fail('WebGL 2 could not be initialised: ' + e.message);
+      return;
+    }
+  }
+
+  /* The engine's own words for a renderer that will not start are a line of
+     its internals (with no WebGL 2 it is "Cannot read properties of null").
+     They are kept, in brackets, because they are what a bug report needs,
+     behind a sentence that says what happened. */
+  function cannotStart(err) {
+    fail('Neither WebGPU nor WebGL 2 could be started on this device. Try enabling hardware acceleration, or a newer browser. ('
+      + (err && err.message ? err.message : String(err)) + ')');
+    if (window.console) console.error(err);
+  }
 
   /* The renderer cannot be used until init() has settled, and Game builds its
      whole world in its constructor, so the order is: make the renderer, wait,
@@ -3239,14 +3272,10 @@ Game.prototype.bench = function (opts) {
   try {
     renderer = makeRenderer(forceWebGL);
   } catch (err0) {
-    fail(err0 && err0.message ? err0.message : String(err0));
-    if (window.console) console.error(err0);
+    cannotStart(err0);
     return;
   }
-  renderer.init().then(start, function (err1) {
-    fail(err1 && err1.message ? err1.message : String(err1));
-    if (window.console) console.error(err1);
-  });
+  renderer.init().then(start, cannotStart);
 
   function start() {
     var game;
@@ -3261,10 +3290,54 @@ Game.prototype.bench = function (opts) {
     var loading = document.getElementById('loading');
     if (loading) loading.style.display = 'none';
 
+    /* THE GPU CAN BE TAKEN AWAY MID RACE: the driver restarts, the laptop
+       changes graphics card, the browser reclaims a context it thinks is
+       idle. The engine then stops drawing and says so on the console and
+       nowhere else, which leaves the last frame, or a black canvas, with the
+       game still running underneath it. So a loss ends where every other
+       failure of the picture ends: at the panel, with the race paused where
+       it stood, the sound faded out and the frame loop stopped. Nothing is
+       recovered. A reload is, and the panel says so.
+
+       Two routes lead here, and both are needed. The engine calls
+       renderer.onDeviceLost for a lost WebGL context and for a WebGPU device
+       the system took away, but NOT for a device that was destroyed (it
+       drops that reason on purpose, because its own dispose() destroys the
+       device). A destroyed device stops the picture all the same, so the
+       device's own promise is watched too and sent down the same road. The
+       engine's handler is called first in either case: it is what makes
+       every later render() return at once. */
+    var gone = false;
+    var engineLost = renderer.onDeviceLost;
+    renderer.onDeviceLost = function (info) {
+      if (gone) return;
+      gone = true;
+      engineLost.call(renderer, info);
+      if (game.state === STATE.RACING || game.state === STATE.COUNTDOWN) game.paused = true;
+      /* `ready` off as well, so a key press cannot wake the sound again
+         over a picture that is not coming back */
+      if (game.audio.ready) {
+        game.audio.master.gain.setTargetAtTime(0, game.audio.ctx.currentTime, 0.2);
+        game.audio.ready = false;
+      }
+      fail('Reload the page to carry on. If it keeps happening, try enabling hardware acceleration, or a newer browser.',
+        'The graphics device was lost, and the picture has stopped.');
+    };
+    var device = renderer.backend && renderer.backend.device;
+    if (device && device.lost && device.lost.then) {
+      device.lost.then(function (info) {
+        renderer.onDeviceLost({
+          api: 'WebGPU', message: (info && info.message) || 'Unknown reason',
+          reason: (info && info.reason) || null, originalEvent: info
+        });
+      });
+    }
+
     var last = performance.now();
     var acc = 0;
 
     function frame(now) {
+      if (gone) return;
       requestAnimationFrame(frame);
       /* photo() holds the loop so its frame is the one on screen when the
          stills tool captures it. Never set in normal play. */
@@ -3293,7 +3366,7 @@ Game.prototype.bench = function (opts) {
     var resizeTimer = null;
     function scheduleResize(delay) {
       if (resizeTimer) clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(function () { game.resize(); }, delay);
+      resizeTimer = setTimeout(function () { if (!gone) game.resize(); }, delay);
     }
     window.addEventListener('resize', function () { scheduleResize(60); });
     /* Mobile Safari reports stale dimensions immediately after a rotation, so
