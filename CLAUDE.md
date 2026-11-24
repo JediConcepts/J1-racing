@@ -169,6 +169,24 @@ by leaking, with no error:
    sums in the engine's `SkyMesh`. It gives the haze and the lights their
    colour. A release that changes the sky's sums needs the copy changed with
    it, and nothing tests that the two agree.
+10. The shadow pass draws with the shadow camera's own layers when they are
+    anything but plain layer 0. `layOutCascades` and `sortCasters` in
+    `src/33-shadows.js` use it to keep small casters out of the far cascades
+    at Monaco. If it stopped, the far cascades would draw everything, or
+    nothing.
+11. Four blend constants are written as numbers in `src/20-track.js`
+    (`BLEND_MULTIPLY`: 5, 100, 200, 202, for `CustomBlending`, `AddEquation`,
+    `ZeroFactor` and `SrcColorFactor`), because the bundle exports none of
+    the four names. Monaco's tunnel shade goes wrong with no error if a value
+    moves. Add the names to `tools/three-entry.webgpu.js` at the next bundle
+    rebuild and use them.
+12. A texture's own `repeat` is honoured on an `emissiveMap`. Monaco's lit
+    windows in `src/20-track.js` lean on it to line up with the painted ones.
+
+One dependency is on the scenery, not the engine: `TITLE_OPENING` in
+`src/40-game.js` places Monaco's opening camera to see the dusk sun through a
+gap between two towers. Move the sun (`TIME_OF_DAY_AT` in `src/32-sky.js`) or
+those buildings and the camera must be found again by looking.
 
 So after ANY change to `vendor/three.bundle.js`, a new release or only a new
 name in the entry, run all three of these before it is committed:
