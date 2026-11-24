@@ -326,6 +326,7 @@ The console of the stills page was watched on every capture (a preloaded script 
 | A1 | `v0.113 dev 1308d33*` | 21.4 to 84.8 | 28 | the bundle; `WebGPURenderer`; boot waits for `init()`; `RenderTarget`; the post pass as a node; the environment handed over directly. Colours wrong, as expected |
 | A2 | `v0.114 dev c33c599*` | 6.0 to 29.9 | 28 | colour management off, as the first statement of the game. Lit surfaces come back up: nothing is converted twice any more |
 | A3 | `v0.115 dev 20abfe9*` | 11.6 to 35.4 | 28 | canvas textures and the environment canvas flagged sRGB. The means go UP: the textures stop reading too bright, and the lights are still short by a factor of pi (step A4) |
+| A4 | `v0.116 dev c9cd75b*` | 1.7 to 14.0 | 10 | the hemisphere, directional and ambient lights multiplied by pi, which r128 did inside its shaders |
 
 ### A1: the bundle, and a game that draws through it
 
@@ -360,3 +361,22 @@ One thing this turned up about the stills themselves. The same two frames taken 
 `texture.encoding = THREE.sRGBEncoding` became `texture.colorSpace = THREE.SRGBColorSpace` in `texFromCanvas` (`src/10-core.js`) and on the environment canvas (`buildEnvironment`). Between A1 and here the old line assigned `undefined` to a property the engine no longer reads, so every canvas texture was taken as linear and read too bright. The car's blob shadow texture (`src/30-cars.js`) never had the flag on r128 and is left without it.
 
 The means rise at this step (Retro 12.7 to 17.6, Modern 17.4 to 24.7 on the per still average), and that is the step working, not failing. At A2 two errors pulled against each other: textures too bright, lights too dim. This step removes the first, so textured surfaces are now darker than the reference everywhere, which is what a scene lit at 1/pi of its strength should look like. The sky, which is unlit and has no texture, did not move.
+
+### A4: light intensity
+
+The three lights in `buildWorld` are multiplied by `Math.PI` (1.05, 1.35 and 0.4 stay as the tuned numbers, with the factor written beside them). Per still average: Retro 17.6 to 4.4, Modern 24.7 to 4.9.
+
+Ten stills are still over 6: the `high` camera on all four circuits in both tiers, and the Indianapolis chase view in both tiers. All ten look a long way across the circuit, which is where fog is (step A5).
+
+Checked by measurement, the spike's way: maps and vertex colours switched off on both engines (the sky left alone), Silverstone, chase camera, tick 900, headless on the fallback, the canvas read back and reduced to the 32 x 18 grid. r128 is the spike's saved r128 build.
+
+| cell | Retro, r128 | Retro, 0.187 | Modern, r128 | Modern, 0.187 |
+|---|---|---|---|---|
+| sky, top centre | 172,197,225 | 172,197,225 | 202,215,226 | 202,215,226 |
+| sky, upper left | 184,196,210 | 184,196,210 | 208,213,219 | 208,213,219 |
+| lit ground, bottom left | 212,212,212 | 212,212,212 | 234,235,235 | 234,235,235 |
+| lit ground, bottom right | 212,212,212 | 212,212,212 | 234,235,235 | 234,234,235 |
+| lit ground, lower middle | 239,239,239 | 239,239,239 | 247,248,248 | 247,247,248 |
+| lit ground, far | 251,251,251 | 251,251,251 | 252,253,253 | 252,252,253 |
+
+Over all 576 cells, with fog also off: mean difference 0.23 of a level in Retro (worst cell 9.0) and 0.23 in Modern (worst cell 3.2). With the materials white the lit ground is near the top of the range, so this shows the lights are right and says little about dark surfaces. (The cells differ from the spike's 245,245,246 and 211,221,229 because the spike read other cells in a headed window; the point is that the two engines agree, cell for cell.)

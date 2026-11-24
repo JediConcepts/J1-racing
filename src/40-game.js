@@ -299,13 +299,19 @@ Game.prototype.buildWorld = function () {
   this.camPos = new THREE.Vector3();
   this.camLook = new THREE.Vector3();
 
-  var hemi = new THREE.HemisphereLight(0xe6efff, 0x6a6244, 1.05);
+  /* LIGHT INTENSITIES CARRY A FACTOR OF PI. The numbers beside it (1.05, 1.35
+     and 0.4) are the ones the look was tuned with on r128, which multiplied
+     every light by pi inside its shaders unless physicallyCorrectLights was
+     set. 0.187 has no such mode: an intensity is taken as it is given. So the
+     factor is written out here, and the tuned numbers stay readable. Without
+     it the whole scene is lit at about a third of its strength. */
+  var hemi = new THREE.HemisphereLight(0xe6efff, 0x6a6244, 1.05 * Math.PI);
   scene.add(hemi);
-  var sun = this.sun = new THREE.DirectionalLight(0xfff2e2, 1.35);
+  var sun = this.sun = new THREE.DirectionalLight(0xfff2e2, 1.35 * Math.PI);
   sun.position.set(-320, 420, 210);
   scene.add(sun);
   scene.add(sun.target);
-  scene.add(new THREE.AmbientLight(0x4d566a, 0.4));
+  scene.add(new THREE.AmbientLight(0x4d566a, 0.4 * Math.PI));
 
   /* SHADOWS. A tight ortho box that FOLLOWS THE CAR rather than one big enough
      to cover the circuit: Silverstone is 1.8 km across, and a shadow map
