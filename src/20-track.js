@@ -1334,7 +1334,15 @@ function buildMonacoTunnelAndUrbanScenery(track, scene) {
   seaGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(seaVerts), 3));
   seaGeo.computeVertexNormals();
 
-  var seaMat = new THREE.MeshStandardMaterial({ color: srgb(0x005f73), roughness: 0.25, metalness: 0.6 });
+  /* envMapIntensity 1.15 is there for the engine move and nothing else. The
+     sea is smooth and metallic, so most of what it shows is the sky it
+     reflects, and three.js 0.187 shades that reflection duller than r128 did:
+     the light part of the water read 77,152,183 where r128 gave 94,161,190.
+     At 1.15 it reads 87,158,189, and every Monaco still that shows the sea
+     moved toward the r128 picture. At 1.3 the darker water overshot. Game's
+     ownEnvironment is what makes the number apply (it does nothing on a
+     material that takes its light from scene.environment). */
+  var seaMat = new THREE.MeshStandardMaterial({ color: srgb(0x005f73), roughness: 0.25, metalness: 0.6, envMapIntensity: 1.15 });
   var sea = new THREE.Mesh(seaGeo, seaMat);
   var harbourY = track.p[700].y; // use track elevation at the harbour
   sea.position.set(0, harbourY - 0.4, 0);

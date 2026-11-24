@@ -328,6 +328,7 @@ The console of the stills page was watched on every capture (a preloaded script 
 | A3 | `v0.115 dev 20abfe9*` | 11.6 to 35.4 | 28 | canvas textures and the environment canvas flagged sRGB. The means go UP: the textures stop reading too bright, and the lights are still short by a factor of pi (step A4) |
 | A4 | `v0.116 dev c9cd75b*` | 1.7 to 14.0 | 10 | the hemisphere, directional and ambient lights multiplied by pi, which r128 did inside its shaders |
 | A5 | `v0.117 dev 11a8615*` | 1.2 to 8.4 | 6 | the haze colour handed over as the linear colour the output step turns back into the hex: the plain conversion for Retro, run backwards through ACES for Modern |
+| A6 | `v0.118 dev a13deb3*` | 1.2 to 7.1 | 4 | `envMapIntensity` made to apply again (0.187 ignores it for `scene.environment`): the car paint's 1.15 is back, and the sea at Monaco is given 1.15 |
 
 ### A1: the bundle, and a game that draws through it
 
@@ -452,4 +453,97 @@ Checked in the running game, headless, Silverstone, both engines side by side, a
 
 A tier change at run time still gives the same stills as loading in the tier, byte for byte, in both directions at Monaco and Silverstone, so the fog colour follows the tier.
 
-What this step cannot close. It is exact only where a surface is fully fogged. Part way into the haze, r128 mixed encoded values and 0.187 mixes linear light, and a dark surface half way in comes out much paler than it did. The stands at Indianapolis are the plainest case (dark seats, 150 to 400 m off): the chase view there is 6.7 in Retro and 6.5 in Modern, did not move at this step, and no fog colour moves it. See "What is left over 6" at the end of this stage.
+What this step cannot close. It is exact only where a surface is fully fogged. Part way into the haze, r128 mixed encoded values and 0.187 mixes linear light, and a dark surface half way in comes out paler than it did. No fog colour moves that.
+
+CORRECTED at step A6. This paragraph first named the stands at Indianapolis as the plainest case of that, and the A5 commit message (a13deb3) and a comment in `applyHaze` said the same. That was a guess from looking at the pair of stills, and it is wrong: with fog switched off on both engines the Indianapolis chase view differs from r128 by just as much as with it on. The stands are pale for another reason. The measurement and the real cause are under "A6: where the rest comes from". The comment is corrected in the A6 commit; the commit message stands as it was written.
+
+### A6: light from the environment
+
+The question the spike left open: does `envMapIntensity` still apply to `scene.environment` in 0.187? It does not. Read in the package source (`src/nodes/accessors/MaterialProperties.js`): the strength a material takes is `material.envMap ? material.envMapIntensity : scene.environmentIntensity`. On r128 the material's number scaled the scene's environment too. So the car paint's `envMapIntensity: 1.15` has been read by nobody since step A1. Confirmed in the running game: setting it to 5 on the body, with no map of its own, changes no cell of the picture.
+
+What was tried. Each variant was applied in the running game after the photo frame (headless, the fallback), the canvas read back and reduced to the 32 x 18 grid, and compared with r128's grid for the same shot (the spike's saved r128 build). The figure is the mean difference over all 576 cells and three channels.
+
+| variant | Silverstone chase, Modern | Silverstone chase, Retro | Monaco high, Modern | Monaco high, Retro | Indianapolis chase, Modern | Indianapolis chase, Retro |
+|---|---|---|---|---|---|---|
+| as A5 left it | 2.469 | 1.827 | 5.348 | 5.058 | 5.228 | 5.329 |
+| body `envMapIntensity` 5, no map of its own | 2.469 | 1.827 | 5.348 | 5.058 | 5.228 | 5.329 |
+| body given the environment as its own map, 1.15 | 2.396 | 1.783 | 5.347 | 5.059 | 4.859 | 5.132 |
+| the same at 1.3 | 2.336 | 1.752 | 5.347 | 5.060 | 4.676 | 5.055 |
+| the same at 1.5 | 2.286 | 1.739 | 5.348 | 5.062 | 4.954 | 5.235 |
+| the same at 1.7 | 2.344 | 1.786 | 5.350 | 5.064 | 5.404 | 5.563 |
+| `scene.environmentIntensity` 0.85 | 1.832 | 1.224 | 6.494 | 5.904 | 4.750 | 4.679 |
+| `scene.environmentIntensity` 1.15 | 3.994 | 3.045 | 6.665 | 6.274 | 6.502 | 6.509 |
+| `scene.environmentIntensity` 1.3 | 5.576 | 4.249 | 8.958 | 8.240 | 8.063 | 7.819 |
+| sea given the environment as its own map, 1.15 | 2.469 | 1.827 | 5.013 | 4.759 | 5.228 | 5.329 |
+| the same at 1.3 | 2.469 | 1.827 | 5.620 | 5.209 | 5.228 | 5.329 |
+
+Single cells, Modern, r128 first:
+
+| cell | r128 | as A5 left it | with the variant |
+|---|---|---|---|
+| player's car, rear (Silverstone chase) | 51,56,66 | 37,41,51 | body 1.15: 41,45,55. 1.3: 45,50,59. 1.5: 50,55,65. 1.7: 55,60,70 |
+| player's car, top | 122,112,98 | 110,97,77 | body 1.15: 114,102,83. 1.3: 117,106,88. 1.5: 121,111,95. 1.7: 124,115,100 |
+| sea, the light part (Monaco high) | 94,161,190 | 77,152,183 | sea 1.15: 87,158,189. 1.3: 97,164,194 |
+| sea, the middle | 0,132,176 | 0,131,175 | sea 1.15: 0,136,180. 1.3: 0,141,185 |
+| grass in the middle distance (Silverstone chase) | 94,160,75 | 107,165,99 | scene 0.85: 104,162,95. scene 1.15: 110,168,104 |
+
+What that says:
+
+- The scene's own strength is not the setting. Raising it brings the car and the light part of the sea toward r128 and takes everything else away from it (the whole picture is worse at 1.15 on every shot). Lowering it helps the far views a little and takes the car and the sea further off. Left at 1.
+- The car body, given the environment as its own map so that its 1.15 applies again, moves toward r128 on every shot and nothing else moves. Applied. This restores what the number did; it tunes nothing.
+- The sea is the same kind of surface (smooth and metallic) and is duller for the same reason, but it never had a strength of its own. At 1.15 its light part comes most of the way back and the picture is closer on both Monaco shots; at 1.3 the darker water overshoots and the picture is worse than leaving it. Applied at 1.15. This one IS a tuned number, put there for the engine move.
+- The grass is not a matter of strength at all. In the middle distance it is paler and less green than on r128 (the spike called it darker; measured here it is lighter, with the blue channel up by 24). Fog is not the reason: the cell reads the same with fog off on both engines. The reason is how 0.187 shades a rough surface seen at a shallow angle, which the next section measures. No strength setting separates the grass from everything else lit by the same environment. Left.
+
+On the 28 stills:
+
+| variant | Retro, per still average | Modern, per still average | range of means | over 6 |
+|---|---|---|---|---|
+| as A5 left it | 3.27 | 3.52 | 1.2 to 8.4 | 6 |
+| body 1.15 applying again | 3.21 | 3.43 | 1.2 to 8.4 | 5 |
+| body at 1.3 | 3.19 | 3.39 | 1.2 to 8.4 | 5 |
+| body at 1.5 | 3.22 | 3.43 | 1.2 to 8.4 | 5 |
+| body 1.15 and sea 1.15 (kept) | 3.17 | 3.39 | 1.2 to 7.1 | 4 |
+
+The body is left at its own 1.15. At 1.5 the player's own car reads almost exactly as on r128 (50,55,65 against 51,56,66), but the stills do not tell 1.15, 1.3 and 1.5 apart (0.04 of a level at most), and with 33 cars at Indianapolis 1.5 is worse than 1.3. Changing a tuned number of the car's look on that evidence was not justified. If the car reads dark in the pairs put to Jamie, 1.3 to 1.5 is the number to try.
+
+The sea at 1.15 moved every Monaco still that shows it, none the wrong way on its worst channel: `high` Modern 8.4 to 7.1, `high` Retro 6.8 to 6.0 (no longer over), `chase` Modern 5.0 to 4.7, `chase` Retro 4.7 to 4.5.
+
+How it is done. `Game.prototype.ownEnvironment` gives every standard material that asks for a strength other than 1 the scene's environment as its own `envMap`, which is what makes 0.187 read the number. It runs over the scene at the end of `buildWorld` and over each car in `buildGrid`. Both backends draw it the same: Chrome, Monaco, high camera, WebGPU against the forced fallback, mean 0.003 (Retro) and 0.004 (Modern) of a level, worst cell 0.20 and 0.15.
+
+### A6: where the rest comes from
+
+Asked while looking for an environment setting, because it decides what a setting could do: how much of what is left is fog? The same shots were taken with `scene.fog` removed on BOTH engines (headless, the canvas grid against r128's, mean over 576 cells and three channels), on the build with step A6 in it.
+
+| shot | tier | with fog | fog off on both |
+|---|---|---|---|
+| Silverstone, chase | Modern | 2.40 | 2.32 |
+| Indianapolis, chase | Modern | 4.86 | 4.85 |
+| Indianapolis, chase | Retro | 5.13 | 5.16 |
+| Silverstone, high | Modern | 3.00 | 1.76 |
+| Silverstone, high | Retro | 1.93 | 1.41 |
+| Monaco, high | Modern | 5.01 | 4.17 |
+| Monaco, high | Retro | 4.76 | 4.46 |
+| Indianapolis, high | Modern | 4.22 | 3.57 |
+| Indianapolis, high | Retro | 3.96 | 3.98 |
+| Brands Hatch, high | Modern | 3.42 | 1.98 |
+| Brands Hatch, high | Retro | 2.16 | 1.62 |
+
+(Silverstone chase in Retro is missing: with fog removed, the r128 page drew a black frame on two tries, so there is no pair. Nothing is claimed for it.)
+
+So fog is a real part of what is left in the far views of Modern (Brands Hatch and Silverstone `high` lose about 40% of their difference without it), a smaller part in Retro, and no part at all of the Indianapolis chase view.
+
+What it is at Indianapolis, and on grass everywhere. With fog off on both engines, single cells:
+
+| cell | tier | r128 | 0.187 |
+|---|---|---|---|
+| Indianapolis stands, right | Modern | 122,122,123 | 138,136,133 |
+| Indianapolis stands, left | Modern | 127,120,126 | 141,131,134 |
+| Indianapolis stands, right | Retro | 113,114,109 | 134,133,121 |
+| Indianapolis stands, left | Retro | 119,109,109 | 143,128,120 |
+| Indianapolis infield grass | Modern | 137,157,89 | 144,160,102 |
+| Silverstone grass, left | Modern | 94,160,75 | 107,165,99 |
+| Silverstone grass, right | Modern | 72,153,52 | 88,158,81 |
+
+These are fully rough surfaces that are not metal (the crowd and the grass are both `roughness: 1.0`), seen at a shallow angle, and on 0.187 they are paler and greyer. The cause is in the two engines' source. r128 worked out how much of the environment a surface mirrors with a short approximation (`integrateSpecularBRDF`, with `F_Schlick_RoughnessDependent`), which for a fully rough surface gives about 1.6% at every angle. 0.187 looks the same quantity up in a table computed from the full model, and for a fully rough surface at a shallow angle that is several times more. So grass and seats seen along their surface now reflect some of the bright horizon they face. (For a smooth surface the difference goes the other way: r128's term added reflection at shallow angles that 0.187 does not have, which is the car and the sea being duller.) The r128 half of this was read in `tools/vendor/three-r128.min.js`; the size of the 0.187 figure is from knowing the model, not from a measurement of the table.
+
+No setting reaches it. `envMapIntensity` and `scene.environmentIntensity` scale all the light a surface takes from the environment, the matt part with the mirrored part, and the matt part is right (step A4's check). What would reach it is not a setting: a material that can turn its own mirror term down (`MeshPhysicalMaterial`'s specular intensity, which is not in the bundle), or a node on the grass and the crowd. That is a change of material, not of a number, and it was not tried. It goes to the controller as the main thing still open: see the stage summary.

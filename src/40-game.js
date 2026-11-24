@@ -308,9 +308,8 @@ Game.prototype.buildEnvironment = function (scene) {
 
    This is exact only where a surface is FULLY fogged. Part way into the haze
    the two engines mix in different spaces (r128 in encoded values, this one
-   in linear light), and a dark surface comes out paler than it did: the
-   stands at Indianapolis are the plainest case. No choice of colour puts
-   that right.
+   in linear light), and a dark surface comes out paler than it did. It shows
+   most in the far views of Modern. No choice of colour puts that right.
 
    The clear colour is the same hex, handed over the same way, so it gets the
    same treatment. The sky dome covers it in every frame the game draws.
@@ -412,6 +411,9 @@ Game.prototype.buildWorld = function () {
   this.gantry = buildStartGantry(this.track, scene);
   this.scenery = buildScenery(this.track, scene);
   this.sky = buildSky(scene);
+  /* after everything above is in the scene, so the sweep sees all of it;
+     the cars come later and are done one by one in buildGrid */
+  this.ownEnvironment(scene);
 
   /* minimap path, precomputed once in normalised space */
   var i, minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity;
@@ -421,6 +423,32 @@ Game.prototype.buildWorld = function () {
     if (p.z < minZ) minZ = p.z; if (p.z > maxZ) maxZ = p.z;
   }
   this.mapBounds = { minX: minX, maxX: maxX, minZ: minZ, maxZ: maxZ };
+};
+
+/* envMapIntensity, PUT BACK TO WORK.
+
+   On r128 a material's envMapIntensity scaled the light it took from
+   scene.environment. In 0.187 that number only scales a material's OWN
+   envMap; light from the scene's environment is scaled by
+   scene.environmentIntensity and nothing else. So the car paint's 1.15 (see
+   buildCarMesh) was read by nobody, and the bodywork came out darker than it
+   was tuned to be.
+
+   Every material under `root` that asks for a strength other than 1 (the car
+   paint, and the sea at Monaco) is given the scene's environment as its own
+   map, which is all it takes for its number to apply again. The renderer filters the one texture once, whoever
+   holds it. Materials that leave the strength at 1 are not touched: for them
+   the scene's environment already does the same thing. */
+Game.prototype.ownEnvironment = function (root) {
+  var env = this.scene.environment;
+  if (!env) return;
+  root.traverse(function (o) {
+    if (!o.material) return;
+    var m = o.material.length ? o.material : [o.material];
+    for (var i = 0; i < m.length; i++) {
+      if (m[i] && m[i].isMeshStandardMaterial && m[i].envMapIntensity !== 1 && !m[i].envMap) m[i].envMap = env;
+    }
+  });
 };
 
 /* Field size is per circuit — GRID_SIZE is only the fallback. */
@@ -459,6 +487,7 @@ Game.prototype.buildGrid = function () {
     var livery = (i === 0) ? LIVERIES[0]
       : LIVERIES[1 + ((i - 1) % Math.max(1, LIVERIES.length - 1))];
     var v = new Vehicle(this.track, livery, i === 0);
+    this.ownEnvironment(v.group);
     this.scene.add(v.group);
     this.scene.add(v.shadow);
     this.cars.push(v);
