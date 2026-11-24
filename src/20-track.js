@@ -758,9 +758,31 @@ function buildTrackMeshes(track, scene) {
   group.add(new THREE.Mesh(runoff.geometry(), new THREE.MeshStandardMaterial({
     map: texFromCanvas(makeRunoffTex(), 1, 1), vertexColors: true, roughness: 0.95, metalness: 0.0 })));
   
-  var grassTexCanvas = track.id === 'monaco-gp-v1' ? makeCityGroundTex() : makeGrassTex();
+  var isCity = track.id === 'monaco-gp-v1';
+  var grassTexCanvas = isCity ? makeCityGroundTex() : makeGrassTex();
+  /* envMapIntensity 0.9 on the grass is a compensation for the engine move
+     and nothing else. Seen along its surface, grass takes more light from
+     the environment on three.js 0.187 than it did on r128, and comes out
+     paler and less green: from the chase camera at Silverstone it read
+     92,159,73 on r128 and 107,165,100 here (Modern, haze off on both). Seen
+     from above the two agree to within 7 levels, and with the environment
+     taken away on both engines they agree everywhere, so the environment is
+     where the extra comes from.
+
+     The number scales all the light the grass takes from the environment,
+     the part that was right along with the extra, so it can only go a little
+     way. At 0.9 every still that shows grass is closer to the live picture on
+     its worst channel and none is further off by more than 0.1 on any. At
+     0.75 the far views came out too dark in green.
+
+     Monaco's ground, which this mesh carries there, stays at 1. It matched
+     the live picture already, and both values tried on it (0.75 and 0.5)
+     took Monaco's stills away from it. The numbers are in
+     docs/v2-picture-log.md. Game's ownEnvironment is what makes the number
+     apply. */
   group.add(new THREE.Mesh(grass.geometry(), new THREE.MeshStandardMaterial({
-    map: texFromCanvas(grassTexCanvas, 6, 1), vertexColors: true, roughness: 1.0, metalness: 0.0 })));
+    map: texFromCanvas(grassTexCanvas, 6, 1), vertexColors: true, roughness: 1.0, metalness: 0.0,
+    envMapIntensity: isCity ? 1 : 0.9 })));
 
   group.add(new THREE.Mesh(kerb.geometry(), new THREE.MeshStandardMaterial({
     map: texFromCanvas(makeKerbTex(), 1, 1, true), vertexColors: true, roughness: 0.72, metalness: 0.0 })));
