@@ -47,7 +47,9 @@ var TIERS = {
   },
   ultra: {
     target: 'super', toneMapping: 'aces', exposure: 1.12,
-    shadows: 'single', sky: 'dome', post: 'grade',
+    shadows: 'single',
+    sky: 'physical',
+    post: 'grade',
     overlays: false, canvas: 'target'
   }
 };
@@ -298,90 +300,46 @@ Game.prototype.applyPostMode = function (mode) {
   this.buildTarget(mode !== 'retro');
 };
 
-/* ENVIRONMENT MAP.
+/* THE SKY RIG, and with it the environment map.
 
-   A Standard material with nothing to reflect is just a Lambert with extra
-   maths — car paint comes out looking like matte plastic. This is the single
-   biggest contributor to the modern look after the material swap itself.
-
-   Generated procedurally from a sky dome with a bright sun disc and a ground
-   half, then prefiltered into the roughness mip chain. On r128 the game ran
-   PMREMGenerator for that; this renderer prefilters an equirectangular
-   scene.environment by itself, so the texture is handed over as painted. Done
-   this way because the artifact CSP blocks every external host, so an HDR file
-   could never be fetched — and a 2 KB shader beats a 4 MB download regardless. */
+   Everything over the horizon is the rig's (SkyRig in 32-sky.js): the sky
+   that is drawn, scene.environment, and what the three lights are set to
+   once the sky is the physical one. It is made in the mode the game has
+   always drawn, the painted dome and the painted environment, so the scene
+   has an environment from here on. The lights have to exist first. */
 Game.prototype.buildEnvironment = function (scene) {
-  /* NO TRY AND CATCH HERE ANY MORE, because nothing in here can fail by
-     itself. On r128 one wrapped this function, with "no environment is a
-     flatter look, never a broken one" in its catch: PMREMGenerator ran inside
-     it, on the GPU, and a prefilter that failed left the scene without an
-     environment and the game still drawing. Now the function only paints a
-     2D canvas, as every texture in the game is painted, and hands it over.
-     The engine filters it inside the first frame it draws, which no catch in
-     here could reach: a failure there is the renderer failing to draw, and
-     that belongs to whoever called for the frame, not to this function. */
-
-  /* Painted as an EQUIRECTANGULAR canvas rather than rendered from a shader
-     dome. The dome version prefiltered to solid black, and because a
-     Standard material takes its whole indirect term from the environment,
-     a black one does not soften the scene, it extinguishes it. A canvas goes
-     through the engine's well worn equirect path instead, and its
-     contents can be inspected, which a shader baked inside PMREM cannot. */
-  var cv = makeCanvas(256, 128), ctx = cv.getContext('2d');
-  var g = ctx.createLinearGradient(0, 0, 0, 128);
-  g.addColorStop(0.00, '#6f9ede');    /* zenith */
-  g.addColorStop(0.42, '#c4d3e8');
-  g.addColorStop(0.50, '#d8d2c4');    /* haze band at the horizon */
-  g.addColorStop(0.58, '#8d8578');
-  g.addColorStop(1.00, '#3f3c37');    /* ground bounce */
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, 256, 128);
-
-  /* A sun disc, which is what actually puts a moving highlight along the
-     bodywork. Placed to match the directional light's bearing. */
-  var sg = ctx.createRadialGradient(74, 34, 1, 74, 34, 26);
-  sg.addColorStop(0, 'rgba(255,252,242,1)');
-  sg.addColorStop(0.25, 'rgba(255,238,206,0.85)');
-  sg.addColorStop(1, 'rgba(255,238,206,0)');
-  ctx.fillStyle = sg;
-  ctx.fillRect(48, 8, 52, 52);
-
-  var tex = new THREE.CanvasTexture(cv);
-  tex.mapping = THREE.EquirectangularReflectionMapping;
-  /* THIS CANVAS KEEPS ITS sRGB FLAG, where texFromCanvas (10-core.js) takes
-     the flag off every other canvas texture that carries colour. The two are
-     not at odds. The flag makes the GPU turn each texel into light before it
-     smooths, where r128 smoothed the painted values first, and that matters
-     for a texture of strong contrast seen small: the crowd came out up to 42
-     levels too light. This canvas is a smooth sky with a soft sun, so the
-     two orders give almost the same answer. Worked out on the canvas as it
-     is painted here: averaging a 2 x 2 box of texels before or after turning
-     it into light differs by 0.080 of a level at worst, and a 4 x 4 box by
-     0.299. Those are the sizes the GPU smooths over when the engine reads
-     it; the wider blurs a rough surface needs are the engine's own
-     prefilter, which r128's did in light as well. Taking the flag off would
-     buy nothing that can be seen and would need a decode of its own inside
-     the engine's prefilter, which is not the game's to change. If the sky
-     ever gets hard edges (a horizon line, a small bright sun), measure it
-     again. */
-  tex.colorSpace = THREE.SRGBColorSpace;
-
-  /* Kept, not disposed: the renderer filters it when it first draws and
-     reads it again if the scene's environment is ever set anew. */
-  scene.environment = tex;
+  this.skyRig = new SkyRig(scene, this.renderer, this.sun, this.hemi, this.ambient);
 };
 
 /* The sky for a tier: TIERS[...].sky, 'dome' | 'physical'. Called by
-   applyQuality. 'dome' is the painted dome and the lights buildWorld makes,
-   which is all there is today, so there is nothing to switch yet and
-   'physical' draws as 'dome' until the real sky is built here. */
+   applyQuality, straight after applyHaze. 'dome' is the painted dome, the
+   lights buildWorld makes and the haze applyHaze has just set. 'physical' is
+   the engine's model of a clear sky at settings.timeOfDay, which sets the
+   lights for itself and takes the haze over: it writes the fog's colour
+   again for every frame it draws (SkyRig.fogToward).
+
+   The circuit's own clouds are flat cards with a painted texture that no
+   light reaches, white at any hour. The physical sky has clouds of its own,
+   lit by its sun, so the cards are put away while it is up. */
 Game.prototype.applySkyMode = function (mode) {
+  /* "ahead" for the sun's bearing is the way the cars leave the line */
+  var t = this.track, a = t.p[t.startIndex], b = t.p[(t.startIndex + 1) % t.n];
+  this.skyRig.setNorth(b.x - a.x, b.z - a.z);
+  /* the hour first, so that a rig coming up from the dome draws its
+     environment once, for the right hour */
+  this.skyRig.setTimeOfDay(this.settings.timeOfDay);
+  this.skyRig.setMode(mode);
+  if (this.scenery && this.scenery.clouds) this.scenery.clouds.visible = mode !== 'physical';
+  this.applyTimeOfDay();
 };
 
-/* The sky and the grade read this.settings.timeOfDay here (one of
-   TIME_OF_DAY_NAMES). Called by setTimeOfDay whenever the setting changes.
-   Nothing reads it yet, so nothing is drawn differently. */
+/* The sky reads this.settings.timeOfDay here (one of TIME_OF_DAY_NAMES).
+   Called by setTimeOfDay whenever the setting changes, and by applySkyMode.
+   Under the dome the rig only remembers the name: Retro and Modern have one
+   hour. The shadows are told last, because the sun has just moved. */
 Game.prototype.applyTimeOfDay = function () {
+  this.skyRig.setTimeOfDay(this.settings.timeOfDay);
+  if (this.shadowRig) this.shadowRig.update();
 };
 
 /* THE HAZE COLOUR, IN THE FORM THIS ENGINE WANTS IT.
@@ -496,13 +454,14 @@ Game.prototype.buildWorld = function () {
      set. 0.187 has no such mode: an intensity is taken as it is given. So the
      factor is written out here, and the tuned numbers stay readable. Without
      it the whole scene is lit at about a third of its strength. */
-  var hemi = new THREE.HemisphereLight(0xe6efff, 0x6a6244, 1.05 * Math.PI);
+  var hemi = this.hemi = new THREE.HemisphereLight(0xe6efff, 0x6a6244, 1.05 * Math.PI);
   scene.add(hemi);
   var sun = this.sun = new THREE.DirectionalLight(0xfff2e2, 1.35 * Math.PI);
   sun.position.set(-320, 420, 210);
   scene.add(sun);
   scene.add(sun.target);
-  scene.add(new THREE.AmbientLight(0x4d566a, 0.4 * Math.PI));
+  this.ambient = new THREE.AmbientLight(0x4d566a, 0.4 * Math.PI);
+  scene.add(this.ambient);
 
   /* SHADOWS. A tight ortho box that FOLLOWS THE CAR rather than one big enough
      to cover the circuit: Silverstone is 1.8 km across, and a shadow map
@@ -547,7 +506,8 @@ Game.prototype.buildWorld = function () {
   buildTrackMeshes(this.track, scene);
   this.gantry = buildStartGantry(this.track, scene);
   this.scenery = buildScenery(this.track, scene);
-  this.sky = buildSky(scene);
+  /* what the camera drags along with it: the rig's dome, and its physical sky */
+  this.sky = this.skyRig.root;
   /* after everything above is in the scene, so the sweep sees all of it;
      the cars come later and are done one by one in buildGrid */
   this.ownEnvironment(scene);
@@ -2410,7 +2370,7 @@ Game.prototype.updateCamera = function (dt, snap) {
   if (this.sun && this.sun.castShadow) {
     var sx2 = p.visX(), sz2 = p.visZ();
     this.sun.target.position.set(sx2, 0, sz2);
-    this.sun.position.set(sx2 - 320, 420, sz2 + 210);
+    this.sun.position.set(sx2 + this.skyRig.sunOffset.x, this.skyRig.sunOffset.y, sz2 + this.skyRig.sunOffset.z);
     this.sun.target.updateMatrixWorld();
   }
 };
