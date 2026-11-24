@@ -344,6 +344,39 @@ function tamper(o) {
       'switched back to Ultra at run time, the canvas is the render target again',
       JSON.stringify(back) + ', uncaught ' + JSON.stringify(uncaught));
 
+    /* A saved time of day is in force from the first frame, with nobody
+       pressing the TIME OF DAY button: a player who chose ULTRA and GOLDEN
+       and then loads the page again (choosing a circuit does that) must come
+       back at golden hour. The sky is asked which hour it drew, the sun
+       light how high it stands, and the shadows which way they take the sun
+       to be. Golden hour's sun is 11 degrees up (TIME_OF_DAY in 32-sky.js),
+       where the dome's is 48. Then the same through a change of tier at run
+       time, both ways. */
+    const hour = () => page.evaluate(() => {
+      const g = window.MCL64, sun = g.sun, rig = g.shadowRig;
+      const up = (v) => Math.round(Math.asin(v.y / v.length()) * 180 / Math.PI * 10) / 10;
+      return {
+        quality: g.settings.quality, saved: g.settings.timeOfDay, sky: g.skyRig.mode, drew: g.skyRig.drawn,
+        sunUp: up(sun.position.clone().sub(sun.target.position)), shadowsUp: up(rig.offset), shadows: rig.mode
+      };
+    });
+    await bootWithSettings({ quality: 'ultra', timeOfDay: 'golden' });
+    const loaded = await hour();
+    check(loaded.quality === 'ultra' && loaded.sky === 'physical' && loaded.drew === 'golden' &&
+      loaded.sunUp === 11 && loaded.shadowsUp === 11 && loaded.shadows === 'cascades' &&
+      consoleErrors.length === 0 && uncaught.length === 0,
+      'loaded with ULTRA and GOLDEN saved, the sky, the sun and the shadows are at golden hour',
+      JSON.stringify(loaded) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+    await page.evaluate(() => window.MCL64.hookSelect(null, 'modern'));
+    const left = await hour();
+    await page.evaluate(() => window.MCL64.hookSelect(null, 'ultra'));
+    const again = await hour();
+    check(left.sky === 'dome' && left.sunUp === 47.7 && left.shadowsUp === 47.7 && left.shadows === 'single' &&
+      again.sky === 'physical' && again.drew === 'golden' && again.sunUp === 11 && again.shadowsUp === 11 &&
+      again.shadows === 'cascades' && consoleErrors.length === 0 && uncaught.length === 0,
+      'switched to Modern the sun is the dome\'s, and switched back to Ultra it is golden hour again',
+      'Modern ' + JSON.stringify(left) + ', Ultra ' + JSON.stringify(again) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+
     /* The texture sweep: four circuits, each loaded in each tier and then
        switched at run time. Console errors count here, over all of it,
        because a node that fails to build says so there and only there. */

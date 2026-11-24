@@ -610,7 +610,52 @@ Game.prototype.applyShadowMode = function (mode) {
     o.castShadow = wide && mark.cast;
     o.receiveShadow = wide && mark.receive;
   });
+  /* THE GROUND BEYOND THE VERGE. Past the verge there is no ground mesh,
+     only one great plane 10 m below the circuit (buildScenery), and the
+     trees out there stand at the height of the verge, 10 m above it. Nobody
+     can see that they float, because the plane has no detail to judge its
+     distance by. But a shadow falls where the sun's ray meets the plane, and
+     10 m further down is 6 m further along the ground at the midday sun,
+     50 m at golden hour and 130 m at dusk: a low sun put every tree's
+     shadow a field away from its trunk. Two things put it back, both only
+     with the cascades, because the single map of Modern reaches 70 m from
+     the player and its stills must not move.
+
+     The plane is lifted to just under the verge (scenery.groundTop), where
+     the trees stand. On a flat circuit that is all it takes.
+
+     And the plane looks its shadow up at the height the trees stand at,
+     straight above each of its points (groundShadowPosition), for a circuit
+     with hills or banking, where the plane cannot come up to every tree. */
+  var sc = this.scenery, ground = sc && sc.ground;
+  if (ground) {
+    if (ground.userData.lowY === undefined) ground.userData.lowY = ground.position.y;
+    ground.position.y = wide && sc.groundTop !== null ? Math.max(sc.groundTop, ground.userData.lowY) : ground.userData.lowY;
+    ground.material.receivedShadowPositionNode = wide ? groundShadowPosition(ground, Math.max(sc.treeFeet, ground.position.y)) : null;
+    ground.material.needsUpdate = true;
+  }
 };
+
+/* The point the ground plane looks its shadow up at: its own point, moved
+   straight up (or down) to height `y`. See the note on the ground in
+   applyShadowMode. On the map the shadow of a tree then starts at its trunk
+   at every hour, whatever the height between the tree and the plane. `y` is
+   one number for the whole plane, the mean of the trees' feet: exact on a
+   flat circuit, the best single number on a hilly one.
+
+   The engine takes the position from material.receivedShadowPositionNode.
+   The point is worked out from the plane's uv, because the plane is a
+   PlaneGeometry laid flat (rotation.x of minus a quarter turn), so u runs
+   along x and v runs against z. */
+function groundShadowPosition(ground, y) {
+  var T = THREE.TSL;
+  var g = ground.geometry.parameters;
+  var at = T.uv();
+  return T.vec3(
+    at.x.sub(0.5).mul(g.width).add(ground.position.x),
+    T.float(y),
+    T.float(0.5).sub(at.y).mul(g.height).add(ground.position.z));
+}
 
 Game.prototype.buildWorld = function () {
   var scene = this.scene = new THREE.Scene();

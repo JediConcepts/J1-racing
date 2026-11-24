@@ -1126,7 +1126,7 @@ function buildScenery(track, scene) {
     });
     var treeBuf = new RibbonBuilder();
     var treeProbe = { i: 0, lateral: 0, s: 0, y: 0, fwd: null, lat: null };
-    var placed = 0;
+    var placed = 0, treeFeet = 0;
     for (i = 0; i < n; i += 2) {
       for (var side2 = -1; side2 <= 1; side2 += 2) {
         if (rnd() > 0.55) continue;
@@ -1146,6 +1146,7 @@ function buildScenery(track, scene) {
         var wdt = hgt * 0.62;
         pushCrossQuad(treeBuf, x, y, z, wdt, hgt, rnd() * TAU);
         placed++;
+        treeFeet += y;
         if (placed > 420) break;
       }
       if (placed > 420) break;
@@ -1182,7 +1183,22 @@ function buildScenery(track, scene) {
   scene.add(cityGround);
 
 
-  return { clouds: clouds };
+  /* `ground`, `groundTop` and `treeFeet` are for the shadows across the
+     whole view (see the note on the ground in applyShadowMode, 40-game.js):
+     the plane above; how high it could lie and still be under every part of
+     the verge, which is 10 cm below the lowest point of the verge's outer
+     edge; and the mean height the trees stand at. Monaco gives no
+     groundTop: its plane has to stay below the sea. */
+  var groundTop = null;
+  if (track.id !== 'monaco-gp-v1') {
+    groundTop = Infinity;
+    for (i = 0; i < n; i++) {
+      groundTop = Math.min(groundTop,
+        groundY(track, i, WALL_HALF + VERGE), groundY(track, i, -(WALL_HALF + VERGE)));
+    }
+    groundTop -= 0.55 + 0.1;
+  }
+  return { clouds: clouds, ground: cityGround, groundTop: groundTop, treeFeet: placed ? treeFeet / placed : 0 };
 }
 
 function buildMonacoTunnelAndUrbanScenery(track, scene) {
