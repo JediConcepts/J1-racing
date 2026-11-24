@@ -5,9 +5,10 @@
  *
  * Builds nothing. For every folder given it serves that folder's index.html,
  * takes one Monaco still the way tools/stills.js takes it (Modern, camera
- * `high`, tick 600, the same browser, viewport and pinned Math.random) and
- * prints the sha256 of the PNG. Given two or more folders it then prints
- * EQUAL or DIFFER, and exits 1 on DIFFER.
+ * `high`, tick 600, the same browser, context, pinned Math.random and watch
+ * on the console) and prints the sha256 of the PNG. Given two or more
+ * folders it then prints EQUAL or DIFFER, and exits 1 on DIFFER. A folder
+ * with no index.html is an error before anything is opened (exit 2).
  *
  * What to give it. The vendored three.js draws four values from Math.random
  * for every UUID it makes, so one object more or less early in boot moves
@@ -29,8 +30,9 @@
 'use strict';
 
 const crypto = require('crypto');
+const fs = require('fs');
 const path = require('path');
-const { CHROMIUM_ARGS, STILL_VIEWPORT, requirePlaywright, serveDist, localOnly, pinRandom, callHook } = require('./browser');
+const { CHROMIUM_ARGS, STILL_CONTEXT, stillClip, watchPage, requirePlaywright, distFile, serveDist, localOnly, pinRandom, callHook } = require('./browser');
 
 const SHOT = { circuit: 'monaco-gp-v1', tick: 600, cam: 'high', quality: 'modern', timeOfDay: 'midday' };
 
@@ -38,6 +40,17 @@ const dirs = process.argv.slice(2);
 if (!dirs.length || dirs.some((d) => d.startsWith('--'))) {
   console.error('usage: node tools/stills-pin-check.js <dist dir> [<dist dir> ...]');
   process.exit(2);
+}
+
+/* Every folder is looked at before a browser exists. serveDist exits the
+   process when a folder has no index.html, and it used to find that out
+   with the browser already open, which left a headless Chromium running
+   with nobody to close it. */
+for (const dir of dirs) {
+  if (!fs.existsSync(distFile(dir))) {
+    console.error('FATAL: ' + distFile(dir) + ' missing. Run `node build.js` there first.');
+    process.exit(2);
+  }
 }
 
 (async () => {
@@ -50,18 +63,16 @@ if (!dirs.length || dirs.some((d) => d.startsWith('--'))) {
     for (const dir of dirs) {
       const server = await serveDist(dir);
       try {
-        /* the same context, pin and clip as tools/stills.js */
-        const context = await browser.newContext({ viewport: STILL_VIEWPORT, deviceScaleFactor: 1, reducedMotion: 'no-preference' });
+        /* The same context, pin, watch and clip as tools/stills.js: all four
+           are read from tools/browser.js, so the two cannot drift apart. */
+        const context = await browser.newContext(STILL_CONTEXT);
         await pinRandom(context);
         const page = await context.newPage();
-        page.on('pageerror', (e) => { console.error('PAGEERROR: ' + e.message); failed = true; });
+        watchPage(page, (line) => { console.error(line); failed = true; });
         await localOnly(page, server.url);
         await page.goto(server.url, { waitUntil: 'load', timeout: 60000 });
         await callHook(page, 'photo', SHOT);
-        const rect = await page.evaluate(() => {
-          const r = document.getElementById('screen').getBoundingClientRect();
-          return { x: Math.round(r.left), y: Math.round(r.top), width: Math.floor(r.width), height: Math.floor(r.height) };
-        });
+        const rect = await stillClip(page);
         const png = await page.screenshot({ clip: rect });
         const hash = crypto.createHash('sha256').update(png).digest('hex');
         hashes.push(hash);

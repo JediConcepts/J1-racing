@@ -22,6 +22,12 @@
  * they differ on every page load; a still shows one fixed set of them, the
  * same one every time, in which the three textures share one pattern.
  *
+ * The run fails (exit 1) on a page error, on a console error and on any
+ * console warning the tool does not know by its exact text: a material that
+ * fails to build is reported on the console and the picture is drawn all the
+ * same, so a quiet run is part of what makes a still worth comparing. The
+ * warnings it knows, and why each is harmless, are in tools/browser.js.
+ *
  * A camera that a circuit cannot place (stands at Monaco, which has no main
  * grandstand) is skipped there, with a line saying so. A run that takes no
  * still at all is an error; a circuit left with none in a run that took
@@ -32,7 +38,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { CHROMIUM_ARGS, STILL_VIEWPORT, requirePlaywright, serveDist, localOnly, pinRandom, callHook } = require('./browser');
+const { CHROMIUM_ARGS, STILL_CONTEXT, stillClip, watchPage, requirePlaywright, serveDist, localOnly, pinRandom, callHook } = require('./browser');
 
 function parseArgs(argv) {
   const a = {};
@@ -65,11 +71,16 @@ const list = (s) => s.split(',').map((x) => x.trim()).filter(Boolean);
   const browser = await chromium.launch({ headless: true, args: CHROMIUM_ARGS });
   let failed = false;
   try {
-    const context = await browser.newContext({ viewport: STILL_VIEWPORT, deviceScaleFactor: 1, reducedMotion: 'no-preference' });
+    const context = await browser.newContext(STILL_CONTEXT);
     /* before the page exists, so it is in place for the very first script */
     await pinRandom(context);
     const page = await context.newPage();
-    page.on('pageerror', (e) => { console.error('PAGEERROR: ' + e.message); failed = true; });
+    /* A page error, a console error or an unknown console warning fails the
+       run: the engine reports a material that would not build on the
+       console and draws the frame anyway (watchPage in tools/browser.js).
+       The stills already written stay on disk; the exit code says not to
+       trust them. */
+    watchPage(page, (line) => { console.error(line); failed = true; });
     await localOnly(page, server.url);
     await page.goto(server.url, { waitUntil: 'load', timeout: 60000 });
     await page.waitForFunction(() => window.MCL64 && window.MCL64.track, null, { timeout: 60000 });
@@ -95,12 +106,7 @@ const list = (s) => s.split(',').map((x) => x.trim()).filter(Boolean);
               console.log('skipped ' + [circuit, quality, tod, cam].join('.') + '  (' + why[1] + ')');
               continue;
             }
-            const rect = await page.evaluate(() => {
-              const r = document.getElementById('screen').getBoundingClientRect();
-              /* whole pixels: the stage is 607.5 px tall at 1280 x 720, so a
-                 still is 607 */
-              return { x: Math.round(r.left), y: Math.round(r.top), width: Math.floor(r.width), height: Math.floor(r.height) };
-            });
+            const rect = await stillClip(page);
             const file = path.join(out, [circuit, quality, tod, cam, 'png'].join('.'));
             await page.screenshot({ path: file, clip: rect });
             count++;

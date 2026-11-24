@@ -1,7 +1,9 @@
-/* Shared by tools/stills.js, tools/stills-pin-check.js and tools/bench.js:
-   find Playwright, serve dist/, the one set of Chromium launch arguments
-   every still is taken with, and the pinned Math.random the stills page runs
-   on (pinRandom, stills only).
+/* Shared by tools/stills.js, tools/stills-pin-check.js, tools/bench.js and
+   test/picture.js: find Playwright, serve dist/, the one set of Chromium
+   launch arguments every still is taken with, and what a still is: the
+   context it is taken in (STILL_CONTEXT), the part of the page it shows
+   (stillClip), the pinned Math.random its page runs on (pinRandom) and the
+   watch on its console (watchPage). The last four are for stills only.
 
    Nothing is installed into this repo; Playwright is found through
    NODE_PATH. Point it at a node_modules that has it:
@@ -29,6 +31,22 @@ const CHROMIUM_ARGS = ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'];
 /* The viewport every still is taken at. Also part of the contract above. */
 const STILL_VIEWPORT = { width: 1280, height: 720 };
 
+/* The browser context every still is taken in, whole, so that the stills
+   tool and the pin check cannot come to differ in it: the viewport above, a
+   device pixel ratio of 1, and motion left on (the page reads the reduced
+   motion setting, and a still must not depend on the machine's). The same
+   contract again: a change here invalidates every earlier still. */
+const STILL_CONTEXT = { viewport: STILL_VIEWPORT, deviceScaleFactor: 1, reducedMotion: 'no-preference' };
+
+/* The part of the page a still is: the game screen (#screen), in whole
+   pixels. The stage is 607.5 px tall at 1280 x 720, so a still is 607. */
+function stillClip(page) {
+  return page.evaluate(() => {
+    const r = document.getElementById('screen').getBoundingClientRect();
+    return { x: Math.round(r.left), y: Math.round(r.top), width: Math.floor(r.width), height: Math.floor(r.height) };
+  });
+}
+
 function requirePlaywright() {
   try {
     return require('playwright');
@@ -38,10 +56,15 @@ function requirePlaywright() {
   }
 }
 
+/* The index.html a dist folder holds: this repo's, or the folder given. */
+function distFile(dir) {
+  return dir ? path.join(path.resolve(dir), 'index.html') : DIST;
+}
+
 /* Serves dist/index.html of this repo, or of the dist folder given (the pin
    check serves a build made somewhere else). */
 function serveDist(dir) {
-  const file = dir ? path.join(path.resolve(dir), 'index.html') : DIST;
+  const file = distFile(dir);
   if (!fs.existsSync(file)) {
     console.error('FATAL: ' + (dir ? file : 'dist/index.html') + ' missing. Run `node build.js` first.');
     process.exit(2);
@@ -107,9 +130,18 @@ async function localOnly(page, url) {
    their two colours. So a Monaco still shows one fixed set of buildings,
    and not a set a player can be dealt. The UUIDs three.js makes also repeat
    in a pinned page (the first one made after each 2D context gets the same
-   four values). The vendored three.js reads them only for JSON export,
-   loading and animation bindings, none of which the game uses; a newer
-   three.js has to be checked for that again.
+   four values). r128 read them only for JSON export, loading and animation
+   bindings, none of which the game uses. three.js 0.187 does more with
+   them: a node's UUID is made the first time it is asked for, and it is
+   what a shader build tells its nodes apart by, so two nodes of one shader
+   can be dealt the same UUID if a 2D context is made between two shader
+   builds. A page that only takes stills makes no 2D context after boot and
+   is not affected: stills of the three older circuits, pinned and not
+   pinned, are the same byte for byte on both backends, shown again after
+   the game gained nodes of its own (docs/v2-picture-log.md, "B3"). A tool
+   that pins AND makes a 2D context in its page after boot is at risk, and
+   the console is where it would show (watchPage, below). A newer three.js
+   has to be checked for all of this again.
 
    tools/bench.js must not call this: it measures the game as players get
    it.
@@ -137,6 +169,60 @@ async function pinRandom(context) {
     };
     startAgainOn2d(HTMLCanvasElement.prototype);
     if (typeof OffscreenCanvas !== 'undefined') startAgainOn2d(OffscreenCanvas.prototype);
+  });
+}
+
+/* The warnings a healthy stills page prints, by exact text. Every other
+   warning fails the run (see watchPage), so each one here says why it is
+   not a fault. Two things are taken off a message before it is compared,
+   because the browser adds them and they differ from run to run: the
+   address of the context at the front of a driver message, and the note at
+   the end that the message will not be repeated.
+
+   The first three come on every run, because of where a still is taken. */
+const KNOWN_WARNINGS = [
+  /* Chromium's own answer when the page asks for a WebGPU adapter and the
+     headless SwiftShader browser has none. It is the reason every still
+     shows the WebGL 2 fallback. */
+  'No available adapters.',
+  /* The engine saying it has taken that fallback by itself. */
+  'THREE.WebGPURenderer: WebGPU is not available, running under WebGL2 backend.',
+  /* The driver, each time a screenshot reads the canvas back. It is the
+     still being taken, not the game. */
+  'GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels',
+  /* The next two come now and then as a page goes away, at the end of a run
+     or when a change of circuit reloads the page: the browser is taking the
+     old page's WebGL context down and says so. They were there on r128 as
+     well (the first is in an r128 capture of the engine move's fix round 1),
+     and the stills of a run that printed them are the same files, byte for
+     byte, as those of a run that did not. A context lost while the game is
+     running is another matter: the engine reports that as an error, and an
+     error always fails the run. */
+  'WebGL: CONTEXT_LOST_WEBGL: loseContext: context lost',
+  'A valid external Instance reference no longer exists.'
+];
+
+/* Watches a stills page for anything that says the picture may be wrong,
+   and hands each one to `report` as a line of text: a page error, a console
+   error, or a console warning that is not in KNOWN_WARNINGS.
+
+   WHY THE CONSOLE AND NOT ONLY PAGE ERRORS. A node material that fails to
+   build does not throw. The engine writes the failure on the console and
+   goes on drawing, with that material missing or wrong, so a tool that
+   listened for page errors alone would write the still and exit 0. That is
+   exactly the fault a still exists to catch. An unknown warning fails too,
+   because the engine reports some of its problems at that level and a new
+   one should be read by a person once, and then either fixed or added
+   above with its reason. */
+function watchPage(page, report) {
+  page.on('pageerror', (e) => report('PAGEERROR: ' + e.message));
+  page.on('console', (m) => {
+    const type = m.type();
+    if (type !== 'error' && type !== 'warning') return;
+    const text = m.text();
+    const plain = text.replace(/^\[\.WebGL-0x[0-9a-f]+\]\s*/, '').replace(/ \(this message will no longer repeat\)$/, '');
+    if (type === 'warning' && KNOWN_WARNINGS.indexOf(plain) >= 0) return;
+    report('CONSOLE ' + type.toUpperCase() + ': ' + text.split('\n')[0]);
   });
 }
 
@@ -171,4 +257,4 @@ async function waitForGame(page, circuit) {
   }
 }
 
-module.exports = { ROOT, CHROMIUM_ARGS, STILL_VIEWPORT, requirePlaywright, serveDist, localOnly, pinRandom, callHook };
+module.exports = { ROOT, CHROMIUM_ARGS, STILL_VIEWPORT, STILL_CONTEXT, stillClip, watchPage, requirePlaywright, distFile, serveDist, localOnly, pinRandom, callHook };

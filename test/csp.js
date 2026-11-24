@@ -128,12 +128,20 @@ const server = http.createServer((req, res) => {
    * What does work is two screenshots a second apart. Playwright's capture
    * forces a real frame, so if the bytes differ the render loop is genuinely
    * turning — no instrumentation the headless environment can throttle. */
+  /* WHICH BACKEND is asked of the game's renderer, not of the canvas. This
+     used to ask the game canvas for a `webgl2` context, which is true on the
+     WebGL 2 fallback and false on a canvas that holds a WebGPU context, so
+     it only passed because this test runs headless, where there is no
+     WebGPU adapter. The renderer names its backend on both, and a game that
+     never started has no renderer to ask: MCL64 is assigned only after the
+     renderer's init() has settled and the world is built. */
   const probe = await page.evaluate(() => {
     const c = document.querySelector('canvas');
+    const b = window.MCL64 && window.MCL64.renderer && window.MCL64.renderer.backend;
     return {
       canvas: !!c,
       size: c ? c.width + 'x' + c.height : null,
-      webglContext: !!(c && (c.getContext('webgl2') || c.getContext('webgl'))),
+      backend: !b ? null : b.isWebGPUBackend ? 'webgpu' : b.isWebGLBackend ? 'webgl2' : null,
       build: (window.MCL64_BUILD || {}).version || null,
       cloudConfigured: !!(window.MCL64_CLOUD && window.MCL64_CLOUD.url)
     };
@@ -226,11 +234,11 @@ const server = http.createServer((req, res) => {
 
   await browser.close();
   server.close();
-  const booted = probe.canvas && probe.webglContext && probe.framesAdvancing;
+  const booted = probe.canvas && !!probe.backend && probe.framesAdvancing;
   const supaOk = differential[0] && !differential[0].cspBlocked;
   const exfilBlocked = differential[1] && differential[1].cspBlocked;
   const ok = realViolations.length === 0 && supaOk && exfilBlocked && booted;
-  console.log('\n  booted (canvas + webgl + motion): ' + (booted ? 'yes' : 'NO'));
+  console.log('\n  booted (canvas + backend + motion): ' + (booted ? 'yes, on ' + probe.backend : 'NO'));
   console.log('  Supabase origin reachable      : ' + (supaOk ? 'yes' : 'NO — connect-src too tight'));
   console.log('  off-origin exfil blocked       : ' + (exfilBlocked ? 'yes' : 'NO — connect-src too loose'));
   console.log('  unexpected violations          : ' + realViolations.length);
