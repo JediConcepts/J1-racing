@@ -312,7 +312,8 @@ Game.prototype.buildEnvironment = function (scene) {
    This is exact only where a surface is FULLY fogged. Part way into the haze
    the two engines mix in different spaces (r128 in encoded values, this one
    in linear light), and a dark surface comes out paler than it did. It shows
-   most in the far views of Modern. No choice of colour puts that right.
+   most in the far views of Modern. No choice of colour puts that right; where
+   the haze starts does most of it (see the note on the 250 in buildWorld).
 
    The clear colour is the same hex, handed over the same way, so it gets the
    same treatment. The sky dome covers it in every frame the game draws.
@@ -364,8 +365,20 @@ function hazeUnderToneMapping(hex, exposure) {
 
 Game.prototype.buildWorld = function () {
   var scene = this.scene = new THREE.Scene();
-  /* the colour here is a first value only: applyHaze sets it for the tier */
-  scene.fog = new THREE.Fog(SKY_HAZE, 150, 980);
+  /* the colour here is a first value only: applyHaze sets it for the tier.
+
+     WHERE THE HAZE STARTS: 250 m, and it was 150 m on r128. The 250 is a
+     compensation for the engine move and nothing else. r128 mixed the haze
+     into the finished, encoded picture; this engine mixes it into linear
+     light, where the same share of haze reads as far more of it on a dark
+     surface. A surface part way into the haze therefore came out paler and
+     redder than on the live game, most of all in the far views of Modern.
+     Starting the haze 100 m further out takes that back off, and is what
+     makes the picture match the live one again (the numbers for 150, 250 and
+     300 are in docs/v2-picture-log.md). The far limit, 980 m, is unchanged:
+     a surface that far away is fully in the haze, as before, and reads as
+     the same colour as before (see applyHaze). */
+  scene.fog = new THREE.Fog(SKY_HAZE, 250, 980);
 
   this.camera = new THREE.PerspectiveCamera(64, 4 / 3, 0.6, 3400);
   this.camPos = new THREE.Vector3();
