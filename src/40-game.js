@@ -1073,9 +1073,10 @@ Game.prototype.resetRace = function (toTitle) {
   this.countdown = 0;
   this.state = toTitle ? STATE.TITLE : STATE.COUNTDOWN;
   if (toTitle) { this.demoShot = 0; this.demoT = 99; this.demoCar = this.cars[1]; }
-  /* A circuit with an opening shot starts on it, from its first frame: see
-     TITLE_OPENING. The cars are placed and driven exactly as they were. */
-  this.demoOpen = (toTitle && TITLE_OPENING[t.id]) || null;
+  /* A circuit with an opening shot starts on it, from its first frame, while
+     the sky is the physical one: see TITLE_OPENING. The cars are placed and
+     driven exactly as they were. */
+  this.demoOpen = (toTitle && this.skyRig.mode === 'physical' && TITLE_OPENING[t.id]) || null;
   if (this.demoOpen) { this.demoT = 0; this.demoCar = this.cars[this.demoOpen.car]; }
   this.setLights(0);
   this.updateCamera(0, true);
@@ -2602,16 +2603,29 @@ Game.prototype.tick = function (dt) {
    Monaco. The bearing is the bearing of Monaco's dusk sun (TIME_OF_DAY_AT),
    so the camera looks into the sunset from behind the papaya car as it leaves
    the harbour front, with the water and a moored boat to the left and the
-   lit town across the frame. The 8 m to the side is not taste: from the first
+   lit town across the frame. The 9 m to the side is not taste: from the first
    stretch of that road the sun stands in a gap between two towers about 6 m
-   wide, and 8 m to the right of the car is where the camera sees through it
-   for the first second and a little more. It was found by looking, at 2 m
-   steps, and it holds only while the sun and those towers stay where they
-   are: move either and look again. After about 1.2 seconds a nearer tower
-   takes the sun, and the shot ends at 3.2 with the car turning away. */
+   wide, and 9 m to the right of the car is where the camera sees through it
+   from the very first frame and for the first second. At 8 m the sun came
+   into the gap a twentieth of a second in, so the one frame a slow device
+   holds longest, the first, was the one without it. It was found by looking,
+   and it holds only while the sun and those towers stay where they are: move
+   either and look again.
+
+   After about a second a nearer tower takes the sun. It comes back behind
+   the La Rascasse sign at 3 seconds and again through the trees at 4.5, so
+   the shot is held to 4.6 and ends on that. It cannot be held longer: at 5
+   seconds the camera rides through the Anthony Noghes sign, which fills the
+   frame, and at 10, on a screen held upright, through a tree.
+
+   THE SHOT IS ULTRA'S. It was placed for a sun that the painted dome does not
+   have, and Retro and Modern draw what the live game draws, on the title as
+   in a race: so it is taken up only while the sky is the physical one
+   (resetRace), a change of tier while it runs ends it (tickDemo), and the
+   bench never runs it (bench). */
 var TITLE_OPENING = {
   'monaco-gp-v1': {
-    car: 0, azimuth: 322, back: 15, side: 8, up: 3.6, turn: 14, tilt: 0, fov: 52, hold: 3.2,
+    car: 0, azimuth: 322, back: 15, side: 9, up: 3.6, turn: 14, tilt: 0, fov: 52, hold: 4.6,
     tall: { back: 20, turn: 11, tilt: -3, fov: 68 }
   }
 };
@@ -2633,9 +2647,23 @@ Game.prototype.tickDemo = function (dt) {
   }
   resolveCarContacts(this.cars, null);
 
+  /* The opening shot is Ultra's (TITLE_OPENING). A tier without the physical
+     sky that comes on while it runs gets the cameras it has always had, from
+     where resetRace starts them. */
+  if (this.demoOpen && this.skyRig.mode !== 'physical') this.demoPlain();
+
   this.demoT += dt;
   var dur = this.demoOpen ? this.demoOpen.hold : (this.demoShot === 0 ? 7.5 : 5.0);
   if (this.demoT >= dur) this.nextDemoShot();
+};
+
+/* The demo's own cameras, from their start, with no opening shot: what
+   resetRace(true) sets for a circuit or a tier that has none. */
+Game.prototype.demoPlain = function () {
+  this.demoOpen = null;
+  this.demoShot = 0;
+  this.demoT = 99;
+  this.demoCar = this.cars[1];
 };
 
 Game.prototype.nextDemoShot = function () {
@@ -4115,6 +4143,9 @@ Game.prototype.bench = function (opts) {
     this.photoHold = false;
     this.hudCanvas.style.visibility = '';
     this.resetRace(true);
+    /* a bench times the demo's own cameras in every tier, as it always has,
+       and never the opening shot (TITLE_OPENING) */
+    if (this.demoOpen) { this.demoPlain(); this.updateCamera(0, true); }
   } catch (e) {
     return Promise.reject(e);
   }
