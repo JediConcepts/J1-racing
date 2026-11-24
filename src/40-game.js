@@ -977,6 +977,7 @@ Game.prototype.buildGrid = function () {
   this.demoCar = this.player;
   this.demoShot = 0;
   this.demoT = 0;
+  this.demoOpen = null;
   this.demoAnchor = new THREE.Vector3();
 };
 
@@ -1036,6 +1037,10 @@ Game.prototype.resetRace = function (toTitle) {
   this.countdown = 0;
   this.state = toTitle ? STATE.TITLE : STATE.COUNTDOWN;
   if (toTitle) { this.demoShot = 0; this.demoT = 99; this.demoCar = this.cars[1]; }
+  /* A circuit with an opening shot starts on it, from its first frame: see
+     TITLE_OPENING. The cars are placed and driven exactly as they were. */
+  this.demoOpen = (toTitle && TITLE_OPENING[t.id]) || null;
+  if (this.demoOpen) { this.demoT = 0; this.demoCar = this.cars[this.demoOpen.car]; }
   this.setLights(0);
   this.updateCamera(0, true);
 };
@@ -2535,6 +2540,46 @@ Game.prototype.tick = function (dt) {
   }
 };
 
+/* The shot a title screen opens on, for a circuit that names one. It is the
+   first frame a new player ever sees, so it is chosen and not left to
+   wherever the demo's cameras happen to fall. A circuit that is not named
+   opens as it always did.
+
+   The camera rides with one car and keeps one bearing, so it is a tracking
+   shot that looks the same way for as long as it lasts:
+
+     car        which car of the demo it rides with (0 is the papaya car)
+     azimuth    the bearing it stands back along, in the degrees of
+                TIME_OF_DAY in 32-sky.js (clockwise from the way the cars
+                leave the line)
+     back, side, up   where it stands from the car, in metres: back along
+                that bearing, to the right of it, and above the car
+     turn       how far to the left of that bearing it looks, in degrees
+     tilt       how far up it looks, in degrees
+     fov        vertical field of view, 45 or more so the sun keeps its glow
+                (SUN_LONG in 32-sky.js)
+     hold       seconds before the demo's own cameras take over
+     tall       what a screen taller than it is wide has in place of the
+                above: it stands further back and sees wider, so the car and
+                the sun both fit across a phone held upright
+
+   Monaco. The bearing is the bearing of Monaco's dusk sun (TIME_OF_DAY_AT),
+   so the camera looks into the sunset from behind the papaya car as it leaves
+   the harbour front, with the water and a moored boat to the left and the
+   lit town across the frame. The 8 m to the side is not taste: from the first
+   stretch of that road the sun stands in a gap between two towers about 6 m
+   wide, and 8 m to the right of the car is where the camera sees through it
+   for the first second and a little more. It was found by looking, at 2 m
+   steps, and it holds only while the sun and those towers stay where they
+   are: move either and look again. After about 1.2 seconds a nearer tower
+   takes the sun, and the shot ends at 3.2 with the car turning away. */
+var TITLE_OPENING = {
+  'monaco-gp-v1': {
+    car: 0, azimuth: 322, back: 15, side: 8, up: 3.6, turn: 14, tilt: 0, fov: 52, hold: 3.2,
+    tall: { back: 20, turn: 11, tilt: -3, fov: 68 }
+  }
+};
+
 /* Attract mode: a full field racing under AI, cut between TV cameras.
    Every N64 racer opened on one of these. */
 Game.prototype.tickDemo = function (dt) {
@@ -2553,13 +2598,14 @@ Game.prototype.tickDemo = function (dt) {
   resolveCarContacts(this.cars, null);
 
   this.demoT += dt;
-  var dur = this.demoShot === 0 ? 7.5 : 5.0;
+  var dur = this.demoOpen ? this.demoOpen.hold : (this.demoShot === 0 ? 7.5 : 5.0);
   if (this.demoT >= dur) this.nextDemoShot();
 };
 
 Game.prototype.nextDemoShot = function () {
   var t = this.track, n = t.n;
   this.demoT = 0;
+  this.demoOpen = null;                      /* the opening shot is shown once */
   this.demoShot = (this.demoShot + 1) % 3;
 
   /* follow whoever is leading on track, then the car behind them */
@@ -2744,7 +2790,20 @@ Game.prototype.updateCamera = function (dt, snap) {
      nobody is driving is just a moving wall. */
   var onboard = (this.state !== STATE.TITLE && ONBOARD_CAMS[this.camMode]) ? this.camMode : 0;
 
-  if (this.state === STATE.TITLE && this.demoShot !== 0) {
+  if (this.state === STATE.TITLE && this.demoOpen) {
+    /* the opening shot: rides with the car, keeps its bearing (TITLE_OPENING).
+       Nothing is damped: the camera is fixed to the car, as an onboard is. */
+    var op = this.demoOpen, tall = (this.camera.aspect < 1 && op.tall) || op;
+    var opAz = op.azimuth * Math.PI / 180 + this.skyRig.north;
+    var opX = Math.sin(opAz), opZ = -Math.cos(opAz);
+    var opBack = tall.back || op.back;
+    this.camPos.set(px - opX * opBack - opZ * op.side, py + op.up, pz - opZ * opBack + opX * op.side);
+    opAz -= (tall.turn === undefined ? op.turn : tall.turn) * Math.PI / 180;
+    this.camLook.set(this.camPos.x + Math.sin(opAz) * 40,
+      this.camPos.y + Math.tan((tall.tilt === undefined ? op.tilt : tall.tilt) * Math.PI / 180) * 40,
+      this.camPos.z - Math.cos(opAz) * 40);
+    this.camera.fov = tall.fov || op.fov;
+  } else if (this.state === STATE.TITLE && this.demoShot !== 0) {
     /* locked-off TV camera: hold the position, track the car */
     this.camPos.copy(this.demoAnchor);
     _look.set(px, py + 0.9, pz);
