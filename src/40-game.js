@@ -579,7 +579,9 @@ Game.prototype.buildTarget = function (modern, full) {
        photo draws a frame whenever it is called, which need not be once for
        each of those, and a still must never carry the glow of the frame
        before it. 'render' is the engine's NodeUpdateType.RENDER (the bundle
-       does not export the name): once for every draw of the post pass. */
+       does not export the name): once for every draw of the post pass.
+       The shadow maps follow the same count and have no such switch, so
+       photo waits for the count to move before it draws (see photo). */
     this.bloom.updateBeforeType = 'render';
     this.bloom.highPassFn = bloomHighPass;
     extra = { bloom: this.bloom, uGain: this.postU.uGain, uLift: this.postU.uLift, uSat: this.postU.uSat };
@@ -3933,7 +3935,8 @@ Game.prototype.photoCamMissing = function (name) {
  *
  * Starts a real race (grid, countdown and all), drives the player with the
  * demo driver for exactly `tick` sim ticks without drawing, places camera
- * `cam`, and draws ONE frame with the HUD hidden. The frame loop is then held
+ * `cam`, and draws ONE frame with the HUD hidden, in the next animation frame
+ * the engine has counted (the promise settles then). The frame loop is held
  * so nothing draws over it before it is captured: the game is left frozen
  * afterwards, and needs a reload to be played. `timeOfDay`, when given, is
  * set and saved through setTimeOfDay before the frame is drawn; an unknown
@@ -4037,22 +4040,53 @@ Game.prototype.photo = function (opts) {
     this.hudCanvas.style.visibility = 'hidden';
     var layers = this.host.querySelectorAll('.scanlines, .glow');
     for (var li = 0; li < layers.length; li++) layers[li].style.visibility = 'hidden';
-    this.drawFrame(1);
-    return Promise.resolve();
+
+    /* THE FRAME IS DRAWN ONCE THE ENGINE HAS MOVED ON A FRAME, not here. The
+       engine draws a shadow map at most once for a camera in each frame it
+       has counted (ShadowNode.updateBefore), and with a draw it skips it
+       keeps the old map AND the old place for it. It counts in an animation
+       callback of its own (renderer.info.frame), which runs beside the game's
+       loop. A photo is asked for between two animation frames, so a frame
+       drawn at once carries the number of the game's last frame, drawn with
+       this same camera: the still came out with the shadows of the view the
+       page had before it, which reads as no shadows at all. So the draw
+       waits for an animation frame in which the count has moved. The loop is
+       held, so nothing else is drawn in between. That is one callback where
+       the engine's comes first and two where the game's does; after a third
+       it is drawn whatever the count says, so an engine that has stopped
+       counting cannot leave the promise open. */
+    var info = this.renderer.info, counted = info.frame, waited = 0;
+    return new Promise(function (resolve, reject) {
+      function draw() {
+        if (info.frame === counted && ++waited < 3) { requestAnimationFrame(draw); return; }
+        try {
+          self.drawFrame(1);
+          resolve();
+        } catch (e) {
+          self.photoUndo();
+          reject(e);
+        }
+      }
+      requestAnimationFrame(draw);
+    });
   } catch (e) {
     /* Only when this call took the hold: a refusal before that leaves the page
-       exactly as it was. resetRace(true) is the title, as bench leaves it, and
-       it clears pendingResult and every car's finished flag, so nothing the
-       demo driver did can be posted by the frame loop or by a later sign in. */
-    if (held) {
-      this.photoHold = false;
-      this.hudCanvas.style.visibility = '';
-      var hidden = this.host.querySelectorAll('.scanlines, .glow');
-      for (var hi = 0; hi < hidden.length; hi++) hidden[hi].style.visibility = '';
-      try { this.resetRace(true); } catch (ignore) { /* report the first error, not this one */ }
-    }
+       exactly as it was. */
+    if (held) this.photoUndo();
     return Promise.reject(e);
   }
+};
+
+/* A photo that failed after it took the hold. resetRace(true) is the title,
+   as bench leaves it, and it clears pendingResult and every car's finished
+   flag, so nothing the demo driver did can be posted by the frame loop or by
+   a later sign in. */
+Game.prototype.photoUndo = function () {
+  this.photoHold = false;
+  this.hudCanvas.style.visibility = '';
+  var hidden = this.host.querySelectorAll('.scanlines, .glow');
+  for (var hi = 0; hi < hidden.length; hi++) hidden[hi].style.visibility = '';
+  try { this.resetRace(true); } catch (ignore) { /* report the first error, not this one */ }
 };
 
 /* MCL64.bench({ circuit, quality, seconds, timeOfDay }) -> Promise<{ frames, avgMs, p95Ms }>
