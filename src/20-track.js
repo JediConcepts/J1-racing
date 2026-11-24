@@ -758,31 +758,9 @@ function buildTrackMeshes(track, scene) {
   group.add(new THREE.Mesh(runoff.geometry(), new THREE.MeshStandardMaterial({
     map: texFromCanvas(makeRunoffTex(), 1, 1), vertexColors: true, roughness: 0.95, metalness: 0.0 })));
   
-  var isCity = track.id === 'monaco-gp-v1';
-  var grassTexCanvas = isCity ? makeCityGroundTex() : makeGrassTex();
-  /* envMapIntensity 0.9 on the grass is a compensation for the engine move
-     and nothing else. Seen along its surface, grass takes more light from
-     the environment on three.js 0.187 than it did on r128, and comes out
-     paler and less green: from the chase camera at Silverstone it read
-     92,159,73 on r128 and 107,165,100 here (Modern, haze off on both). Seen
-     from above the two agree to within 7 levels, and with the environment
-     taken away on both engines they agree everywhere, so the environment is
-     where the extra comes from.
-
-     The number scales all the light the grass takes from the environment,
-     the part that was right along with the extra, so it can only go a little
-     way. At 0.9 every still that shows grass is closer to the live picture on
-     its worst channel and none is further off by more than 0.1 on any. At
-     0.75 the far views came out too dark in green.
-
-     Monaco's ground, which this mesh carries there, stays at 1. It matched
-     the live picture already, and both values tried on it (0.75 and 0.5)
-     took Monaco's stills away from it. The numbers are in
-     docs/v2-picture-log.md. Game's ownEnvironment is what makes the number
-     apply. */
+  var grassTexCanvas = track.id === 'monaco-gp-v1' ? makeCityGroundTex() : makeGrassTex();
   group.add(new THREE.Mesh(grass.geometry(), new THREE.MeshStandardMaterial({
-    map: texFromCanvas(grassTexCanvas, 6, 1), vertexColors: true, roughness: 1.0, metalness: 0.0,
-    envMapIntensity: isCity ? 1 : 0.9 })));
+    map: texFromCanvas(grassTexCanvas, 6, 1), vertexColors: true, roughness: 1.0, metalness: 0.0 })));
 
   group.add(new THREE.Mesh(kerb.geometry(), new THREE.MeshStandardMaterial({
     map: texFromCanvas(makeKerbTex(), 1, 1, true), vertexColors: true, roughness: 0.72, metalness: 0.0 })));
@@ -1018,25 +996,7 @@ function buildScenery(track, scene) {
   /* grandstands and pit buildings clustered around the start line */
   var crowdTex = texFromCanvas(makeCrowdTex(), 3, 1);
   var standMat = new THREE.MeshStandardMaterial({ color: srgb(0x33353f), roughness: 0.82, metalness: 0.1 });
-  /* envMapIntensity 0.6 is a compensation for the engine move and nothing
-     else. The crowd is a dark texture with bright specks. r128 smoothed a
-     texture's stored, encoded values and turned the result into light
-     afterwards; three.js 0.187 turns each texel into light first and smooths
-     that, and the average of the light is brighter than the light of the
-     average. So wherever the crowd is seen small enough for its specks to
-     run together, it comes out paler than on the live game: the far end of
-     the Indianapolis stands read 148,139,133 on r128 and 190,174,157 here
-     (Modern, the high camera, haze off on both).
-
-     Taking some of the sky's light off the crowd pulls that back toward the
-     live picture. It does not touch the cause, and it costs a little where
-     the crowd is seen close with its specks apart, which was right already:
-     at 0.6 the view from the Silverstone stands moves 0.17 of a level away
-     from the live picture, while the four Indianapolis views move 0.3 to 0.9
-     toward it. At 0.4 the close view was out by more than the 0.2 allowed.
-     The numbers are in docs/v2-picture-log.md. Game's ownEnvironment is what
-     makes the number apply. */
-  var crowdMat = new THREE.MeshStandardMaterial({ map: crowdTex, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0, envMapIntensity: 0.6 });
+  var crowdMat = new THREE.MeshStandardMaterial({ map: crowdTex, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0 });
   var roofMat = new THREE.MeshStandardMaterial({ color: COL.papaya, roughness: 0.45, metalness: 0.2 });
   var pitMat = new THREE.MeshStandardMaterial({ map: texFromCanvas(makePitwallTex(), 4, 1, true),  });
 
@@ -1550,28 +1510,9 @@ function buildMonacoTunnelAndUrbanScenery(track, scene) {
   var buildingTex1 = texFromCanvas(makeBuildingTex('#dbd3c5', '#1a1f24'), 1, 1, true);
   var buildingTex2 = texFromCanvas(makeBuildingTex('#c9bba8', '#2a2f34'), 1, 1, true);
   var buildingTex3 = texFromCanvas(makeBuildingTex('#b0a18f', '#1a1f24'), 1, 1, true);
-  /* envMapIntensity 0.8 on the three building materials is a compensation
-     for the engine move and nothing else, and like the crowd's it does not
-     touch the cause. A building's texture is light walls and dark windows in
-     fine stripes. r128 smoothed the stored, encoded values of a texture and
-     turned the result into light; three.js 0.187 turns each texel into light
-     first and smooths that, which is brighter wherever the stripes run
-     together. So a tower seen from far off, or a face seen along its length,
-     is lighter than on the live game: the shaded face of the tower nearest
-     the high camera read 102,105,106 on r128 and 130,131,129 here, while the
-     face turned to the camera, with its stripes apart, is within 6 levels
-     (Modern, haze off on both).
-
-     Taking some of the sky's light off the buildings pulls the far ones back
-     toward the live picture and costs a little where they are close. At 0.8
-     six of the eight Monaco stills move toward the live picture, by up to 0.6
-     of a level, and the apex and grid views in Modern move away by 0.11 at
-     most. At 0.7 the apex view was out by more than the 0.2 allowed. The
-     numbers are in docs/v2-picture-log.md. Game's ownEnvironment is what
-     makes the number apply. */
-  var buildingMat1 = new THREE.MeshStandardMaterial({ map: buildingTex1, roughness: 0.8, envMapIntensity: 0.8 });
-  var buildingMat2 = new THREE.MeshStandardMaterial({ map: buildingTex2, roughness: 0.8, envMapIntensity: 0.8 });
-  var buildingMat3 = new THREE.MeshStandardMaterial({ map: buildingTex3, roughness: 0.8, envMapIntensity: 0.8 });
+  var buildingMat1 = new THREE.MeshStandardMaterial({ map: buildingTex1, roughness: 0.8 });
+  var buildingMat2 = new THREE.MeshStandardMaterial({ map: buildingTex2, roughness: 0.8 });
+  var buildingMat3 = new THREE.MeshStandardMaterial({ map: buildingTex3, roughness: 0.8 });
   var mats = [buildingMat1, buildingMat2, buildingMat3];
 
   var step = 6;

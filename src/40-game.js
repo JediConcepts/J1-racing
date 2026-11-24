@@ -472,9 +472,8 @@ Game.prototype.buildWorld = function () {
    was tuned to be.
 
    Every material under `root` that asks for a strength other than 1 (the car
-   paint, the sea and the buildings at Monaco, the crowd and the grass) is
-   given the scene's environment as its own map, which is all it takes for
-   its number to apply again. The renderer filters the one texture once,
+   paint, and the sea at Monaco) is given the scene's environment as its own
+   map, which is all it takes for its number to apply again. The renderer filters the one texture once,
    whoever holds it. Materials that leave the strength at 1 are not touched:
    for them the scene's environment already does the same thing. */
 Game.prototype.ownEnvironment = function (root) {
