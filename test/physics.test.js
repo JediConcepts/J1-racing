@@ -50,7 +50,7 @@ const read = (p) => fs.readFileSync(path.join(REPO, p), 'utf8');
 /* THREE ships as a UMD bundle that wants a global to attach to. */
 global.window = global;
 global.self = global;
-new Function(read('vendor/three.min.js'))();
+new Function(read('vendor/three.bundle.js'))();
 const THREE = global.THREE;
 
 /* The src files are written to be concatenated into one IIFE, so evaluate them

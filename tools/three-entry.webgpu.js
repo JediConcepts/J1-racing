@@ -62,15 +62,21 @@ export {
 } from 'three/webgpu';
 
 /* 2. What the move to 0.187 needs that the source does not name yet. The
- *    same seven names as in the WebGL entry, for the same reasons. */
+ *    same seven names as in the WebGL entry, for the same reasons, and two
+ *    more that only this flavour needs. ColorManagement, because the game
+ *    switches colour management off (it converts its own colours, as it did
+ *    for r128). UnsignedByteType, for the 8 bit render target that Retro
+ *    draws into. */
 export {
+  ColorManagement,
   HalfFloatType,
   LinearSRGBColorSpace,
   MathUtils,
   Object3D,
   PCFShadowMap,
   REVISION,
-  SRGBColorSpace
+  SRGBColorSpace,
+  UnsignedByteType
 } from 'three/webgpu';
 
 /* 3. This renderer and what stands beside it. RenderPipeline is the post

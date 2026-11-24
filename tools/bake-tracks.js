@@ -28,7 +28,7 @@ function loadThree() {
   if (three) return three;
   global.window = global;
   global.self = global;
-  new Function(read('vendor/three.min.js'))();
+  new Function(read('tools/vendor/three-r128.min.js'))();
   three = global.THREE;
   return three;
 }

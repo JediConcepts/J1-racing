@@ -37,7 +37,7 @@ const REPO = path.join(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(REPO, p), 'utf8');
 
 /* One place for what gets loaded, so swapping the vendor file is one edit. */
-const VENDOR = 'vendor/three.min.js';
+const VENDOR = 'vendor/three.bundle.js';
 const CHAIN = ['src/05-fpmath.js', 'src/10-core.js', 'src/12-trackdata.js', 'src/20-track.js', 'src/30-cars.js'];
 
 const GOLDEN = path.join(__dirname, 'golden', 'sim-2.json');

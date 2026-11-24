@@ -1,4 +1,4 @@
-/* Bundles vendor/three.min.js + src/*.js into a playable page.
+/* Bundles vendor/three.bundle.js + src/*.js into a playable page.
    Artifacts are served under a CSP that blocks every external host, so the
    library has to be inlined rather than linked.
 
@@ -95,7 +95,7 @@ function read(p) {
   return fs.readFileSync(path.join(root, p), 'utf8');
 }
 
-const three = read('vendor/three.min.js');
+const three = read('vendor/three.bundle.js');
 const supabase = read('vendor/supabase.js');
 const template = read('src/index.template.html').replace('__MAPS_KEY__', process.env.GOOGLE_MAPS_PLATFORM_KEY || '');
 
@@ -185,7 +185,7 @@ const wrapped = 'window.MCL64_BUILD = ' + JSON.stringify(BUILD) + ';\n'
   + '(function(){\n"use strict";\n' + game + '\n})();\n';
 
 /* A literal </script> anywhere in the payload would close the tag early. */
-for (const [label, body] of [['three.min.js', three], ['supabase.js', supabase], ['game', wrapped]]) {
+for (const [label, body] of [['three.bundle.js', three], ['supabase.js', supabase], ['game', wrapped]]) {
   if (/<\/script/i.test(body)) {
     throw new Error('Refusing to build: ' + label + ' contains a literal </script>');
   }
@@ -348,7 +348,7 @@ if (standalone.indexOf(CLOUD.key) === -1) problems.push('index.html is missing t
    minifier or a vendor bump that quietly drops a header is exactly how a project
    ends up distributing an unattributed dependency, so fail the build here. */
 if (three.indexOf('Three.js Authors') === -1) {
-  problems.push('vendor/three.min.js has lost its own @license header — check the vendored file');
+  problems.push('vendor/three.bundle.js has lost its own @license header — check the vendored file');
 }
 if (fragment.indexOf(NOTICE.three) === -1) problems.push('artifact.html is missing the three.js notice');
 if (standalone.indexOf(NOTICE.three) === -1) problems.push('index.html is missing the three.js notice');

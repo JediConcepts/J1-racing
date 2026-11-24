@@ -13,50 +13,87 @@ var STATE = { TITLE: 0, COUNTDOWN: 1, RACING: 2, FINISHED: 3 };
 
 /* --- post-process: RGBA5551 quantise + ordered dither ------------------- */
 
-var POST_VERT = [
-  'varying vec2 vUv;',
-  'void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }'
-].join('\n');
+/* The pass is a node, not GLSL: WebGPURenderer draws node materials on both
+   of its backends and does not draw a ShaderMaterial at all. It is the r128
+   fragment shader function for function (the same Bayer arithmetic, the same
+   1/52 dither, the same 31 level quantise, the same grade and vignette), with
+   one stage added in front.
 
-var POST_FRAG = [
-  'uniform sampler2D tDiffuse;',
-  'uniform vec2 uRes;',
-  'uniform float uFade;',
-  'uniform float uRetro;',      /* 1 = console, 0 = modern */
-  'varying vec2 vUv;',
-  /* recursive 4x4 Bayer, built arithmetically — GLSL ES 1.0 will not let us
-     dynamically index a const array */
-  'float b2(vec2 p){ return mod(2.0*p.y + 3.0*p.x, 4.0); }',
-  'float bayer4(vec2 q){',
-  '  vec2 hi = floor(mod(q,4.0)*0.5);',
-  '  vec2 lo = mod(q,2.0);',
-  '  return (4.0*b2(hi) + b2(lo)) / 16.0;',
-  '}',
-  'void main(){',
-  '  vec3 c = texture2D(tDiffuse, vUv).rgb;',
-  '  if (uRetro > 0.5) {',
-  /* the console path: dither into a 5-bit-per-channel palette */
-  '    vec2 px = floor(vUv * uRes);',
-  '    float d = bayer4(px) - 0.5;',
-  '    c += d * (1.0/52.0);',
-  '    c = floor(c * 31.0 + 0.5) / 31.0;',
-  '  } else {',
-  /* modern: the frame is already tone mapped by the renderer, so this is
-     only a gentle grade — a little saturation and contrast, no quantise
-     and no dither. */
-  '    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));',
-  '    c = mix(vec3(l), c, 1.16);',
-  '    c = clamp((c - 0.5) * 1.07 + 0.5, 0.0, 1.0);',
-  '  }',
-  '  vec2 q = (vUv - 0.5) * 2.0;',
-  '  float vig = 1.0 - dot(q,q) * mix(0.06, 0.13, uRetro);',
-  '  gl_FragColor = vec4(c * vig * uFade, 1.0);',
-  '}'
-].join('\n');
+   THE ADDED STAGE. On r128 the scene arrived in the render target already
+   tone mapped and sRGB encoded, in 8 bits, and the pass only had to read it.
+   This renderer tone maps and encodes only when it draws to the canvas, so
+   the target holds linear light that has not been tone mapped. The pass
+   therefore does both itself before the old maths runs: tone mapping for
+   Modern (Retro never had any), then the sRGB encode, then a round to 8 bits
+   as the old target stored it. The encode is written out by hand, with r128's
+   own formula, because the engine's colour space node does nothing once
+   colour management is switched off, which is how this game runs.
+
+   One node is built for each tier and not one node switched by a uniform:
+   the tier is known when the target is made (see buildTarget), and a Retro
+   frame then never pays for a tone map it throws away.
+
+   `frame` is the render target's texture, `uRes` its size in pixels and
+   `uFade` the fade from black. */
+function buildPostNode(frame, uRes, uFade, retro) {
+  var T = THREE.TSL;
+
+  /* recursive 4x4 Bayer, built arithmetically, as the GLSL had it:
+       float b2(vec2 p){ return mod(2.0*p.y + 3.0*p.x, 4.0); }
+       float bayer4(vec2 q){ hi = floor(mod(q,4.0)*0.5); lo = mod(q,2.0);
+                             return (4.0*b2(hi) + b2(lo)) / 16.0; } */
+  function b2(p) { return p.y.mul(2.0).add(p.x.mul(3.0)).mod(4.0); }
+  function bayer4(q) {
+    var hi = q.mod(4.0).mul(0.5).floor();
+    var lo = q.mod(2.0);
+    return b2(hi).mul(4.0).add(b2(lo)).div(16.0);
+  }
+
+  return T.Fn(function () {
+    var vUv = T.uv();
+    var c = T.texture(frame, vUv).rgb;
+
+    /* Modern: ACES, with the exposure read from renderer.toneMappingExposure.
+       The colour space argument is the working space, so renderOutput tone
+       maps and converts nothing. */
+    if (!retro) {
+      c = T.renderOutput(T.vec4(c, 1.0), THREE.ACESFilmicToneMapping, THREE.LinearSRGBColorSpace).rgb;
+    }
+    c = T.clamp(c, 0.0, 1.0);
+
+    /* linear to sRGB, as r128's LinearTosRGB, then what an 8 bit target kept */
+    var curve = c.pow(T.vec3(0.41666)).mul(1.055).sub(0.055);
+    var toe = c.mul(12.92);
+    c = T.mix(curve, toe, c.lessThanEqual(T.vec3(0.0031308)));
+    c = c.mul(255.0).add(0.5).floor().div(255.0);
+
+    if (retro) {
+      /* the console path: dither into a 5-bit-per-channel palette. uv() on a
+         full screen pass has its origin at the TOP on this renderer, on both
+         backends, where the old vUv had it at the bottom, so y is turned over
+         before it indexes the matrix. Left as it comes, the pattern would be
+         upside down and nearly every pixel a palette step out. */
+      var px = T.vec2(vUv.x, vUv.y.oneMinus()).mul(uRes).floor();
+      var d = bayer4(px).sub(0.5);
+      c = c.add(d.mul(1.0 / 52.0));
+      c = c.mul(31.0).add(0.5).floor().div(31.0);
+    } else {
+      /* modern: the frame is tone mapped by now, so this is only a gentle
+         grade: a little saturation and contrast, no quantise and no dither. */
+      var l = T.dot(c, T.vec3(0.2126, 0.7152, 0.0722));
+      c = T.mix(T.vec3(l), c, 1.16);
+      c = T.clamp(c.sub(0.5).mul(1.07).add(0.5), 0.0, 1.0);
+    }
+
+    var q = vUv.sub(0.5).mul(2.0);
+    var vig = T.float(1.0).sub(T.dot(q, q).mul(retro ? 0.13 : 0.06));
+    return T.vec4(c.mul(vig).mul(uFade), 1.0);
+  })();
+}
 
 /* --- the game ----------------------------------------------------------- */
 
-function Game(host) {
+function Game(host, renderer) {
   this.host = host;
   this.state = STATE.TITLE;
   this.time = 0;
@@ -103,7 +140,7 @@ function Game(host) {
   this.camMode = this.settings.camMode;
   this.settingsResume = false;
 
-  this.buildRenderer();
+  this.buildRenderer(renderer);
   this.buildWorld();
   this.buildGrid();
   this.bindInput();
@@ -111,47 +148,95 @@ function Game(host) {
   this.resetRace(true);
 }
 
-Game.prototype.buildRenderer = function () {
+/* The renderer, with the arguments main has always passed. WebGPURenderer
+   picks its WebGL 2 backend by itself where the browser has no WebGPU;
+   `forceWebGL` asks for that backend outright (the address switch in boot).
+   Nothing here touches the GPU: that happens in init(), which returns a
+   promise, so boot waits for it before it makes the Game.
+
+   `antialias: true` no longer buys what it did. On r128 it gave the canvas
+   four samples, which the one full screen triangle drawn to it never used.
+   This renderer gives a full screen pass no samples on either backend, as
+   long as the fallback's context is made while an output conversion is still
+   pending. That is why the tone mapping and output colour space are set in
+   buildRenderer, after init(), and not here: set before init(), the fallback
+   would make a multisampled canvas again and pay for it on every frame. */
+function makeRenderer(forceWebGL) {
+  return new THREE.WebGPURenderer({
+    canvas: document.getElementById('gl'), antialias: true, alpha: false,
+    powerPreference: 'high-performance', stencil: false,
+    forceWebGL: !!forceWebGL
+  });
+}
+
+/* `renderer` comes from makeRenderer and has finished init(). */
+Game.prototype.buildRenderer = function (renderer) {
   this.glCanvas = document.getElementById('gl');
   this.hudCanvas = document.getElementById('hud');
   this.hud = this.hudCanvas.getContext('2d');
 
-  this.renderer = new THREE.WebGLRenderer({
-    canvas: this.glCanvas, antialias: true, alpha: false,
-    powerPreference: 'high-performance', stencil: false
-  });
+  this.renderer = renderer;
+  /* The renderer adds no output pass of its own: the post node tone maps and
+     encodes (see buildPostNode). With either of these left at its default the
+     renderer would draw every frame through a hidden target of its own first. */
+  this.renderer.toneMapping = THREE.NoToneMapping;
+  this.renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
   this.renderer.setPixelRatio(window.devicePixelRatio || 1);
   this.renderer.setClearColor(SKY_HAZE, 1);
   this.renderer.shadowMap.enabled = true;
   this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
-  this.rt = new THREE.WebGLRenderTarget(320, 240, {
-    minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
-    format: THREE.RGBAFormat, depthBuffer: true, stencilBuffer: false
-  });
-  /* COLOUR MANAGEMENT. The scene renders INTO this target, and r128 applies
-     the target's own texture encoding rather than renderer.outputEncoding when
-     the destination is a render target. Without this the frame stays linear
-     all the way to the screen — survivable with Lambert, which the palette was
-     hand-tuned around, but pitch black once physically-based shading and ACES
-     tone mapping are in front of it. The post pass then samples already
-     encoded values and writes them through untouched, which is correct. */
-  this.rt.texture.encoding = THREE.sRGBEncoding;
+  /* The post pass: one node material on a full screen quad. The uniforms
+     outlive the node, which is built again whenever the target is. */
+  this.postU = {
+    uRes: THREE.TSL.uniform(new THREE.Vector2(320, 240)),
+    uFade: THREE.TSL.uniform(1)
+  };
+  this.postMat = new THREE.NodeMaterial();
+  this.postMat.depthTest = false;
+  this.postMat.depthWrite = false;
+  this.postQuad = new THREE.QuadMesh(this.postMat);
+  this.buildTarget(false);
+};
 
-  this.postScene = new THREE.Scene();
-  this.postCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-  this.postMat = new THREE.ShaderMaterial({
-    uniforms: {
-      tDiffuse: { value: this.rt.texture },
-      uRes: { value: new THREE.Vector2(320, 240) },
-      uFade: { value: 1 },
-      uRetro: { value: 1 }
-    },
-    vertexShader: POST_VERT,
-    fragmentShader: POST_FRAG,
-    depthTest: false, depthWrite: false
+/* The target the scene is drawn into, and the post node that reads it.
+
+   The scene arrives here LINEAR and not tone mapped (see buildPostNode), so
+   the two tiers want different storage:
+
+     Modern  half float. Highlights above 1.0 have to survive until the pass
+             tone maps them; in 8 bits they would clip first.
+     Retro   8 bits, flagged sRGB, which is what r128 had. The GPU encodes on
+             write and decodes on read, so the pass still reads linear values,
+             and what it reads has been through the same 8 bit store as
+             before. That keeps the dither on the palette steps r128 gave.
+
+   Called with the tier whenever it may have changed. A change makes a new
+   target, so the node that samples it is built again too. */
+Game.prototype.buildTarget = function (modern) {
+  if (this.rt && this.rtModern === modern) return;
+  if (this.rt) this.rt.dispose();
+  this.rtModern = modern;
+  this.rt = new THREE.RenderTarget(this.gw || 320, this.gh || 240, {
+    minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+    format: THREE.RGBAFormat,
+    type: modern ? THREE.HalfFloatType : THREE.UnsignedByteType,
+    colorSpace: modern ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace,
+    depthBuffer: true, stencilBuffer: false
   });
-  this.postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.postMat));
+  this.postMat.fragmentNode = buildPostNode(this.rt.texture, this.postU.uRes, this.postU.uFade, !modern);
+  this.postMat.needsUpdate = true;
+};
+
+/* The two draws of a frame: the scene into the target, then the post pass
+   on to the canvas. The renderer clears the target by itself before the
+   first. `fade` is 1 for a full picture and 0 for black. */
+Game.prototype.drawFrame = function (fade) {
+  this.renderer.setRenderTarget(this.rt);
+  this.renderer.render(this.scene, this.camera);
+  this.renderer.setRenderTarget(null);
+  this.postU.uFade.value = fade;
+  this.postQuad.render(this.renderer);
 };
 
 /* ENVIRONMENT MAP.
@@ -161,7 +246,9 @@ Game.prototype.buildRenderer = function () {
    biggest contributor to the modern look after the material swap itself.
 
    Generated procedurally from a sky dome with a bright sun disc and a ground
-   half, then prefiltered by PMREMGenerator into the roughness mip chain. Done
+   half, then prefiltered into the roughness mip chain. On r128 the game ran
+   PMREMGenerator for that; this renderer prefilters an equirectangular
+   scene.environment by itself, so the texture is handed over as painted. Done
    this way because the artifact CSP blocks every external host, so an HDR file
    could never be fetched — and a 2 KB shader beats a 4 MB download regardless. */
 Game.prototype.buildEnvironment = function (scene) {
@@ -170,7 +257,7 @@ Game.prototype.buildEnvironment = function (scene) {
        dome. The dome version prefiltered to solid black — and because a
        Standard material takes its whole indirect term from the environment,
        a black one does not soften the scene, it extinguishes it. A canvas goes
-       through PMREMGenerator's well-worn equirect path instead, and its
+       through the engine's well-worn equirect path instead, and its
        contents can be inspected, which a shader baked inside PMREM cannot. */
     var cv = makeCanvas(256, 128), ctx = cv.getContext('2d');
     var g = ctx.createLinearGradient(0, 0, 0, 128);
@@ -195,12 +282,9 @@ Game.prototype.buildEnvironment = function (scene) {
     tex.mapping = THREE.EquirectangularReflectionMapping;
     tex.encoding = THREE.sRGBEncoding;
 
-    var pmrem = new THREE.PMREMGenerator(this.renderer);
-    pmrem.compileEquirectangularShader();
-    var rt = pmrem.fromEquirectangular(tex);
-    scene.environment = rt.texture;
-    pmrem.dispose();
-    tex.dispose();
+    /* Kept, not disposed: the renderer filters it when it first draws and
+       reads it again if the scene's environment is ever set anew. */
+    scene.environment = tex;
   } catch (e) {
     /* No environment is a flatter look, never a broken one. */
     scene.environment = null;
@@ -974,7 +1058,7 @@ Game.prototype.resize = function () {
   this.gw = gw; this.gh = gh;
   this.renderer.setSize(gw, gh, false);
   this.rt.setSize(gw, gh);
-  this.postMat.uniforms.uRes.value.set(gw, gh);
+  this.postU.uRes.value.set(gw, gh);
 
   this.glCanvas.style.width = cw + 'px';
   this.glCanvas.style.height = ch + 'px';
@@ -2516,17 +2600,12 @@ Game.prototype.selectTrack = function (id) {
 Game.prototype.applyQuality = function () {
   var modern = this.settings.quality === 'modern';
 
-  this.renderer.toneMapping = modern ? THREE.ACESFilmicToneMapping : THREE.NoToneMapping;
+  /* Tone mapping itself is in the post node, which buildTarget builds for the
+     tier; the node reads the exposure from here. The renderer's own
+     toneMapping stays off (see buildRenderer), so no material's shader holds
+     any tone mapping, and a change of tier no longer has to rebuild every
+     material in the scene as it did on r128. */
   this.renderer.toneMappingExposure = modern ? 1.12 : 1.0;
-
-  /* Tone mapping is compiled INTO every material's shader, so changing it
-     after the scene exists does nothing until each one is rebuilt. Without
-     this the toggle appears to do nothing but change the resolution. */
-  this.scene.traverse(function (o) {
-    if (!o.material) return;
-    var m = o.material.length ? o.material : [o.material];
-    for (var i = 0; i < m.length; i++) if (m[i]) m[i].needsUpdate = true;
-  });
 
   /* Shadows are a modern-only cost, and the fake blob is a retro-only cheat.
      Running both at once double-darkens under every car. */
@@ -2536,7 +2615,7 @@ Game.prototype.applyQuality = function () {
     if (this.cars[ci].shadow) this.cars[ci].shadow.visible = !modern;
   }
 
-  this.postMat.uniforms.uRetro.value = modern ? 0 : 1;
+  this.buildTarget(modern);
   this.resize();
 };
 
@@ -2627,15 +2706,9 @@ Game.prototype.render = function (dt) {
   /* drift the clouds; nothing else in the sky moves */
   if (this.scenery && this.scenery.clouds) this.scenery.clouds.rotation.y += dt * 0.004;
 
-  this.renderer.setRenderTarget(this.rt);
-  this.renderer.clear();
-  this.renderer.render(this.scene, this.camera);
-  this.renderer.setRenderTarget(null);
-
   var fade = 1;
   if (this.state === STATE.COUNTDOWN && this.countdown < 0.6) fade = clamp(this.countdown / 0.6, 0, 1);
-  this.postMat.uniforms.uFade.value = fade;
-  this.renderer.render(this.postScene, this.postCam);
+  this.drawFrame(fade);
 
   this.drawHUD();
 };
@@ -2905,12 +2978,7 @@ Game.prototype.photo = function (opts) {
     this.hudCanvas.style.visibility = 'hidden';
     var layers = this.host.querySelectorAll('.scanlines, .glow');
     for (var li = 0; li < layers.length; li++) layers[li].style.visibility = 'hidden';
-    this.renderer.setRenderTarget(this.rt);
-    this.renderer.clear();
-    this.renderer.render(this.scene, this.camera);
-    this.renderer.setRenderTarget(null);
-    this.postMat.uniforms.uFade.value = 1;
-    this.renderer.render(this.postScene, this.postCam);
+    this.drawFrame(1);
     return Promise.resolve();
   } catch (e) {
     /* Only when this call took the hold: a refusal before that leaves the page
@@ -3005,71 +3073,94 @@ Game.prototype.bench = function (opts) {
     return;
   }
 
-  var game;
+  /* `?renderer=webgl` in the address forces the WebGL 2 backend, for testing
+     the fallback on a machine that has WebGPU. Left alone, the renderer picks
+     WebGPU where the browser has it and the fallback where it does not. */
+  var forceWebGL = /[?&]renderer=webgl(&|$)/.test(location.search || '');
+
+  /* The renderer cannot be used until init() has settled, and Game builds its
+     whole world in its constructor, so the order is: make the renderer, wait,
+     then make the game. Either step failing ends at the fallback panel. */
+  var renderer;
   try {
-    game = new Game(host);
-  } catch (err) {
-    fail(err && err.message ? err.message : String(err));
-    if (window.console) console.error(err);
+    renderer = makeRenderer(forceWebGL);
+  } catch (err0) {
+    fail(err0 && err0.message ? err0.message : String(err0));
+    if (window.console) console.error(err0);
     return;
   }
-
-  var loading = document.getElementById('loading');
-  if (loading) loading.style.display = 'none';
-
-  var last = performance.now();
-  var acc = 0;
-
-  function frame(now) {
-    requestAnimationFrame(frame);
-    /* photo() holds the loop so its frame is the one on screen when the
-       stills tool captures it. Never set in normal play. */
-    if (game.photoHold) { last = now; return; }
-    var dt = (now - last) / 1000;
-    last = now;
-    if (dt > 0.25) dt = 0.25;          /* tab was backgrounded — don't fast-forward */
-    acc += dt;
-    var guard = 0;
-    while (acc >= STEP && guard < 6) { game.tick(STEP); acc -= STEP; guard++; }
-    if (acc > STEP * 6) acc = 0;
-    /* Whatever is left in the accumulator is how far this frame sits past the
-       last physics step. Feeding it to sync() is what lets the cars move on
-       frames where no step ran — without it they only advance at 60Hz while
-       the camera glides on every frame, and the chase car twitches. */
-    var alpha = acc / STEP;
-    for (var i = 0; i < game.cars.length; i++) game.cars[i].sync(dt, alpha);
-    game.render(dt);
-    game.updateAudio();
-    if (window.updateMonacoLiveStreetView && game.playerCar && game.track) {
-      window.updateMonacoLiveStreetView(game.playerCar, game.track);
-    }
-  }
-  requestAnimationFrame(frame);
-
-  var resizeTimer = null;
-  function scheduleResize(delay) {
-    if (resizeTimer) clearTimeout(resizeTimer);
-    resizeTimer = setTimeout(function () { game.resize(); }, delay);
-  }
-  window.addEventListener('resize', function () { scheduleResize(60); });
-  /* Mobile Safari reports stale dimensions immediately after a rotation, so
-     this one deliberately waits longer than the plain resize path. */
-  window.addEventListener('orientationchange', function () { scheduleResize(320); });
-  if (window.screen && screen.orientation && screen.orientation.addEventListener) {
-    screen.orientation.addEventListener('change', function () { scheduleResize(320); });
-  }
-
-  document.addEventListener('visibilitychange', function () {
-    if (document.hidden && (game.state === STATE.RACING || game.state === STATE.COUNTDOWN)) {
-      game.paused = true;
-    }
-    last = performance.now();
-    acc = 0;
+  renderer.init().then(start, function (err1) {
+    fail(err1 && err1.message ? err1.message : String(err1));
+    if (window.console) console.error(err1);
   });
 
-  window.MCL64 = game;
-  /* The circuit registry, for the selector UI and for poking at in a console. */
-  game.tracks = TRACKS;
-  game.trackById = trackById;
-  game.photoCams = PHOTO_CAMS;
+  function start() {
+    var game;
+    try {
+      game = new Game(host, renderer);
+    } catch (err) {
+      fail(err && err.message ? err.message : String(err));
+      if (window.console) console.error(err);
+      return;
+    }
+
+    var loading = document.getElementById('loading');
+    if (loading) loading.style.display = 'none';
+
+    var last = performance.now();
+    var acc = 0;
+
+    function frame(now) {
+      requestAnimationFrame(frame);
+      /* photo() holds the loop so its frame is the one on screen when the
+         stills tool captures it. Never set in normal play. */
+      if (game.photoHold) { last = now; return; }
+      var dt = (now - last) / 1000;
+      last = now;
+      if (dt > 0.25) dt = 0.25;          /* tab was backgrounded — don't fast-forward */
+      acc += dt;
+      var guard = 0;
+      while (acc >= STEP && guard < 6) { game.tick(STEP); acc -= STEP; guard++; }
+      if (acc > STEP * 6) acc = 0;
+      /* Whatever is left in the accumulator is how far this frame sits past the
+         last physics step. Feeding it to sync() is what lets the cars move on
+         frames where no step ran — without it they only advance at 60Hz while
+         the camera glides on every frame, and the chase car twitches. */
+      var alpha = acc / STEP;
+      for (var i = 0; i < game.cars.length; i++) game.cars[i].sync(dt, alpha);
+      game.render(dt);
+      game.updateAudio();
+      if (window.updateMonacoLiveStreetView && game.playerCar && game.track) {
+        window.updateMonacoLiveStreetView(game.playerCar, game.track);
+      }
+    }
+    requestAnimationFrame(frame);
+
+    var resizeTimer = null;
+    function scheduleResize(delay) {
+      if (resizeTimer) clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function () { game.resize(); }, delay);
+    }
+    window.addEventListener('resize', function () { scheduleResize(60); });
+    /* Mobile Safari reports stale dimensions immediately after a rotation, so
+       this one deliberately waits longer than the plain resize path. */
+    window.addEventListener('orientationchange', function () { scheduleResize(320); });
+    if (window.screen && screen.orientation && screen.orientation.addEventListener) {
+      screen.orientation.addEventListener('change', function () { scheduleResize(320); });
+    }
+
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden && (game.state === STATE.RACING || game.state === STATE.COUNTDOWN)) {
+        game.paused = true;
+      }
+      last = performance.now();
+      acc = 0;
+    });
+
+    window.MCL64 = game;
+    /* The circuit registry, for the selector UI and for poking at in a console. */
+    game.tracks = TRACKS;
+    game.trackById = trackById;
+    game.photoCams = PHOTO_CAMS;
+  }
 })();
