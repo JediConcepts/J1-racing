@@ -269,7 +269,44 @@ Past what the task asked, because task 5 has to know (criterion 6): `test/sim-pa
 
 Each flavour was built twice from the scratchpad workdir, and once more from a second workdir that the tool filled itself (its fetch path, run with `npm_config_offline=true` so npm could only read its own cache and nothing was downloaded). The three builds of each flavour are identical byte for byte (`cmp`), with the SHA-256 values in the table above. The second workdir is at a different path, so the path does not reach the output.
 
-The tool refuses, with exit code 2 and before doing anything, when `<workdir>` is the repo, a folder inside it, or a symlink to either; it also stops when `<workdir>` is not a folder or the flavour is not one of the two. An import in an entry that is not `three`, `three/webgpu`, `three/tsl` or `three/addons/...` fails the build, and a failed build leaves the file in `vendor/` as it was.
+The tool refuses, with exit code 2 and before doing anything, when `<workdir>` is the repo, a folder inside it, or a symlink to either; it also stops when `<workdir>` is not a folder or the flavour is not one of the two. (As first committed, at a69c112, that refusal could be passed by a path in another letter case. See "The workdir check, corrected" below.) An import in an entry that is not `three`, `three/webgpu`, `three/tsl` or `three/addons/...` fails the build, and a failed build leaves the file in `vendor/` as it was.
+
+### The workdir check, corrected
+
+The review of a69c112 found that the check above compared two strings from `fs.realpathSync`. That call follows symlinks but does not correct letter case, and this disk (APFS) ignores case, so the repo typed in another case was a different string, passed the check, and the tool would have gone on to run `npm install` with the repo as its prefix. Nothing of the kind was ever run: the fault was found by reading and by evaluating the comparison alone.
+
+The check now goes by identity. Two folders are the same folder when `fs.statSync` gives the same `dev` and `ino` for both (read as BigInt), however their paths are spelt. The tool refuses when:
+
+- the repo is met on the way up from the workdir (the workdir is the repo, or inside it; the way up starts from the real path, so a symlink is followed first);
+- the workdir is met on the way up from the repo (the repo is inside it; node looks in every `node_modules` above a script, so packages put there would reach the repo's own requires);
+- the workdir holds a `.git` entry of any kind;
+- any of those checks cannot be made.
+
+The check is a function, `workdirRefusal`, which the file exports when another script requires it; required, the file does nothing else. That let the check be tried on the repo itself without the tool, and so npm, ever running there. A throwaway script outside the repo called it with each input below. "Before" is the old comparison worked out from the same strings; "now" is what `workdirRefusal` returned. `<repo>` is the path `git rev-parse --show-toplevel` prints.
+
+| input | before | now | reason given |
+|---|---|---|---|
+| `<repo>`, as git gives it | refused | refused | it is the repo, or inside it |
+| `<repo>` in upper case, every letter | **accepted** | refused | it is the repo, or inside it |
+| `<repo>/tools` | refused | refused | it is the repo, or inside it |
+| the parent folder of `<repo>` | **accepted** | refused | the repo is inside it |
+| the home folder | **accepted** | refused | the repo is inside it |
+| a symlink in the scratchpad that points at `<repo>` | refused | refused | it is the repo, or inside it |
+| the real workdir, `<scratchpad>/three` | accepted | accepted | |
+| `<repo>/tools` in upper case, every letter | **accepted** | refused | it is the repo, or inside it |
+| `<repo>` with one letter in the wrong case | **accepted** | refused | it is the repo, or inside it |
+| a symlink in the scratchpad that points at `<repo>/tools` | refused | refused | it is the repo, or inside it |
+| `/` | **accepted** | refused | the repo is inside it |
+| a scratch folder that holds a file named `.git` | accepted | refused | it holds a .git entry |
+| a folder that does not exist | refused | refused | workdir is not a folder |
+| a file | refused | refused | workdir is not a folder |
+| an empty scratch folder | accepted | accepted | |
+
+Fifteen inputs, fifteen as wanted. The first seven are the ones the fix was asked to prove. After the run the repo had no `node_modules`, and `package.json` and both lockfiles were unchanged.
+
+The `require` of esbuild is also wrapped now. With a workdir whose esbuild folder held only its `package.json`, the tool prints one line (`vendor-three: esbuild in <workdir> could not be loaded (Cannot find module ...). Take esbuild out of its node_modules and run this again, which fetches it afresh.`) and exits 1, where it printed a stack before. A workdir whose esbuild has no platform binary (no `@esbuild` folder) does not fail at the `require` at all: esbuild looks for its binary when the build starts, and the tool's last `catch` already turned that into one line, `vendor-three: The package "@esbuild/darwin-arm64" could not be found, and is needed by esbuild.`, exit 1. Both were run against scratch workdirs, with npm held offline, and neither touched a file in `vendor/`.
+
+Then each flavour was built once more from the real workdir with the corrected tool. `cmp` against copies of the two files taken before the run reports no difference, and the SHA-256 values are the two in the table at the head of this section.
 
 ### One thing for task 6 that this turned up
 

@@ -15,8 +15,9 @@
  * that is missing, or there at another version, is fetched with npm into
  * <workdir>. Nothing is ever installed into the repo, and the repo's own
  * package.json is never read: it names three at ^0.185.1, which nothing uses.
- * Given the repo, or a folder inside it, the tool stops before it does
- * anything.
+ * Given the repo, a folder inside it, a folder the repo is inside, or any
+ * folder that holds a .git entry, the tool stops before it does anything
+ * (workdirRefusal below).
  *
  * The output depends only on the two versions below and the entry, so two
  * runs give the same bytes, whichever workdir they use. Change a version here
@@ -37,22 +38,84 @@ function stop(message, code) {
   process.exit(code === undefined ? 1 : code);
 }
 
+/* A folder and every folder above it, up to the top of the disk. */
+function upwards(dir) {
+  const list = [];
+  for (let at = dir; ; at = path.dirname(at)) {
+    list.push(at);
+    if (path.dirname(at) === at) return list;
+  }
+}
+
+/* Says why a folder cannot be the workdir, or returns null when it can.
+
+   WHY IDENTITY. Two folders are the same folder when the disk says so (the
+   same device and the same file number from fs.statSync), not when their
+   paths are spelt the same. This disk ignores letter case and fs.realpathSync
+   does not correct it, so the repo typed as /users/.../F1GAME is another
+   string and the same folder. The first form of this check compared strings,
+   let that spelling through, and npm would then have installed into the repo.
+   The numbers are read as BigInt, because a file number can be larger than a
+   plain number holds exactly.
+
+   Refused:
+   - the repo, or a folder inside it: the repo is met on the way up from the
+     workdir. The way up starts from the real path, so a symlink is followed
+     first.
+   - a folder the repo is inside: the workdir is met on the way up from the
+     repo. node looks in every node_modules above a script, so packages put
+     there would reach the repo's own requires.
+   - belt and braces, any folder that holds a .git entry, whatever it is.
+   A check that cannot be made is a refusal as well. */
+function workdirRefusal(workArg) {
+  let work;
+  try {
+    if (!fs.statSync(workArg).isDirectory()) throw new Error('not a folder');
+    work = fs.realpathSync(workArg);
+  } catch (e) {
+    return 'workdir is not a folder: ' + workArg + '\nMake an empty folder outside the repo and pass that.';
+  }
+  const refusing = 'Refusing to use ' + work + ' as the workdir: ';
+  const advice = '\nNothing from npm is installed into the repo. Pass a folder outside it.';
+  try {
+    const identity = (dir) => fs.statSync(dir, { bigint: true });
+    const same = (a, b) => a.dev === b.dev && a.ino === b.ino;
+    const repoId = identity(ROOT);
+    const workId = identity(work);
+    if (upwards(work).some((dir) => same(identity(dir), repoId))) {
+      return refusing + 'it is the repo, or inside it.' + advice;
+    }
+    if (upwards(ROOT).some((dir) => same(identity(dir), workId))) {
+      return refusing + 'the repo is inside it.' + advice;
+    }
+  } catch (e) {
+    return refusing + 'it could not be compared with the repo (' + e.message + ').' + advice;
+  }
+  try {
+    fs.lstatSync(path.join(work, '.git'));
+    return refusing + 'it holds a .git entry.\nNothing from npm is installed into a repository. Pass a plain folder outside the repo.';
+  } catch (e) {
+    if (e.code !== 'ENOENT') return refusing + 'its .git entry could not be looked for (' + e.message + ').' + advice;
+  }
+  return null;
+}
+
+/* Required by another script, this file hands over the check and does nothing
+   more, so the check can be tried on the repo itself without the tool ever
+   running there. Run directly, it carries on as the tool. (A return at the
+   top level is allowed in a CommonJS file: node runs it as a function body.) */
+module.exports = { workdirRefusal: workdirRefusal };
+if (require.main !== module) return;
+
 const flavour = process.argv[2];
 const workArg = process.argv[3];
 if (process.argv.length !== 4 || FLAVOURS.indexOf(flavour) === -1) {
   stop('usage: node tools/vendor-three.js <webgl|webgpu> <workdir>', 2);
 }
 
-/* The workdir is checked by its real path, so a symlink into the repo is
-   caught as well. */
-if (!fs.existsSync(workArg) || !fs.statSync(workArg).isDirectory()) {
-  stop('workdir is not a folder: ' + workArg + '\nMake an empty folder outside the repo and pass that.', 2);
-}
+const refusal = workdirRefusal(workArg);
+if (refusal) stop(refusal, 2);
 const WORK = fs.realpathSync(workArg);
-if (WORK === ROOT || WORK.startsWith(ROOT + path.sep)) {
-  stop('Refusing to use ' + WORK + ' as the workdir: it is the repo, or inside it.\n' +
-    'Nothing from npm is installed into the repo. Pass a folder outside it.', 2);
-}
 
 function installedVersion(name) {
   try {
@@ -83,7 +146,17 @@ if (wanted.length) {
 }
 
 const PKG = path.join(WORK, 'node_modules', 'three');
-const esbuild = require(path.join(WORK, 'node_modules', 'esbuild'));
+/* An install that was cut short leaves an esbuild that will not load. That
+   ends in one line, not a stack. (An esbuild without the binary for this
+   machine, as in a workdir copied from another one, loads here and fails when
+   the build starts: the catch at the foot of the file gives that its line.) */
+let esbuild;
+try {
+  esbuild = require(path.join(WORK, 'node_modules', 'esbuild'));
+} catch (e) {
+  stop('vendor-three: esbuild in ' + WORK + ' could not be loaded (' + String(e && e.message).split('\n')[0] +
+    '). Take esbuild out of its node_modules and run this again, which fetches it afresh.');
+}
 
 /* Where each `three...` import in an entry or an addon really is. This is
    spelt out, not left to node's rules, for two reasons: the entries live in
