@@ -63,11 +63,51 @@ var SHADOW_WIDE = {
    holds until the field of view crosses a step. */
 var SHADOW_FOV_STEP = 8;
 
+/* ...and holds a little longer on the way down. The chase camera's field of
+   view is 52 degrees plus 10 for speed, so it stands at the 56 degree step
+   at 132 km/h, a speed a car passes into and out of most corners and can
+   sit on through a long one; the driver's eye camera does the same at 72
+   degrees and 110 km/h. With one threshold for both directions a field of
+   view hovering there laid all four cascades out again and again, and each
+   time every shadow edge moved to a new grid of texels. So a layout is
+   taken up the moment the field of view passes its step, as it must be to
+   cover the view, and is only given up for the narrower one when the field
+   of view is this many degrees under the step: about 50 km/h of speed in
+   the chase camera, so 82 km/h on the way down against 132 on the way up. */
+var SHADOW_FOV_HOLD = 1.5;
+
+/* WHO IS DRAWN INTO WHICH CASCADE, on a circuit that asks (ShadowRig.sparse).
+
+   Left alone, every caster in the scene that a cascade's box touches is
+   drawn into it. At Monaco that is 740 meshes, most of them parts of the
+   120 boats in the harbour, and the last cascade, whose box is the size of
+   the town, drew all but a handful of them in every frame: 1,100 to 1,600
+   shadow draws for a main pass of 150. A texel of the third cascade is
+   half a metre and one of the fourth about a metre, so a mast, a wheel or a
+   cabin roof drawn into them covers less than a texel and darkens nothing.
+
+   So each caster has a REACH: the number of cascades, counted from the
+   camera, that it is drawn into. The engine draws a shadow map with the
+   shadow camera's layers when those are anything but the plain layer 0, so
+   the third and fourth cascades are given a layer each and a caster is put
+   on the layers its reach covers. Layer 0 is not touched: the main camera,
+   Modern's single map and the first two cascades see what they always saw.
+
+   A mesh may say its own reach (userData.shadowReach, 2 to 4). Otherwise it
+   goes by size, the radius of the sphere round it in metres: under
+   `mid` it stays in the first two cascades, from `mid` it is in the third
+   as well (a car's body is 2.9 m), and from `far` in all four (the smallest
+   building is 13 m). */
+var SHADOW_REACH = { layers: [0, 0, 2, 3], mid: 1.5, far: 9 };
+
 function ShadowRig(scene, camera, sun) {
   this.scene = scene;
   this.camera = camera;
   this.sun = sun;
   this.mode = null;
+  /* whether small casters are left out of the far cascades (SHADOW_REACH);
+     the game sets it for the circuit before it sets a mode */
+  this.sparse = false;
   /* the point the shadows are centred on; the game sets it before update() */
   this.focus = new THREE.Vector3();
   this.csm = null;
@@ -128,7 +168,10 @@ ShadowRig.prototype.setMode = function (mode) {
   this.mode = mode;
   this.sun.castShadow = mode !== 'blob';
   if (had) this.dropCascades();
-  if (mode === 'cascades') this.buildCascades();
+  if (mode === 'cascades') {
+    if (this.sparse) this.sortCasters();
+    this.buildCascades();
+  }
   /* HOW THE ENGINE IS TOLD. The engine builds a light's shadow once and
      keeps it; switching castShadow makes it build every lit material again,
      which is all 'blob' against 'single' needs. Between 'single' and
@@ -166,11 +209,35 @@ ShadowRig.prototype.buildCascades = function () {
   csm.setup = function (builder) {
     var first = this.camera === null;
     var node = setup.call(this, builder);
-    if (first) rig.layOutCascades(true);
+    if (first) rig.layOutCascades(true);   /* afresh: see syncView */
     return node;
   };
 
   this.sun.shadow.shadowNode = csm;
+};
+
+/* Puts every mesh on the layers of the cascades its reach covers (see
+   SHADOW_REACH). Every mesh and not only those that cast now, because some
+   are only given their flag after the mode is set (wideShadow in
+   20-track.js); a layer on a mesh that casts nothing costs nothing. The
+   layers are left on when the mode goes: nothing but a sparse cascade looks
+   at them. */
+ShadowRig.prototype.sortCasters = function () {
+  var L = SHADOW_REACH.layers, scale = new THREE.Vector3();
+  this.scene.traverse(function (o) {
+    if (!o.isMesh || !o.geometry) return;
+    var reach = o.userData.shadowReach;
+    if (!reach) {
+      if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+      o.updateWorldMatrix(true, false);
+      scale.setFromMatrixScale(o.matrixWorld);
+      var r = o.geometry.boundingSphere.radius * Math.max(scale.x, scale.y, scale.z);
+      reach = r >= SHADOW_REACH.far ? 4 : (r >= SHADOW_REACH.mid ? 3 : 2);
+    }
+    for (var i = 2; i < L.length; i++) {
+      if (reach > i) o.layers.enable(L[i]); else o.layers.disable(L[i]);
+    }
+  });
 };
 
 ShadowRig.prototype.dropCascades = function () {
@@ -180,17 +247,35 @@ ShadowRig.prototype.dropCascades = function () {
   delete this.sun.shadow.shadowNode;
   /* takes the cascades' own lights back out of the scene */
   csm.dispose();
-  /* and their maps, which nothing else frees */
+  /* THE ENGINE'S SHADOW NODE FOR EACH CASCADE, which the line above does not
+     free. Each owns the depth material its cascade is drawn with, and the
+     renderer keeps one render object, with its own uniform buffer, for every
+     caster drawn with that material until the material is disposed. Left
+     alone, every visit to Ultra left those behind for good: 62 of them a
+     visit from the title screen at Silverstone, counted. Disposing of the
+     node frees the material, which lets go of the render objects, and the
+     map with it. `_shadowNodes` is a private field of the engine's node, so
+     it is one of the things an engine update must check. */
+  var nodes = csm._shadowNodes || [];
+  for (var n = 0; n < nodes.length; n++) nodes[n].dispose();
+  /* and their maps, for a cascade whose node was never made (a second
+     dispose of a map the node has already freed does nothing) */
   for (var i = 0; i < csm.lights.length; i++) csm.lights[i].shadow.dispose();
 };
 
 /* Copies the game camera into the stand in. True when the stand in's
-   projection changed, which is when the cascades have to be laid out again. */
-ShadowRig.prototype.syncView = function () {
+   projection changed, which is when the cascades have to be laid out again.
+
+   `afresh` rounds the field of view with no memory of the layout before
+   (see SHADOW_FOV_HOLD). The first layout of a set of cascades is made
+   that way, and so is a still's: what a still shows must depend on where
+   its camera is and not on where the camera was before it. */
+ShadowRig.prototype.syncView = function (afresh) {
   var cam = this.camera, view = this.view;
   cam.updateMatrixWorld();
   view.matrixWorld.copy(cam.matrixWorld);
   var fov = Math.min(170, Math.ceil(cam.fov / SHADOW_FOV_STEP) * SHADOW_FOV_STEP);
+  if (!afresh && fov < view.fov && cam.fov > view.fov - SHADOW_FOV_STEP - SHADOW_FOV_HOLD) fov = view.fov;
   if (fov === view.fov && cam.aspect === view.aspect && cam.far === view.far) return false;
   view.fov = fov;
   view.aspect = cam.aspect;
@@ -203,12 +288,13 @@ ShadowRig.prototype.syncView = function () {
 };
 
 /* Lays the cascades out from the stand in for the camera, when its
-   projection has changed (or `force`), and sets each cascade's own reach and
-   bias. Does nothing until the node has made its cascades. */
+   projection has changed (or `force`, which also lays them out afresh: see
+   syncView), and sets each cascade's own reach and bias. Does nothing until
+   the node has made its cascades. */
 ShadowRig.prototype.layOutCascades = function (force) {
   var csm = this.csm;
   if (!csm || csm.camera === null) return;
-  var moved = this.syncView();
+  var moved = this.syncView(force);
   if (csm.camera !== this.view) { csm.camera = this.view; moved = true; }
   if (moved || force) csm.updateFrustums();
 
@@ -245,13 +331,17 @@ ShadowRig.prototype.layOutCascades = function (force) {
       cam.far = width + SHADOW_WIDE.lightMargin + 1;
       cam.updateProjectionMatrix();
     }
+    /* which casters this cascade draws: all of them, or on a sparse circuit
+       those whose reach comes this far (see SHADOW_REACH) */
+    cam.layers.mask = this.sparse && SHADOW_REACH.layers[i] ? 1 << SHADOW_REACH.layers[i] : 1;
     sh.bias = -(0.05 + 1.5 * texel * slope) / (cam.far - cam.near);
     sh.normalBias = Math.max(0.035, 0.5 * texel);
   }
 };
 
-/* Once a frame, and again by whoever has just moved the sun. */
-ShadowRig.prototype.update = function () {
+/* Once a frame, and again by whoever has just moved the sun. `afresh` is
+   for a still (see syncView). */
+ShadowRig.prototype.update = function (afresh) {
   if (this.mode !== 'single' && this.mode !== 'cascades') return;
   var sun = this.sun;
   /* THE SUN'S DIRECTION IS READ FRESH, from the light itself, whenever the
@@ -273,7 +363,7 @@ ShadowRig.prototype.update = function () {
   this.sunAt.copy(sun.position);
   this.targetAt.copy(sun.target.position);
 
-  if (this.mode === 'cascades') this.layOutCascades(false);
+  if (this.mode === 'cascades') this.layOutCascades(!!afresh);
 };
 
 ShadowRig.prototype.dispose = function () {

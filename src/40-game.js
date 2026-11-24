@@ -30,29 +30,152 @@ var STATE = { TITLE: 0, COUNTDOWN: 1, RACING: 2, FINISHED: 3 };
                   'device'  the render target times the device pixel ratio,
                             which is what main has always had
                   'target'  the size of the render target and no larger
+     heavy        true for a tier that not every device is known to hold.
+                  Such a tier is not trusted until it has drawn (see
+                  chooseTier and loadSettings), and is given up for
+                  TIER_SAFE if the frames come too slowly (see watchPace).
 
-   Ultra is Modern in every field but `canvas` for now: it is the place the
-   wide shadows, the real sky and the full post pass are switched on, one
-   field at a time. */
+   Retro and Modern are what main has always drawn, in every field, the two
+   layers over the page included: main lays them over both.
+
+   Ultra keeps Modern's target, tone mapping and exposure, and differs in
+   the rest:
+     shadows   'cascades'  four maps laid along the view, so everything the
+                           camera sees out to 700 m has a shadow
+                           (33-shadows.js)
+     sky       'physical'  the engine's clear sky at settings.timeOfDay,
+                           which sets the three lights and the haze for the
+                           hour (32-sky.js)
+     post      'full'      Modern's tone map with bloom in front of it and a
+                           grade for the time of day behind it
+     overlays  false       the picture is its own post pass, with no
+                           scanlines and no glow over it
+     canvas    'target'    no larger than the render target
+     heavy     true */
 var TIERS = {
   retro: {
     target: 'small', toneMapping: 'none', exposure: 1.0,
     shadows: 'blob', sky: 'dome', post: 'retro',
-    overlays: true, canvas: 'device'
+    overlays: true, canvas: 'device', heavy: false
   },
   modern: {
     target: 'super', toneMapping: 'aces', exposure: 1.12,
     shadows: 'single', sky: 'dome', post: 'grade',
-    overlays: false, canvas: 'device'
+    overlays: true, canvas: 'device', heavy: false
   },
   ultra: {
     target: 'super', toneMapping: 'aces', exposure: 1.12,
     shadows: 'cascades',
     sky: 'physical',
     post: 'full',
-    overlays: false, canvas: 'target'
+    overlays: false, canvas: 'target', heavy: true
   }
 };
+
+/* --- a tier is not trusted until it has drawn ---------------------------- */
+
+/* How long the Graphics button waits after the last click before the tier it
+   shows is built, in milliseconds. The button steps through the tiers in one
+   direction, so the way from Modern to Retro passes Ultra, and Ultra takes
+   seconds to build the first time. With the wait, two quick clicks pass it
+   without building it. */
+var TIER_SETTLE_MS = 400;
+
+/* The tier a failed heavy tier falls back to, and how many frames a heavy
+   tier has to draw before it is trusted. */
+var TIER_SAFE = 'modern';
+var TIER_TRIAL_FRAMES = 60;
+
+/* THE TRIAL KEY. A heavy tier is built on the player's say so and saved, and
+   a device that cannot hold it may lose its graphics device, or the whole
+   tab, in the frames that follow. The saved tier would then be built again
+   on every load, with no way back short of clearing the site's storage. So
+   the tier's name is written here before it is built and taken away once it
+   has drawn TIER_TRIAL_FRAMES frames; a load that finds it knows the tier
+   never got that far (see loadSettings). What the key holds:
+
+     'ultra'           being tried now. Found at load: it did not start.
+     'ultra lost'      the graphics device was lost while it was on, for
+                       the first time. Found at load: that load is in
+                       TIER_SAFE, and the key becomes 'ultra again'.
+     'ultra again'     one loss behind it, and owed a second chance (with
+                       ' chosen' after it for a tier the player picked).
+                       Found at load: the tier is on again, on trial.
+     'ultra lost twice'  lost again in the load that was its second chance.
+                       Found at load: the tier is off, and saved as off.
+     'ultra untried'   the page was left before the trial was over, and
+                       nothing had gone wrong on it: the game reloaded it
+                       itself (a change of circuit), or the player closed
+                       or reloaded the tab (see leaveTier). Found at load:
+                       no failure, the trial starts again from the first
+                       frame.
+
+   Storage that is blocked reads as no key and writes nothing, which is the
+   game as it was before there was a trial. */
+var TIER_TRIAL_KEY = 'mcl64.tierTrial.v1';
+function tierTrialRead() {
+  try { return window.localStorage ? localStorage.getItem(TIER_TRIAL_KEY) : null; } catch (e) { return null; }
+}
+function tierTrialWrite(value) {
+  try {
+    if (value == null) localStorage.removeItem(TIER_TRIAL_KEY);
+    else localStorage.setItem(TIER_TRIAL_KEY, value);
+  } catch (e) {}
+}
+
+/* ONE LOST DEVICE DOES NOT TURN A TIER OFF FOR GOOD. Devices are lost for
+   reasons that have nothing to do with the tier on the screen: a driver
+   restarts, a browser takes back a context. (Measured in review: headless
+   Chromium lost its context within two seconds of starting in 1 start of
+   3 in Modern, where no heavy tier was on to blame.) So a first loss costs
+   the tier one load and no more: the load after the loss is in TIER_SAFE,
+   and the one after that tries the tier again, on trial. A device that
+   loses it in that load as well has lost it twice running, and the tier is
+   turned off until the player picks it again. The key carries all of it
+   (see above), with the word 'chosen' to say whose tier it was, because
+   any setting saved in the load between writes the settings out whole with
+   TIER_SAFE in them.
+
+   What the player is told when a load finds the key, by how it was left.
+   Only a player who picked the tier is told: one who was given it as the
+   default never asked for it, and comes up in TIER_SAFE with no word. */
+var TIER_FELL = {
+  failed: 'ULTRA OFF: IT DID NOT START LAST TIME',
+  lost: 'ULTRA OFF: THE GRAPHICS DEVICE WAS LOST'
+};
+
+/* --- stepping down when the device cannot keep up ------------------------ */
+
+/* Ultra is 2.5 to 4.8 times the work of a Modern frame, and every figure
+   there is for it was measured on one fast machine. So the frames of a
+   heavy tier are watched from the first one drawn (Game.watchPace), on the
+   title screen and in the attract demo as well as in a race: Ultra is the
+   tier a new player is given, so a device that cannot hold it has to be
+   found out before the player has done anything. The gap between frames is
+   kept as a running mean over about `meanMs`; when the mean has stood over
+   `slowMs` for `forMs`, the tier is given up for TIER_SAFE.
+
+   WHY 40 ms. It is 25 frames a second. A phone in Low Power Mode, a laptop
+   saving energy and a 30 Hz screen all hold the browser to 30 frames a
+   second, which is a gap of 33 ms on a device that may be running the tier
+   with time to spare: a healthy device with a cap on it, and Modern would
+   run at the same 30 there. The limit has to stand clear of that, or such
+   a device has the tier taken away on every load for nothing (the limit
+   was 25 ms once, and did exactly that). Under 25 frames a second no cap
+   explains the gap, and the device is a slow one.
+
+   A gap over `ignoreMs` that stands alone is not a slow frame, it is a
+   change of tab or of tier, and is left out altogether: the first
+   `ignoreRun` of them in a row are. A device that takes that long over
+   every frame is the slowest there is, and the one the guard is most for,
+   so from the next long gap in the row each counts, as `ignoreMs` and no
+   more.
+
+   PACE_SAID is for the player who picked the tier, and says why it went. A
+   player who never picked it is not told anything alarming: the tier
+   changes, and a race that is running flashes the name of the new one. */
+var PACE = { slowMs: 40, forMs: 3000, ignoreMs: 250, ignoreRun: 3, meanMs: 500 };
+var PACE_SAID = 'ULTRA TOO SLOW ON THIS DEVICE: NOW MODERN';
 
 /* The names settings.timeOfDay may hold, in the order the settings button
    cycles through them. Only the names live here: what each one looks like
@@ -285,6 +408,32 @@ function Game(host, renderer) {
   this.splitGood = false;
   this.message = '';
   this.messageT = 0;
+  /* a line for the player that is not part of the race (see notify) */
+  this.notice = '';
+  this.noticeT = 0;
+  /* the tier that is on the screen (applyQuality), the timer of a tier that
+     has been clicked to and not yet built, the frames a heavy tier still has
+     to draw before it is trusted, and why a tier the player picked was given
+     up at load (see chooseTier and loadSettings) */
+  this.tierOn = null;
+  this.tierTimer = null;
+  this.trialLeft = 0;
+  this.tierFell = null;
+  /* whether a heavy tier has one lost device behind it already, so that a
+     loss in this load is the second running (see TIER_FELL) */
+  this.tierAgain = false;
+  /* whether something has gone wrong on this page that the tier on the
+     screen may be to blame for: a lost graphics device, or an error nobody
+     caught (see leaveTier) */
+  this.tierBroke = false;
+  /* the running mean of the frame gap in a heavy tier, how long it has
+     stood over the limit, both in milliseconds, how many gaps too long to
+     be a frame have come in a row, and whether this load has already
+     stepped down once (see watchPace) */
+  this.paceMean = 0;
+  this.paceSlow = 0;
+  this.paceLong = 0;
+  this.paceDone = false;
   /* OFF to start. The halo is the one part of the car that sits between the
      camera and the driver, and the onboard mounts are framed through it — so
      the first thing anyone sees is the shot without a bar across it, and H
@@ -319,6 +468,7 @@ function Game(host, renderer) {
   this.bindInput();
   this.resize();
   this.resetRace(true);
+  if (this.tierFell) this.notify(TIER_FELL[this.tierFell] || TIER_FELL.failed);
 }
 
 /* The renderer, with the arguments main has always passed. WebGPURenderer
@@ -493,6 +643,7 @@ Game.prototype.applySkyMode = function (mode) {
   /* "ahead" for the sun's bearing is the way the cars leave the line */
   var t = this.track, a = t.p[t.startIndex], b = t.p[(t.startIndex + 1) % t.n];
   this.skyRig.setNorth(b.x - a.x, b.z - a.z);
+  this.skyRig.setCircuit(t.id);
   /* the hour first, so that a rig coming up from the dome draws its
      environment once, for the right hour */
   this.skyRig.setTimeOfDay(this.settings.timeOfDay);
@@ -509,6 +660,11 @@ Game.prototype.applySkyMode = function (mode) {
    hour. The shadows are told last, because the sun has just moved. */
 Game.prototype.applyTimeOfDay = function () {
   this.skyRig.setTimeOfDay(this.settings.timeOfDay);
+  /* scenery with a look of its own under the physical sky (Monaco's sea and
+     tunnel: setHour in 20-track.js) is told the hour, or told there is none */
+  if (this.scenery && this.scenery.setHour) {
+    this.scenery.setHour(this.skyRig.mode === 'physical' ? this.skyRig.row : null);
+  }
   if (this.shadowRig) this.shadowRig.update();
 };
 
@@ -600,7 +756,12 @@ Game.prototype.applyShadowMode = function (mode) {
   var mapped = mode !== 'blob';
   var wide = mode === 'cascades';
   this.renderer.shadowMap.enabled = mapped;
-  if (this.shadowRig) this.shadowRig.setMode(mode);
+  if (this.shadowRig) {
+    /* a circuit with hundreds of small casters asks for them to be left out
+       of the far cascades: see ShadowRig.sortCasters */
+    this.shadowRig.sparse = !!(this.scenery && this.scenery.sparseShadows);
+    this.shadowRig.setMode(mode);
+  }
   for (var ci = 0; ci < (this.cars || []).length; ci++) {
     if (this.cars[ci].shadow) this.cars[ci].shadow.visible = !mapped;
   }
@@ -632,6 +793,12 @@ Game.prototype.applyShadowMode = function (mode) {
     if (ground.userData.lowY === undefined) ground.userData.lowY = ground.position.y;
     ground.position.y = wide && sc.groundTop !== null ? Math.max(sc.groundTop, ground.userData.lowY) : ground.userData.lowY;
     ground.material.receivedShadowPositionNode = wide ? groundShadowPosition(ground, Math.max(sc.treeFeet, ground.position.y)) : null;
+    /* Monaco's plane cannot be lifted (it has to stay below the sea) and its
+       town stands on a hill, 10 to 40 m above it, so no one height puts the
+       shadows of the cascades where the buildings are: they fell fields away
+       from what cast them, in rows of dashes. There the plane takes no
+       shadow from the cascades at all. */
+    ground.receiveShadow = !(wide && sc.farGroundShadow === false);
     ground.material.needsUpdate = true;
   }
 };
@@ -810,6 +977,7 @@ Game.prototype.buildGrid = function () {
   this.demoCar = this.player;
   this.demoShot = 0;
   this.demoT = 0;
+  this.demoOpen = null;
   this.demoAnchor = new THREE.Vector3();
 };
 
@@ -869,6 +1037,10 @@ Game.prototype.resetRace = function (toTitle) {
   this.countdown = 0;
   this.state = toTitle ? STATE.TITLE : STATE.COUNTDOWN;
   if (toTitle) { this.demoShot = 0; this.demoT = 99; this.demoCar = this.cars[1]; }
+  /* A circuit with an opening shot starts on it, from its first frame: see
+     TITLE_OPENING. The cars are placed and driven exactly as they were. */
+  this.demoOpen = (toTitle && TITLE_OPENING[t.id]) || null;
+  if (this.demoOpen) { this.demoT = 0; this.demoCar = this.cars[this.demoOpen.car]; }
   this.setLights(0);
   this.updateCamera(0, true);
 };
@@ -1043,12 +1215,8 @@ Game.prototype.bindInput = function () {
   var qualitySet = document.getElementById('set-quality');
   if (qualitySet) qualitySet.addEventListener('click', function (e) {
     e.preventDefault();
-    var names = Object.keys(TIERS);
-    self.settings.quality = names[(names.indexOf(self.settings.quality) + 1) % names.length];
-    self.applyQuality();
-    self.applySettings();
-    self.saveSettings();
-    self.flash(TIER_UI[self.settings.quality].flash);
+    var names = self.tierCycle();
+    self.chooseTier(names[(names.indexOf(self.settings.quality) + 1) % names.length]);
   });
 
   var todSet = document.getElementById('set-tod');
@@ -1443,6 +1611,28 @@ Game.prototype.flash = function (msg) {
   this.messageT = msg ? 1.9 : 0;
 };
 
+/* A line the player has to be able to read whichever screen is up, for
+   longer than a flash: flash() is the race's own, it is drawn only while a
+   race is on, counted down by the simulation's clock and wiped when a race
+   is reset. This one is drawn over the title and the results as well, and
+   counted down by the frame loop (render), so it runs on the title screen
+   and never touches the simulation. One line of up to 49 characters: the
+   HUD is never narrower than 300 units. */
+Game.prototype.notify = function (msg) {
+  this.notice = msg || '';
+  this.noticeT = msg ? 7 : 0;
+};
+
+Game.prototype.drawNotice = function () {
+  if (!this.notice || this.noticeT <= 0) return;
+  var g = this.hud, W = this.vw, H = this.vh;
+  var w = textWidth(this.notice, 1) + 12, y = Math.round(H * 0.72);
+  g.globalAlpha = clamp(this.noticeT / 0.6, 0, 1);
+  this.panel(Math.round(W / 2 - w / 2), y - 5, w, GLYPH_H + 10);
+  drawTextCenter(g, this.notice, W / 2, y, 1, C_WHITE, C_SHADOW);
+  g.globalAlpha = 1;
+};
+
 Game.prototype.beginRace = function () {
   this.audio.wake();
   this.maybeEnterFullscreen();
@@ -1462,7 +1652,7 @@ Game.prototype.resize = function () {
   /* The canvas drawing buffer is not sized here by name: renderer.setSize
      below multiplies by the renderer's pixel ratio, and applyQuality sets
      that from the tier's `canvas` rule. */
-  var tier = (this.settings && TIERS[this.settings.quality]) || TIERS.retro;
+  var tier = (this.settings && TIERS[this.tierOn || this.settings.quality]) || TIERS.retro;
   var gw, gh;
   if (tier.target === 'super') {
     /* Render ABOVE the display size and let the downscale do the smoothing.
@@ -1582,7 +1772,7 @@ Game.prototype.playerInput = function (dt) {
    The chrome button and the settings panel are two views of ONE state, so
    changing either has to end up calling applySettings(). */
 
-var SETTINGS_KEY = 'mcl64.settings.v1';
+var SETTINGS_KEY = 'mcl64.settings.v2';
 
 /* ---- one sensitivity, three meanings -----------------------------------
    Each input type needs a different knob turned, but the player should only
@@ -1613,6 +1803,41 @@ function applyExpo(v, k) {
   return sign(v) * Math.pow(Math.abs(v), k);
 }
 
+/* WHO STARTS WHERE, AND WHO KEEPS WHAT. 24 Nov 2026, the owner, having played
+   the Ultra build on his phone: "seems to work.. well we need to default to
+   Ultra Dusk and Monaco as game 1 now". So a player who has never chosen
+   gets the Ultra tier, at dusk, at Monaco (monaco-gp-v1), on a phone as on
+   a desk, on the title screen and for the first race.
+
+   A player who picked a tier, an hour or a circuit keeps it. What was saved
+   before today cannot say which of its values were picked: the whole object
+   is written on any save, a change of music volume included, so it holds
+   the defaults of its day beside the choices. Hence the `defaults` field,
+   which every save from today writes as SETTINGS_DEFAULTS. A saved object
+   without it is from before today, and is read like this, once:
+
+     tier      'modern' was the default, on every device, on main and on
+               every build since (the comment there said Retro; the code
+               said Modern). A saved 'modern' is taken for never chosen and
+               becomes Ultra. 'retro' or 'ultra' was picked, and is kept.
+     circuit   'silverstone-v1' was the default, on every device. A saved
+               Silverstone becomes Monaco; any other circuit is kept.
+     hour      there was none on main, and 'midday' was the default on the
+               builds that had one. None, or midday, becomes dusk; morning
+               or golden was picked, and is kept.
+
+   The object is then saved, with the field, so that this happens once and
+   whatever the player picks afterwards is kept, the old defaults included.
+   A player who had truly picked Modern, Silverstone or midday is moved with
+   the rest, once: nothing saved could tell them apart.
+
+   `tierChosen` says whether the tier is one the player picked on the
+   Graphics button. The game's own pick is not: the default, and the tier a
+   failed or slow Ultra falls back to. Nobody is told off for a tier they
+   never asked for (see watchPace and TIER_FELL). */
+var SETTINGS_DEFAULTS = 2;
+var OLD_DEFAULTS = { quality: 'modern', trackId: 'silverstone-v1', timeOfDay: 'midday' };
+
 Game.prototype.loadSettings = function () {
   /* Phones default to auto throttle: one thumb cannot hold the gas and steer
      accurately at the same time. Tilt deliberately stays OFF — switching it on
@@ -1635,17 +1860,22 @@ Game.prototype.loadSettings = function () {
     camMode: 0,
     autoThrottle: touchLikely(),
     autoFullscreen: true,
-    /* Retro is the default because it is the point of the thing — modern is
-       there for anyone who wants to see the circuit without the dither. */
-    quality: 'modern',
-    timeOfDay: 'midday',
-    trackId: 'silverstone-v1',
+    /* see WHO STARTS WHERE above */
+    quality: 'ultra',
+    tierChosen: false,
+    timeOfDay: 'dusk',
+    trackId: 'monaco-gp-v1',
+    defaults: SETTINGS_DEFAULTS,
     userConfigured: false
   };
+  /* whether storage held settings at all, and whether they were saved before
+     today's defaults */
+  var found = false, old = false;
   try {
     var raw = window.localStorage ? localStorage.getItem(SETTINGS_KEY) : null;
     if (raw) {
       var p = JSON.parse(raw);
+      old = p.defaults !== SETTINGS_DEFAULTS;
       /* validate each field rather than trusting the blob — a stale or hand
          edited entry must not be able to wedge the controls */
       if (typeof p.steerTilt === 'boolean') s.steerTilt = p.steerTilt;
@@ -1653,12 +1883,18 @@ Game.prototype.loadSettings = function () {
       if (typeof p.autoThrottle === 'boolean') s.autoThrottle = p.autoThrottle;
       if (typeof p.autoFullscreen === 'boolean') s.autoFullscreen = p.autoFullscreen;
       if (typeof p.userConfigured === 'boolean') s.userConfigured = p.userConfigured;
-      /* anything that is not a tier, or not a time of day, keeps the default */
-      if (typeof p.quality === 'string' && TIERS.hasOwnProperty(p.quality)) s.quality = p.quality;
-      if (TIME_OF_DAY_NAMES.indexOf(p.timeOfDay) >= 0) s.timeOfDay = p.timeOfDay;
+      /* Anything that is not a tier, or not a time of day, keeps the
+         default. So does a value that was the default when an object from
+         before today was saved; any other value in such an object was
+         picked. */
+      if (typeof p.quality === 'string' && TIERS.hasOwnProperty(p.quality) && !(old && p.quality === OLD_DEFAULTS.quality)) {
+        s.quality = p.quality;
+        s.tierChosen = old || p.tierChosen === true;
+      }
+      if (TIME_OF_DAY_NAMES.indexOf(p.timeOfDay) >= 0 && !(old && p.timeOfDay === OLD_DEFAULTS.timeOfDay)) s.timeOfDay = p.timeOfDay;
       /* Validated against the registry: a stale or hand-edited id must fall
          back to a real circuit rather than crashing the boot. */
-      if (typeof p.trackId === 'string' && trackById(p.trackId).id === p.trackId) {
+      if (typeof p.trackId === 'string' && trackById(p.trackId).id === p.trackId && !(old && p.trackId === OLD_DEFAULTS.trackId)) {
         s.trackId = p.trackId;
       }
       /* tiltSens is the old field name — read it so anyone who already set a
@@ -1672,8 +1908,77 @@ Game.prototype.loadSettings = function () {
       if (typeof p.engineOn === 'boolean') s.engineOn = p.engineOn;
       if (typeof p.engineVol === 'number' && isFinite(p.engineVol)) s.engineVol = clamp(Math.round(p.engineVol), 0, 10);
       if (typeof p.musicVol === 'number' && isFinite(p.musicVol)) s.musicVol = clamp(Math.round(p.musicVol), 0, 10);
+      found = true;
     }
   } catch (e) { /* blocked storage or corrupt JSON — defaults are fine */ }
+  /* the tier of this load is the game's pick and not the player's: nothing
+     was saved, or it was saved before today and held the old default */
+  var given = (!found || old) && !s.tierChosen;
+  var write = found && old;
+
+  /* A TIER LEFT ON TRIAL (see TIER_TRIAL_KEY). The key is taken away
+     whatever it says, so one failure is acted on once. If it names the tier
+     of this load, that tier either never drew its frames or lost the
+     graphics device: the load goes to TIER_SAFE instead. The constructor
+     tells a player who had picked the tier; one who was given it is told
+     nothing. A key marked untried is a page that was left with nothing
+     wrong on it, and the trial starts again.
+
+     A tier that never drew its frames, or lost the device twice running, is
+     off, and that is saved here and now, or the next load would try the
+     same tier again. A FIRST lost device is not saved (see TIER_FELL): what
+     storage holds is left alone, and the key is written again to say the
+     tier is owed a second chance. The load that finds that puts the tier
+     back, on trial, as the player's own or the game's as it was. It does so
+     whether storage still holds the tier or holds TIER_SAFE as the game's
+     pick, which is what a setting saved in the load between leaves there.
+     A player who picked a tier in that load has no such key: commitTier
+     wrote over it. */
+  var trial = tierTrialRead();
+  if (trial) {
+    tierTrialWrite(null);
+    var parts = trial.split(' ');
+    var named = TIERS.hasOwnProperty(parts[0]) && TIERS[parts[0]].heavy ? parts[0] : null;
+    if (named && parts[1] === 'again') {
+      if (s.quality === named || (s.quality === TIER_SAFE && !s.tierChosen)) {
+        s.quality = named;
+        s.tierChosen = parts[2] === 'chosen';
+        tierTrialWrite(named);
+        this.trialLeft = TIER_TRIAL_FRAMES;
+        this.tierAgain = true;
+        write = true;
+      }
+    } else if (named && named === s.quality) {
+      if (parts[1] === 'untried') {
+        tierTrialWrite(named);
+        this.trialLeft = TIER_TRIAL_FRAMES;
+      } else if (parts[1] === 'lost' && parts[2] !== 'twice') {
+        if (s.tierChosen) this.tierFell = 'lost';
+        tierTrialWrite(named + ' again' + (s.tierChosen ? ' chosen' : ''));
+        this.tierAgain = true;
+        s.quality = TIER_SAFE;
+        s.tierChosen = false;
+      } else {
+        if (s.tierChosen) this.tierFell = parts[1] === 'lost' ? 'lost' : 'failed';
+        s.quality = TIER_SAFE;
+        s.tierChosen = false;
+        write = true;
+      }
+    }
+  }
+
+  /* A HEAVY TIER NOBODY PICKED goes on trial exactly as a picked one does
+     (commitTier): the key is written before the world is built, and the
+     settings are saved with it, so a first load that dies before it has
+     drawn TIER_TRIAL_FRAMES frames leaves both behind and the load after it
+     comes up in TIER_SAFE. A load that draws them takes the key away, and
+     the saved tier is trusted from then on like any other. */
+  if (given && TIERS[s.quality].heavy && !(this.trialLeft > 0)) {
+    tierTrialWrite(s.quality);
+    this.trialLeft = TIER_TRIAL_FRAMES;
+    write = true;
+  }
+  if (write) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch (e2) {} }
   return s;
 };
 
@@ -1681,6 +1986,13 @@ Game.prototype.loadSettings = function () {
    to record that the defaults no longer apply. */
 Game.prototype.saveSettings = function () {
   this.settings.userConfigured = true;
+  this.storeSettings();
+};
+
+/* Writes the settings without saying the player set anything: for the game's
+   own changes (a tier given up, see watchPace). */
+Game.prototype.storeSettings = function () {
+  this.settings.defaults = SETTINGS_DEFAULTS;
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings)); } catch (e) {}
 };
 
@@ -2228,6 +2540,46 @@ Game.prototype.tick = function (dt) {
   }
 };
 
+/* The shot a title screen opens on, for a circuit that names one. It is the
+   first frame a new player ever sees, so it is chosen and not left to
+   wherever the demo's cameras happen to fall. A circuit that is not named
+   opens as it always did.
+
+   The camera rides with one car and keeps one bearing, so it is a tracking
+   shot that looks the same way for as long as it lasts:
+
+     car        which car of the demo it rides with (0 is the papaya car)
+     azimuth    the bearing it stands back along, in the degrees of
+                TIME_OF_DAY in 32-sky.js (clockwise from the way the cars
+                leave the line)
+     back, side, up   where it stands from the car, in metres: back along
+                that bearing, to the right of it, and above the car
+     turn       how far to the left of that bearing it looks, in degrees
+     tilt       how far up it looks, in degrees
+     fov        vertical field of view, 45 or more so the sun keeps its glow
+                (SUN_LONG in 32-sky.js)
+     hold       seconds before the demo's own cameras take over
+     tall       what a screen taller than it is wide has in place of the
+                above: it stands further back and sees wider, so the car and
+                the sun both fit across a phone held upright
+
+   Monaco. The bearing is the bearing of Monaco's dusk sun (TIME_OF_DAY_AT),
+   so the camera looks into the sunset from behind the papaya car as it leaves
+   the harbour front, with the water and a moored boat to the left and the
+   lit town across the frame. The 8 m to the side is not taste: from the first
+   stretch of that road the sun stands in a gap between two towers about 6 m
+   wide, and 8 m to the right of the car is where the camera sees through it
+   for the first second and a little more. It was found by looking, at 2 m
+   steps, and it holds only while the sun and those towers stay where they
+   are: move either and look again. After about 1.2 seconds a nearer tower
+   takes the sun, and the shot ends at 3.2 with the car turning away. */
+var TITLE_OPENING = {
+  'monaco-gp-v1': {
+    car: 0, azimuth: 322, back: 15, side: 8, up: 3.6, turn: 14, tilt: 0, fov: 52, hold: 3.2,
+    tall: { back: 20, turn: 11, tilt: -3, fov: 68 }
+  }
+};
+
 /* Attract mode: a full field racing under AI, cut between TV cameras.
    Every N64 racer opened on one of these. */
 Game.prototype.tickDemo = function (dt) {
@@ -2246,13 +2598,14 @@ Game.prototype.tickDemo = function (dt) {
   resolveCarContacts(this.cars, null);
 
   this.demoT += dt;
-  var dur = this.demoShot === 0 ? 7.5 : 5.0;
+  var dur = this.demoOpen ? this.demoOpen.hold : (this.demoShot === 0 ? 7.5 : 5.0);
   if (this.demoT >= dur) this.nextDemoShot();
 };
 
 Game.prototype.nextDemoShot = function () {
   var t = this.track, n = t.n;
   this.demoT = 0;
+  this.demoOpen = null;                      /* the opening shot is shown once */
   this.demoShot = (this.demoShot + 1) % 3;
 
   /* follow whoever is leading on track, then the car behind them */
@@ -2437,7 +2790,20 @@ Game.prototype.updateCamera = function (dt, snap) {
      nobody is driving is just a moving wall. */
   var onboard = (this.state !== STATE.TITLE && ONBOARD_CAMS[this.camMode]) ? this.camMode : 0;
 
-  if (this.state === STATE.TITLE && this.demoShot !== 0) {
+  if (this.state === STATE.TITLE && this.demoOpen) {
+    /* the opening shot: rides with the car, keeps its bearing (TITLE_OPENING).
+       Nothing is damped: the camera is fixed to the car, as an onboard is. */
+    var op = this.demoOpen, tall = (this.camera.aspect < 1 && op.tall) || op;
+    var opAz = op.azimuth * Math.PI / 180 + this.skyRig.north;
+    var opX = Math.sin(opAz), opZ = -Math.cos(opAz);
+    var opBack = tall.back || op.back;
+    this.camPos.set(px - opX * opBack - opZ * op.side, py + op.up, pz - opZ * opBack + opX * op.side);
+    opAz -= (tall.turn === undefined ? op.turn : tall.turn) * Math.PI / 180;
+    this.camLook.set(this.camPos.x + Math.sin(opAz) * 40,
+      this.camPos.y + Math.tan((tall.tilt === undefined ? op.tilt : tall.tilt) * Math.PI / 180) * 40,
+      this.camPos.z - Math.cos(opAz) * 40);
+    this.camera.fov = tall.fov || op.fov;
+  } else if (this.state === STATE.TITLE && this.demoShot !== 0) {
     /* locked-off TV camera: hold the position, track the car */
     this.camPos.copy(this.demoAnchor);
     _look.set(px, py + 0.9, pz);
@@ -2606,8 +2972,8 @@ Game.prototype.drawHUD = function () {
   g.setTransform(this.us, 0, 0, this.us, 0, 0);
   g.clearRect(0, 0, W, H);
 
-  if (this.state === STATE.TITLE) { this.drawTitle(); return; }
-  if (this.state === STATE.FINISHED) { this.drawResults(); return; }
+  if (this.state === STATE.TITLE) { this.drawTitle(); this.drawNotice(); return; }
+  if (this.state === STATE.FINISHED) { this.drawResults(); this.drawNotice(); return; }
 
   var p = this.player;
   var small = W < 300;
@@ -2721,6 +3087,7 @@ Game.prototype.drawHUD = function () {
     drawTextCenter(g, 'PAUSED', W / 2, H / 2 - 10, 3, C_PAPAYA, C_SHADOW);
     drawTextCenter(g, 'PRESS P TO RESUME', W / 2, H / 2 + 14, 1, C_WHITE, C_SHADOW);
   }
+  this.drawNotice();
 };
 
 /* Overhead circuit map. North-up and never rotated — a map you can learn is
@@ -3046,7 +3413,8 @@ Game.prototype.selectTrack = function (id) {
   this.syncTrackList();
   this.flash('LOADING ' + def.name);
   /* let the flash paint before the navigation stalls the frame */
-  setTimeout(function () { location.reload(); }, 220);
+  var self = this;
+  setTimeout(function () { self.carryTier(); location.reload(); }, 220);
 };
 
 /* Puts the tier in settings.quality on the screen. Everything a tier decides
@@ -3054,6 +3422,7 @@ Game.prototype.selectTrack = function (id) {
    method, which undoes what the last tier set up and sets up its own. */
 Game.prototype.applyQuality = function () {
   var tier = TIERS[this.settings.quality];
+  this.tierOn = this.settings.quality;
 
   /* Tone mapping itself is in the post node, which buildTarget builds for the
      tier; the node reads the exposure from here. The renderer's own
@@ -3080,6 +3449,176 @@ Game.prototype.applyQuality = function () {
   for (var li = 0; li < layers.length; li++) layers[li].style.display = tier.overlays ? '' : 'none';
 
   this.resize();
+};
+
+/* The tiers the Graphics button steps through, in order, on every device:
+   the ruling that kept Ultra off touch devices until it had been run on a
+   phone was lifted on 24 Nov 2026, when the owner ran it on his. */
+Game.prototype.tierCycle = function () {
+  var out = [];
+  for (var name in TIERS) {
+    if (TIERS.hasOwnProperty(name)) out.push(name);
+  }
+  return out;
+};
+
+/* THE PLAYER PICKS A TIER (the Graphics button). The button and its hint
+   say the new tier at once, and nothing else happens until the clicks have
+   stopped for TIER_SETTLE_MS: a tier that was only passed through on the way
+   to another is never built and never saved. */
+Game.prototype.chooseTier = function (name) {
+  var self = this;
+  this.settings.quality = name;
+  this.applySettings();
+  this.flash(TIER_UI[name].flash);
+  if (this.tierTimer) clearTimeout(this.tierTimer);
+  this.tierTimer = setTimeout(function () { self.tierTimer = null; self.commitTier(); }, TIER_SETTLE_MS);
+};
+
+/* The clicks have stopped. A heavy tier goes on trial before it is built:
+   the key is in storage first, so a build that takes the tab down with it
+   leaves the key behind (see TIER_TRIAL_KEY). The settings are saved after,
+   not before: a build that throws saves nothing. */
+Game.prototype.commitTier = function () {
+  var name = this.settings.quality;
+  if (name !== this.tierOn) {
+    var heavy = TIERS[name].heavy;
+    this.trialLeft = heavy ? TIER_TRIAL_FRAMES : 0;
+    tierTrialWrite(heavy ? name : null);
+    this.applyQuality();
+  }
+  /* the tier the clicks ended on is the player's own from here on */
+  this.settings.tierChosen = true;
+  this.saveSettings();
+};
+
+/* Called by the frame loop for every frame it has drawn. The frame that
+   ends a trial takes the key away: the tier is trusted from then on. */
+Game.prototype.countFrame = function () {
+  if (this.trialLeft > 0 && --this.trialLeft === 0) tierTrialWrite(null);
+};
+
+/* Called by the frame loop with the gap since the frame before, in
+   milliseconds (see PACE). It is given the gap and reads no clock, and it is
+   never called from tick: the simulation knows nothing of it. Every frame of
+   a heavy tier counts, from the first, whatever is on the screen: the title,
+   the attract demo, a race, the results. In a pause or with the page hidden
+   the count starts again.
+
+   It steps down ONCE in a load. A player who picks the heavy tier again has
+   chosen it, and is not argued with a second time in that load; the load
+   after it watches again. (A browser that something holds back looks the
+   same from here as a device that cannot keep up. The limit is set clear
+   of the common case, a cap at 30 frames a second, but the guard can still
+   be wrong, and must not be able to be wrong over and over.)
+
+   What it gives up is saved, so the device stays stepped down, and it is
+   saved as the game's pick and not the player's (storeSettings). A player
+   who had picked the tier is told why it went. One who was given it is not:
+   a race that is running flashes the new tier's name, and that is all. */
+Game.prototype.watchPace = function (gapMs) {
+  if (this.paceDone || this.paused || document.hidden || this.tierTimer || !this.tierOn || !TIERS[this.tierOn].heavy) {
+    this.paceMean = 0;
+    this.paceSlow = 0;
+    this.paceLong = 0;
+    return;
+  }
+  if (!(gapMs > 0)) return;
+  /* a long gap is left out while it stands alone, and counts once it is
+     plainly how this device draws (see PACE) */
+  if (gapMs > PACE.ignoreMs) {
+    if (++this.paceLong <= PACE.ignoreRun) return;
+    gapMs = PACE.ignoreMs;
+  } else {
+    this.paceLong = 0;
+  }
+  this.paceMean = this.paceMean > 0
+    ? this.paceMean + (gapMs - this.paceMean) * Math.min(1, gapMs / PACE.meanMs)
+    : gapMs;
+  if (this.paceMean <= PACE.slowMs) { this.paceSlow = 0; return; }
+  this.paceSlow += gapMs;
+  if (this.paceSlow < PACE.forMs) return;
+
+  var chosen = this.settings.tierChosen;
+  this.paceDone = true;
+  this.paceMean = 0;
+  this.paceSlow = 0;
+  this.paceLong = 0;
+  this.settings.quality = TIER_SAFE;
+  this.settings.tierChosen = false;
+  this.trialLeft = 0;
+  tierTrialWrite(null);
+  this.applyQuality();
+  this.applySettings();
+  this.storeSettings();
+  if (chosen) this.notify(PACE_SAID);
+  else this.flash(TIER_UI[TIER_SAFE].flash);
+};
+
+/* The graphics device has gone (boot's onDeviceLost). If a heavy tier was on,
+   the next load must not go straight back into it. Whether this is the
+   first loss or the second running is for the load that finds the key to
+   act on (see TIER_FELL). */
+Game.prototype.tierLost = function () {
+  this.tierBroke = true;
+  if (this.tierTimer) { clearTimeout(this.tierTimer); this.tierTimer = null; }
+  if (this.tierOn && TIERS[this.tierOn].heavy) tierTrialWrite(this.tierOn + (this.tierAgain ? ' lost twice' : ' lost'));
+};
+
+/* THE PLAYER LEAVES THE PAGE (boot's pagehide: the tab is closed, reloaded
+   or sent somewhere else) while a heavy tier is still on trial. That is not
+   a failure. Read as one, it costs every new player who looks and leaves
+   inside the first 60 frames the tier they were given: Ultra is everyone's
+   default, and the next visit would come up in TIER_SAFE without a word.
+   So the tier is marked untried, as carryTier marks it, and the load that
+   follows starts its trial again from the first frame.
+
+   Only a page on which nothing went wrong may say so. One that lost its
+   graphics device, or had an error nobody caught, leaves the key as it
+   stands: something did fail there, and the tier may be why. And a tab
+   the system kills gets no pagehide at all, so a tier that takes its tab
+   down with it is caught as before.
+
+   A tier that was clicked to and not yet built is dropped, on any page.
+   Its timer can fire while the page waits to be replaced (see carryTier),
+   and it was never saved, so what is saved stays as it was. The button
+   goes back to the tier on the screen, for a page the browser keeps and
+   brings back. */
+Game.prototype.leaveTier = function () {
+  if (this.tierTimer) {
+    clearTimeout(this.tierTimer);
+    this.tierTimer = null;
+    this.settings.quality = this.tierOn;
+    this.applySettings();
+  }
+  if (this.tierBroke || !(this.trialLeft > 0)) return;
+  tierTrialWrite(TIERS[this.tierOn].heavy ? this.tierOn + ' untried' : null);
+};
+
+/* The browser kept the page that was left and has brought it back (boot's
+   pageshow). Its trial carries on where it stopped, so the key says once
+   more that the tier is being tried now. */
+Game.prototype.returnTier = function () {
+  if (this.tierBroke || !(this.trialLeft > 0) || !TIERS[this.tierOn].heavy) return;
+  tierTrialWrite(this.tierOn);
+};
+
+/* The game is about to reload the page itself. A tier that is clicked to
+   and not yet built, or built and still on trial, has not failed: it is
+   marked untried, so the load that follows starts its trial again and does
+   not take the key for a failure. */
+Game.prototype.carryTier = function () {
+  if (!this.tierTimer && !(this.trialLeft > 0)) return;
+  /* THIS PAGE LIVES ON until the answer to the reload arrives, and that can
+     take longer than the wait of a tier that was clicked to. So the timer
+     of that tier is stopped here. Left running, it builds the tier on the
+     page that is being left, writes the plain key over the mark and saves,
+     and the load that follows finds a tier that "did not start". Nor may a
+     frame this page still draws end the trial and take the mark away. */
+  if (this.tierTimer) { clearTimeout(this.tierTimer); this.tierTimer = null; }
+  this.trialLeft = 0;
+  var name = this.settings.quality;
+  tierTrialWrite(TIERS[name].heavy ? name + ' untried' : null);
 };
 
 /* Sets the time of day by name (one of TIME_OF_DAY_NAMES), saves it, and has
@@ -3182,6 +3721,7 @@ Game.prototype.render = function (dt) {
   if (this.state === STATE.COUNTDOWN && this.countdown < 0.6) fade = clamp(this.countdown / 0.6, 0, 1);
   this.drawFrame(fade);
 
+  if (this.noticeT > 0) { this.noticeT -= dt; if (this.noticeT <= 0) this.notice = ''; }
   this.drawHUD();
 };
 
@@ -3230,10 +3770,11 @@ Game.prototype.hookSelect = function (circuit, quality) {
     this.settings.trackId = circuit;
     if (quality) this.settings.quality = quality;
     this.saveSettings();
+    this.carryTier();
     location.reload();
     return false;
   }
-  if (quality && quality !== this.settings.quality) {
+  if (quality && (quality !== this.settings.quality || quality !== this.tierOn)) {
     this.settings.quality = quality;
     this.applyQuality();
   }
@@ -3445,6 +3986,11 @@ Game.prototype.photo = function (opts) {
     this.updateCamera(0, true);
     if (cam !== 'chase' && cam !== 'helmet') this.placePhotoCamera(cam);
     this.camMode = keepMode;
+    /* The wide shadows hold a layout a little past the field of view it was
+       made for (SHADOW_FOV_HOLD in 33-shadows.js). A still lays them out
+       afresh, so that it shows the same shadows whatever camera the page
+       had before it. */
+    this.shadowRig.update(true);
 
     if (this.scenery && this.scenery.clouds) this.scenery.clouds.rotation.y = ticks * STEP * 0.004;
 
@@ -3473,19 +4019,29 @@ Game.prototype.photo = function (opts) {
   }
 };
 
-/* MCL64.bench({ circuit, quality, seconds }) -> Promise<{ frames, avgMs, p95Ms }>
+/* MCL64.bench({ circuit, quality, seconds, timeOfDay }) -> Promise<{ frames, avgMs, p95Ms }>
  *
  * Runs the attract demo and times the gaps between animation frames, which
  * is the frame time a player actually gets. The first second is a warm up
  * (shaders compile on the first frames after a tier change) and is not
- * counted. Releases a hold left by photo. */
+ * counted. Releases a hold left by photo. `timeOfDay` is as photo takes it:
+ * one of TIME_OF_DAY_NAMES, set and saved before the run, and anything else
+ * is refused. It changes the picture in Ultra only.
+ *
+ * The step down guard (watchPace) is switched off for the rest of the load.
+ * It watches the attract demo too, and a bench of Ultra on a machine too slow
+ * for it would otherwise come back with Modern's frame times under Ultra's
+ * name. */
 Game.prototype.bench = function (opts) {
   var o = opts || {};
   try {
     var seconds = o.seconds > 0 ? o.seconds : 20;
+    if (o.timeOfDay != null && TIME_OF_DAY_NAMES.indexOf(o.timeOfDay) < 0) throw new Error('unknown time of day ' + o.timeOfDay);
     if (!this.hookSelect(o.circuit, o.quality)) {
       return Promise.reject(new Error('MCL64.bench: reloading to load ' + o.circuit + '; call again once the page has loaded'));
     }
+    if (o.timeOfDay != null) this.setTimeOfDay(o.timeOfDay);
+    this.paceDone = true;
     this.photoHold = false;
     this.hudCanvas.style.visibility = '';
     this.resetRace(true);
@@ -3520,6 +4076,12 @@ Game.prototype.bench = function (opts) {
    ========================================================================= */
 
 (function boot() {
+  /* First of all: from here on, every failure is this function's to report.
+     The guard script at the head of the page (index.template.html) shows
+     the panel for a page that never got this far, and stands down when it
+     sees this. */
+  window.MCL64_BOOTED = true;
+
   /* One line on the console so a build is identifiable from a devtools
      screenshot, without anyone opening the settings panel. */
   if (window.MCL64_BUILD) {
@@ -3529,8 +4091,10 @@ Game.prototype.bench = function (opts) {
   var host = document.getElementById('screen');
   var fallback = document.getElementById('fallback');
 
-  /* Every way the picture can fail ends here: the panel, with a sentence a
-     player can act on. `lead` replaces the panel's own first line, which
+  /* Every way the picture can fail once boot has begun ends here: the
+     panel, with a sentence a player can act on. (A browser that cannot read
+     the engine's script never gets to boot; the guard script in the
+     template shows the same panel for it.) `lead` replaces the panel's own first line, which
      says the game could not start, for the one case where it had started. */
   function fail(msg, lead) {
     if (fallback) {
@@ -3637,6 +4201,7 @@ Game.prototype.bench = function (opts) {
       if (gone) return;
       gone = true;
       engineLost.call(renderer, info);
+      game.tierLost();
       if (game.state === STATE.RACING || game.state === STATE.COUNTDOWN) game.paused = true;
       /* `ready` off as well, so a key press cannot wake the sound again
          over a picture that is not coming back */
@@ -3657,6 +4222,15 @@ Game.prototype.bench = function (opts) {
       });
     }
 
+    /* A PAGE LEFT EARLY IS NOT A TIER THAT FAILED (see leaveTier). The two
+       listeners for errors are what lets a page say nothing went wrong on
+       it: an exception nobody caught, and a promise that was rejected with
+       nobody waiting on it. */
+    window.addEventListener('error', function () { game.tierBroke = true; });
+    window.addEventListener('unhandledrejection', function () { game.tierBroke = true; });
+    window.addEventListener('pagehide', function () { game.leaveTier(); });
+    window.addEventListener('pageshow', function (e) { if (e.persisted) game.returnTier(); });
+
     var last = performance.now();
     var acc = 0;
 
@@ -3666,7 +4240,8 @@ Game.prototype.bench = function (opts) {
       /* photo() holds the loop so its frame is the one on screen when the
          stills tool captures it. Never set in normal play. */
       if (game.photoHold) { last = now; return; }
-      var dt = (now - last) / 1000;
+      var gap = now - last;
+      var dt = gap / 1000;
       last = now;
       if (dt > 0.25) dt = 0.25;          /* tab was backgrounded: don't fast forward */
       acc += dt;
@@ -3680,6 +4255,8 @@ Game.prototype.bench = function (opts) {
       var alpha = acc / STEP;
       for (var i = 0; i < game.cars.length; i++) game.cars[i].sync(dt, alpha);
       game.render(dt);
+      game.countFrame();
+      game.watchPace(gap);
       game.updateAudio();
       if (window.updateMonacoLiveStreetView && game.playerCar && game.track) {
         window.updateMonacoLiveStreetView(game.playerCar, game.track);

@@ -44,7 +44,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { CHROMIUM_ARGS, STILL_CONTEXT, stillClip, watchPage, requirePlaywright, serveDist, localOnly, pinRandom, callHook } = require('./browser');
+const { CHROMIUM_ARGS, STILL_CONTEXT, stillClip, watchPage, requirePlaywright, serveDist, localOnly, pinRandom, startFrom, callHook } = require('./browser');
 
 function parseArgs(argv) {
   const a = {};
@@ -80,6 +80,9 @@ const list = (s) => s.split(',').map((x) => x.trim()).filter(Boolean);
     const context = await browser.newContext(STILL_CONTEXT);
     /* before the page exists, so it is in place for the very first script */
     await pinRandom(context);
+    /* the page it has always started from, by name, and not the one a new
+       player is given (startFrom in tools/browser.js) */
+    await startFrom(context);
     const page = await context.newPage();
     /* A page error, a console error or an unknown console warning fails the
        run: the engine reports a material that would not build on the

@@ -76,6 +76,63 @@ var TIME_OF_DAY = {
   }
 };
 
+/* ONE CIRCUIT'S OWN HOURS. A row here is laid over the row of the same name
+   in TIME_OF_DAY, field by field, on that circuit and on no other (see
+   SkyRig.setCircuit and SkyRig.rowFor). A circuit that is not named, or an
+   hour that is not, has the table above and nothing else.
+
+   MONACO AT DUSK is the first thing a new player sees, so its sun is placed
+   as a photographer would place it and not by the rule that serves the
+   other three circuits.
+
+     azimuth 322   38 degrees to the left of the way the cars leave the line,
+                   which at Monaco is over the far end of the harbour. From
+                   the grid the disc is in the frame, low on the left, with
+                   the water under it; the fronts of the buildings across
+                   the road are turned towards it and take two thirds of its
+                   light; and every car throws a long shadow across the road
+                   and back towards the camera. With the table's 340 the sun
+                   stood at the end of the street and those fronts were lit
+                   at a glancing angle. Further round (305 was tried) the
+                   fronts are brighter still, but the disc leaves the frame
+                   and the picture stops saying dusk.
+     elevation 7.5 and not 4.5. A sea wall 1.25 m high throws a shadow 16 m
+                   long at 4.5 degrees, which is the whole road; at 7.5 it
+                   is 9.5 m, and 6 m across the road at this bearing, so the
+                   far lane is in the sun. The disc also clears the towers
+                   at the far end of the harbour.
+     rayleigh      more of it: a deeper blue overhead and a redder horizon.
+     gain, tint    the sky under the table's, because a sun this much higher
+                   makes the model's sky a good deal brighter and the camera
+                   looks towards it for a third of the lap. The tint keeps
+                   its blue, where the table's takes a quarter of it out:
+                   that is what turned the upper sky teal.
+     sun, sunK     a stronger and slightly less red sun. Its light on the
+                   road falls with the sine of its height, so the table's
+                   0.95 left the road to the fill alone; the fronts of the
+                   buildings, which face it, take most of 1.9 and glow.
+     sky, fill     the shade is most of a street circuit at this hour. It is
+                   lifted and kept blue, so a road in shadow is read as a
+                   road at dusk and not as a dark band.
+     windows       how strongly the town's lit windows shine (setHour in
+                   20-track.js). Only an hour that names it has any.
+     haze          starts further out: the far side of the harbour is 300 m
+                   away and is the middle of the picture. */
+var TIME_OF_DAY_AT = {
+  'monaco-gp-v1': {
+    dusk: {
+      elevation: 7.5, azimuth: 322,
+      rayleigh: 3.2,
+      gain: 0.72, tint: [1.00, 0.86, 0.94],
+      sun: [1.00, 0.58, 0.30], sunK: 1.90,
+      sky: [0.56, 0.62, 1.00], land: [0.44, 0.34, 0.32], skyK: 0.72,
+      fill: [0.40, 0.38, 0.58], fillK: 0.50,
+      windows: 1.9,
+      haze: [340, 980]
+    }
+  }
+};
+
 /* How far the sun light sits from the point it looks at: the length of the
    (-320, 420, 210) the dome's sun has always had. */
 var SUN_REACH = 568.2;
@@ -107,6 +164,25 @@ var SUN_DISC = 2000;
 /* How much brighter than the rest of the horizon the fog may go when the
    camera looks towards the sun. See SkyRig.fogToward. */
 var FOG_GLARE = 2.5;
+
+/* THE SUN THROUGH A LONG LENS. The bloom gives the sun's disc a glow for
+   every pixel of the disc (BLOOM.sunGive in 40-game.js), and the disc is a
+   fixed angle across, so the glow grows with the square of the lens: tuned
+   on the race cameras (50 degrees and wider), it came out as a wash over a
+   third of the frame from the title screen's 34 degree camera, where the
+   disc covers three times the pixels. Under SUN_LONG degrees of field of
+   view the disc is therefore drawn at SUN_DISC_LONG and not at SUN_DISC:
+   still far past white, so the disc itself looks the same, but under what
+   the bloom takes for the sun (BLOOM.sun, 500), so it glows as any bright
+   thing does and no more.
+
+   It is a step and not a slope. A slope was tried: the bloom gives the full
+   glow from one above BLOOM.sun, so a disc at 500.25 should have asked for
+   a quarter of it. Measured on both backends it gave none, the figure
+   being lost somewhere under the quarter steps of a half float at that
+   size. No race camera is near the step (the narrowest is 50 degrees). */
+var SUN_LONG = 45;
+var SUN_DISC_LONG = 60;
 
 /* What the land reflects, for the half of the environment below the horizon:
    grass, tarmac and gravel taken together. */
@@ -247,6 +323,8 @@ function SkyRig(scene, renderer, sun, hemi, ambient) {
   this.mode = 'dome';
   this.timeOfDay = 'midday';
   this.north = 0;
+  this.circuit = '';
+  this.rows = {};
   this.drawn = '';
   /* for the fog: the hour's row and its sun, and the mean of the horizon
      away from the sun */
@@ -284,7 +362,37 @@ function SkyRig(scene, renderer, sun, hemi, ambient) {
   this.envTarget = null;
   this.pmrem = null;
   this.gain = null;
+  /* what SkyMesh's showSunDisc is set to for a race camera and for a long
+     lens (see SUN_LONG) */
+  this.discFull = 1;
+  this.discLong = 1;
 }
+
+/* Which circuit the rig is over: an id from TRACKS. A circuit may have hours
+   of its own (TIME_OF_DAY_AT). Called once the circuit is built. */
+SkyRig.prototype.setCircuit = function (id) {
+  if (id === this.circuit) return;
+  this.circuit = id;
+  this.rows = {};
+  this.drawn = '';
+  if (this.mode === 'physical') this.setTimeOfDay(this.timeOfDay);
+};
+
+/* The row for an hour on this circuit: TIME_OF_DAY's, with the circuit's own
+   fields laid over it. Null for a name that is not an hour. */
+SkyRig.prototype.rowFor = function (name) {
+  var base = TIME_OF_DAY[name];
+  if (!base) return null;
+  var own = (TIME_OF_DAY_AT[this.circuit] || {})[name];
+  if (!own) return base;
+  if (!this.rows[name]) {
+    var row = {}, k;
+    for (k in base) if (base.hasOwnProperty(k)) row[k] = base[k];
+    for (k in own) if (own.hasOwnProperty(k)) row[k] = own[k];
+    this.rows[name] = row;
+  }
+  return this.rows[name];
+};
 
 /* Where "ahead" is for the azimuths in TIME_OF_DAY: the direction the cars
    travel at the start line, as (x, z) on the ground. Called once the circuit
@@ -329,6 +437,8 @@ SkyRig.prototype.buildPhysical = function () {
   this.sky.onBeforeRender = function (renderer, scene, camera) {
     var e = camera.matrixWorld.elements;
     rig.fogToward(-e[8], -e[10]);
+    /* and how long its lens is: see SUN_LONG */
+    rig.sky.showSunDisc.value = camera.fov < SUN_LONG ? rig.discLong : rig.discFull;
   };
   this.root.add(this.sky);
 
@@ -397,7 +507,7 @@ SkyRig.prototype.setMode = function (mode) {
 
 /* One of TIME_OF_DAY's names. In 'dome' it is only remembered. */
 SkyRig.prototype.setTimeOfDay = function (name) {
-  var row = TIME_OF_DAY[name];
+  var row = this.rowFor(name);
   if (!row) throw new Error('unknown time of day ' + name);
   this.timeOfDay = name;
   if (this.mode !== 'physical') return;
@@ -436,8 +546,10 @@ SkyRig.prototype.setTimeOfDay = function (name) {
      is on it. SkyMesh's showSunDisc is a plain multiplier on the disc. */
   var disc = [0, 0, 0];
   skyLight(sx, sy, sz, sx, sy, sz, row, disc);
-  this.sky.showSunDisc.value = SUN_DISC / Math.max(
+  this.discFull = SUN_DISC / Math.max(
     disc[0] * row.gain * row.tint[0], disc[1] * row.gain * row.tint[1], disc[2] * row.gain * row.tint[2]);
+  this.discLong = this.discFull * SUN_DISC_LONG / SUN_DISC;
+  this.sky.showSunDisc.value = this.discFull;
 
   /* The land in the environment: what the ground sends back up under this
      hour's sun and sky. A strength already carries the factor of pi, and a

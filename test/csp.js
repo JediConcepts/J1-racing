@@ -43,6 +43,10 @@ if (!fs.existsSync(DIST)) {
   process.exit(2);
 }
 
+/* How long the page may take to load and the game to arrive, in milliseconds
+   (see the wait after page.goto). */
+const READY_MS = 240000;
+
 const HTACCESS = fs.readFileSync(path.join(ROOT, 'deploy/.htaccess'), 'utf8');
 
 /* Parse the headers straight out of .htaccess rather than retyping them, so
@@ -106,9 +110,25 @@ const server = http.createServer((req, res) => {
   page.on('pageerror', e => errors.push('PAGEERROR: ' + e.message));
   page.on('requestfailed', r => failedReq.push(r.url().slice(0, 90) + ' — ' + (r.failure() || {}).errorText));
 
-  await page.goto(url, { waitUntil: 'load', timeout: 60000 });
-  /* The game boots on rAF and the board fetch is async; give both a moment. */
-  await page.waitForTimeout(9000);
+  await page.goto(url, { waitUntil: 'load', timeout: READY_MS });
+  /* WAIT FOR THE GAME, NOT FOR THE CLOCK. This used to sleep nine seconds,
+     which was enough while the page a new browser gets was Modern at
+     Silverstone. Since 24 Nov 2026 it is Ultra at dusk at Monaco, and the
+     software rasteriser this runs on needs several times as long to build
+     that, more on a busy machine. So the wait is on the game's own signal:
+     MCL64 is assigned once the renderer has started and the world is built,
+     and the fallback panel is where a boot that failed ends. The limit is
+     generous and a quick machine never reaches it. A boot that gives
+     neither in that time is not waited for any longer: the probe below then
+     finds no backend, and the run fails on `booted`, as it should. */
+  const ready = await page.waitForFunction(() => {
+    const f = document.getElementById('fallback');
+    if (f && getComputedStyle(f).display !== 'none') return 'the fallback panel';
+    return window.MCL64 && window.MCL64.track ? 'the game' : false;
+  }, null, { timeout: READY_MS }).then((h) => h.jsonValue(), () => 'neither the game nor the fallback panel in ' + READY_MS / 1000 + ' s');
+  console.log('  the boot ended at: ' + ready);
+  /* The board fetch is async and starts with the game; give it a moment. */
+  await page.waitForTimeout(2000);
 
   /* Did the thing actually start? "No errors" is not evidence — a game that
      never booted also throws nothing.
@@ -147,8 +167,18 @@ const server = http.createServer((req, res) => {
     };
   });
 
+  /* Between the two the page is given three animation frames of its own as
+     well as the second. Not to count them (see above): the default page now
+     takes a second or more over each frame on this rasteriser, so a second
+     by the clock can pass with no new frame in it, and two equal shots would
+     then say nothing about the loop. */
   const shotA = await page.screenshot({ path: '/tmp/mcl64-csp-boot.png' });
   await page.waitForTimeout(1200);
+  await page.evaluate(() => new Promise((done) => {
+    let n = 0;
+    const next = () => { if (++n >= 3) done(); else requestAnimationFrame(next); };
+    requestAnimationFrame(next);
+  }));
   const shotB = await page.screenshot();
   probe.framesAdvancing = !shotA.equals(shotB);
 
@@ -166,7 +196,7 @@ const server = http.createServer((req, res) => {
   const boardOpened = await btn.count() > 0;
   if (!boardOpened) console.log('  !! #btn-board absent — cloud UI never enabled, board untested');
   else {
-    await btn.click({ timeout: 10000 });
+    await btn.click({ timeout: READY_MS });
     await page.waitForTimeout(7000);
   }
   await page.screenshot({ path: '/tmp/mcl64-csp-board.png' });

@@ -3,7 +3,9 @@
    launch arguments every still is taken with, and what a still is: the
    context it is taken in (STILL_CONTEXT), the part of the page it shows
    (stillClip), the pinned Math.random its page runs on (pinRandom) and the
-   watch on its console (watchPage). The last four are for stills only.
+   watch on its console (watchPage). The first three of those four are for
+   stills only; the bench watches its console too. And the page a tool
+   starts from (startFrom), which the stills and the bench share.
 
    Nothing is installed into this repo; Playwright is found through
    NODE_PATH. Point it at a node_modules that has it:
@@ -172,6 +174,32 @@ async function pinRandom(context) {
   });
 }
 
+/* THE PAGE A TOOL STARTS FROM. A tool's browser has nothing saved, so the
+   first page it loads is the one a new player is given, built and thrown
+   away before the first hook is called. Until 24 Nov 2026 that was Modern at
+   Silverstone at midday. Since then it is Ultra at dusk at Monaco: the
+   heaviest page the game has, which the software rasteriser takes many
+   seconds over, and whose console would fail a run of Retro stills that
+   never asked for it. A tool must not lean on what a new player is given.
+
+   So a tool saves settings of its own before the first load, as a player
+   who had picked them would have: the same Modern at Silverstone at midday
+   it always started from, so nothing a tool measured before has moved.
+   Every hook still names its own circuit, tier and hour.
+
+   Saved once for the context, and not again on a reload: a hook changes
+   circuit by saving its choice and reloading the page, and has to find what
+   it saved. `defaults` and `tierChosen` are what src/40-game.js writes for
+   settings saved since the defaults changed and a tier the player picked. */
+const TOOL_START = { quality: 'modern', tierChosen: true, timeOfDay: 'midday', trackId: 'silverstone-v1', defaults: 2 };
+async function startFrom(context) {
+  await context.addInitScript((saved) => {
+    if (sessionStorage.getItem('tool.started')) return;
+    sessionStorage.setItem('tool.started', '1');
+    localStorage.setItem('mcl64.settings.v2', saved);
+  }, JSON.stringify(TOOL_START));
+}
+
 /* The warnings a healthy stills page prints, by exact text. Every other
    warning fails the run (see watchPage), so each one here says why it is
    not a fault. Two things are taken off a message before it is compared,
@@ -202,9 +230,15 @@ const KNOWN_WARNINGS = [
   'A valid external Instance reference no longer exists.'
 ];
 
-/* Watches a stills page for anything that says the picture may be wrong,
-   and hands each one to `report` as a line of text: a page error, a console
-   error, or a console warning that is not in KNOWN_WARNINGS.
+/* Watches a page for anything that says the picture may be wrong, and hands
+   each one to `report` as a line of text: a page error, a console error, or
+   a console warning that is not in KNOWN_WARNINGS.
+
+   The stills tool gives `report` alone, and all three fail its run. The
+   bench gives `note` as well, and an unknown warning then goes there and
+   not to `report`: KNOWN_WARNINGS is the list of a headless stills page,
+   and the bench runs headed on a real GPU, whose driver has warnings of its
+   own that say nothing about the frame. An error is an error on either.
 
    WHY THE CONSOLE AND NOT ONLY PAGE ERRORS. A node material that fails to
    build does not throw. The engine writes the failure on the console and
@@ -214,7 +248,7 @@ const KNOWN_WARNINGS = [
    because the engine reports some of its problems at that level and a new
    one should be read by a person once, and then either fixed or added
    above with its reason. */
-function watchPage(page, report) {
+function watchPage(page, report, note) {
   page.on('pageerror', (e) => report('PAGEERROR: ' + e.message));
   page.on('console', (m) => {
     const type = m.type();
@@ -222,7 +256,7 @@ function watchPage(page, report) {
     const text = m.text();
     const plain = text.replace(/^\[\.WebGL-0x[0-9a-f]+\]\s*/, '').replace(/ \(this message will no longer repeat\)$/, '');
     if (type === 'warning' && KNOWN_WARNINGS.indexOf(plain) >= 0) return;
-    report('CONSOLE ' + type.toUpperCase() + ': ' + text.split('\n')[0]);
+    (type === 'warning' && note ? note : report)('CONSOLE ' + type.toUpperCase() + ': ' + text.split('\n')[0]);
   });
 }
 
@@ -257,4 +291,4 @@ async function waitForGame(page, circuit) {
   }
 }
 
-module.exports = { ROOT, CHROMIUM_ARGS, STILL_VIEWPORT, STILL_CONTEXT, stillClip, watchPage, requirePlaywright, distFile, serveDist, localOnly, pinRandom, callHook };
+module.exports = { ROOT, CHROMIUM_ARGS, STILL_VIEWPORT, STILL_CONTEXT, TOOL_START, stillClip, watchPage, requirePlaywright, distFile, serveDist, localOnly, pinRandom, startFrom, callHook };

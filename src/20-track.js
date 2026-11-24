@@ -1156,8 +1156,9 @@ function buildScenery(track, scene) {
   }
 
   /* Monaco GP Real 3D Tunnel Canopy, Fairmont Hotel & Urban Street Environment */
+  var town = null;
   if (track.id === 'monaco-gp-v1') {
-    buildMonacoTunnelAndUrbanScenery(track, scene);
+    town = buildMonacoTunnelAndUrbanScenery(track, scene);
   }
 
   /* drifting cloud plane */
@@ -1198,8 +1199,70 @@ function buildScenery(track, scene) {
     }
     groundTop -= 0.55 + 0.1;
   }
-  return { clouds: clouds, ground: cityGround, groundTop: groundTop, treeFeet: placed ? treeFeet / placed : 0 };
+  /* `setHour`, `farGroundShadow` and `sparseShadows` are Monaco's, for the
+     tier with the physical sky and the shadows across the whole view. See
+     the notes where buildMonacoTunnelAndUrbanScenery makes them. */
+  return {
+    clouds: clouds, ground: cityGround, groundTop: groundTop, treeFeet: placed ? treeFeet / placed : 0,
+    setHour: town ? town.setHour : null,
+    farGroundShadow: !town,
+    sparseShadows: !!town
+  };
 }
+
+/* MONACO UNDER THE PHYSICAL SKY. What the town's own materials are set to
+   while the sky is the physical one, at any hour; under the dome every one
+   of them is as it was built, to the last figure.
+
+   sea        Under the dome the sea is a smooth teal mirror of a painted
+              sky that is the same blue all round. The physical sky is many
+              times brighter at the horizon towards a low sun, and a smooth
+              surface seen from a few metres up reflects the horizon, so the
+              water came out as a sheet of near white, and the sun's own
+              highlight on it as a small hard patch far past white. So here
+              it is deep water: a dark blue of its own, a fifth of the sky's
+              reflection (which leaves it violet away from the sun and warm
+              towards it), and rough, so that the sun's highlight is a wide
+              soft sheen towards the sun and not a patch. Smoother than this
+              (0.36 and 0.5 were tried) the highlight is far past white over
+              half the harbour and the bloom makes a lamp of it.
+   tunnel     what the tunnel's own concrete is drawn at, as a multiple of
+              its painted colour, red, green and blue, with no light on it
+              at all. The sky's light, the fill and the light of the
+              environment are shadowed by nothing: by them the wall that
+              faces the sunset was lit like a house front and the one
+              opposite was black, 5 m under a roof. So under the physical
+              sky the tunnel is not lit, it is given the look of concrete by
+              lamplight: dark, warm, and enough to see the walls go by.
+   shade      what the road and the barriers inside the tunnel are
+              multiplied by: between two lamps, and under one (see the
+              tunnel's shade in buildMonacoTunnelAndUrbanScenery). The sky's
+              light and the fill are shadowed by nothing, so they lit the
+              road in the tunnel like open air. The cars are left alone:
+              they read as lit by the lamps.
+   lamps      how bright the ceiling strips are drawn, as a multiple of
+              their gold. It passes the bloom's threshold, so they glow as
+              lamps do.
+   windows    the colour of a lit window at its brightest, in linear light,
+              before the hour's own strength (the `windows` of a row in
+              TIME_OF_DAY_AT, 32-sky.js; an hour without one has none lit). */
+var MONACO_PHYSICAL = {
+  sea: { color: 0x10304f, roughness: 0.80, metalness: 0.20, envMapIntensity: 0.22 },
+  tunnel: [2.4, 1.9, 1.4],
+  shade: { dark: [0.42, 0.37, 0.34], lit: [0.92, 0.72, 0.46] },
+  lamps: 5.0,
+  windows: [1.00, 0.72, 0.42]
+};
+
+/* A blend that multiplies what is already drawn by the colour of what is
+   drawn over it, in the engine's own numbers: CustomBlending, AddEquation,
+   ZeroFactor and SrcColorFactor in the constants.js of three.js. They are
+   written out because the vendored bundle carries none of the four names
+   (tools/three-entry.webgpu.js), and a new name means building the bundle
+   again, which is a step with checks of its own. The numbers are the same in
+   r128 and in 0.187. An engine update has to look at them. */
+var BLEND_MULTIPLY = { blending: 5, blendEquation: 100, blendSrc: 200, blendDst: 202 };
+
 
 function buildMonacoTunnelAndUrbanScenery(track, scene) {
   var n = track.n;
@@ -1254,11 +1317,90 @@ function buildMonacoTunnelAndUrbanScenery(track, scene) {
     vertexColors: true, roughness: 0.8, metalness: 0.2, side: THREE.DoubleSide
   }));
   tunnelMesh.castShadow = true; tunnelMesh.receiveShadow = true; scene.add(tunnelMesh);
+  /* the tunnel's two materials: as built, and by lamplight (see `tunnel` in
+     MONACO_PHYSICAL). setHour puts one or the other on the mesh. */
+  var tunnelBuilt = tunnelMesh.material;
+  var tunnelLamplit = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+  tunnelLamplit.color.setRGB(MONACO_PHYSICAL.tunnel[0], MONACO_PHYSICAL.tunnel[1], MONACO_PHYSICAL.tunnel[2]);
 
   var lightMesh = new THREE.Mesh(lightBuilder.geometry(), new THREE.MeshBasicMaterial({
     vertexColors: true, side: THREE.DoubleSide
   }));
   scene.add(lightMesh);
+
+  /* THE TUNNEL'S SHADE, for the tier with the physical sky. Only the sun
+     casts a shadow. The light of the sky and the fill reach every surface
+     whatever is over it, and at dusk they are most of the light there is, so
+     the road in the tunnel was as bright as the street outside. A light for
+     each lamp, or a shadowed sky, would cost every frame of the lap for the
+     sake of 390 m of it.
+
+     So the shade is laid on: a skin 6 cm over the road and the runoff and
+     4 cm inside each barrier, drawn after everything solid, that multiplies
+     what is behind it by its own colour (white leaves it alone). It is white
+     at each mouth and comes down over the first ten samples in, about 37 m,
+     as daylight does in a real tunnel. Inside, it is lighter and warm at
+     each sample that carries a lamp and dark and cool between them, so the
+     lamps lay pools of light on the road that go by under the car. A car is
+     in front of the skin and keeps its light. Hidden until setHour shows
+     it. */
+  var shadeBuilder = new RibbonBuilder();
+  var shadeUv = [[0, 0], [0, 1], [1, 1], [1, 0]];
+  function shadeAt(si) {
+    var c = si % 3 === 0 ? MONACO_PHYSICAL.shade.lit : MONACO_PHYSICAL.shade.dark;
+    var open = 1 - smoothstep(0, 10, Math.min(si - tunnelStart, tunnelEnd - si));
+    return new THREE.Color(c[0] + (1 - c[0]) * open, c[1] + (1 - c[1]) * open, c[2] + (1 - c[2]) * open);
+  }
+  /* the road is crowned over the runoff (runoffDrop), so the floor is laid
+     in the three flat parts it has */
+  var shadeAcross = [-WALL_HALF + 0.04, -HALF_W, HALF_W, WALL_HALF - 0.04];
+  for (i = tunnelStart; i < tunnelEnd; i++) {
+    var j2 = (i + 1) % n, k0 = shadeAt(i), k1 = shadeAt(i + 1);
+    for (var sa = 0; sa < 3; sa++) {
+      shadeBuilder.quad(edgeY(track, i, shadeAcross[sa], 0.06), edgeY(track, j2, shadeAcross[sa], 0.06),
+        edgeY(track, j2, shadeAcross[sa + 1], 0.06), edgeY(track, i, shadeAcross[sa + 1], 0.06), shadeUv, k0, k1);
+    }
+    var inL = shadeAcross[0], inR = shadeAcross[3];
+    shadeBuilder.quad(edgeY(track, i, inL, 1.25), edgeY(track, j2, inL, 1.25),
+      edgeY(track, j2, inL, 0.06), edgeY(track, i, inL, 0.06), shadeUv, k0, k1);
+    shadeBuilder.quad(edgeY(track, i, inR, 0.06), edgeY(track, j2, inR, 0.06),
+      edgeY(track, j2, inR, 1.25), edgeY(track, i, inR, 1.25), shadeUv, k0, k1);
+  }
+  var shadeMesh = new THREE.Mesh(shadeBuilder.geometry(), new THREE.MeshBasicMaterial({
+    vertexColors: true, side: THREE.DoubleSide, fog: false, transparent: true, depthWrite: false,
+    blending: BLEND_MULTIPLY.blending, blendEquation: BLEND_MULTIPLY.blendEquation,
+    blendSrc: BLEND_MULTIPLY.blendSrc, blendDst: BLEND_MULTIPLY.blendDst
+  }));
+  shadeMesh.visible = false;
+  shadeMesh.renderOrder = 1;
+  scene.add(shadeMesh);
+
+  /* THE LAMPS THAT CAN BE SEEN. The ceiling strips above (lightMesh) are set
+     5 cm under the height the roof has over the middle of the road, but the
+     roof is hung from the tops of the two walls, which stand on the runoff,
+     22 cm lower (runoffDrop). So the strips are above the ceiling and no
+     camera has ever seen them. They are left as they are, because the dome's
+     picture must not move; under the physical sky the tunnel gets strips of
+     its own, 8 cm under the roof where it really is. */
+  var lampBuilder = new RibbonBuilder();
+  function underRoof(si, off) {
+    var p = track.p[si], l = track.lat[si];
+    var yL = groundY(track, si, -WALL_HALF), yR = groundY(track, si, WALL_HALF);
+    return vec(p.x + l.x * off, yL + (yR - yL) * (off + WALL_HALF) / (2 * WALL_HALF) + 5.8 - 0.08, p.z + l.z * off);
+  }
+  for (i = tunnelStart; i < tunnelEnd; i += 3) {
+    var l2 = (i + 1) % n;
+    for (var ls = -1; ls <= 1; ls += 2) {
+      lampBuilder.quad(underRoof(i, ls * 1.5), underRoof(l2, ls * 1.5), underRoof(l2, ls * 2.5), underRoof(i, ls * 2.5),
+        shadeUv, goldLight);
+    }
+  }
+  var lampMesh = new THREE.Mesh(lampBuilder.geometry(), new THREE.MeshBasicMaterial({
+    vertexColors: true, side: THREE.DoubleSide, fog: false
+  }));
+  lampMesh.material.color.setScalar(MONACO_PHYSICAL.lamps);
+  lampMesh.visible = false;
+  scene.add(lampMesh);
 
   /* Tunnel Entrance & Exit Portals */
   function buildPortal(idx, title) {
@@ -1395,6 +1537,9 @@ function buildMonacoTunnelAndUrbanScenery(track, scene) {
   sea.position.set(0, harbourY - 0.4, 0);
   sea.receiveShadow = true; scene.add(sea);
   track.sea = sea;
+  /* the sea as it is built, which is the sea under the dome */
+  var seaBuilt = { color: seaMat.color.clone(), roughness: seaMat.roughness, metalness: seaMat.metalness, envMapIntensity: seaMat.envMapIntensity };
+  var seaDeep = MONACO_PHYSICAL.sea;
 
   var yachtHullMat = new THREE.MeshStandardMaterial({ color: srgb(0xf0f2f5), roughness: 0.3, metalness: 0.2 });
   var yachtDeckMat = new THREE.MeshStandardMaterial({ color: srgb(0x20242a), roughness: 0.5 });
@@ -1539,8 +1684,16 @@ function buildMonacoTunnelAndUrbanScenery(track, scene) {
       yacht.add(mast);
     }
 
+    /* How far from the camera each part is worth a shadow (shadowReach, read
+       by ShadowRig.sortCasters): the hull and the bow of a boat through the
+       third cascade, a superyacht's hull through the last, and the cabin,
+       the windows, the roof and the mast through the second only. A mast is
+       30 cm across and a texel of the third cascade is half a metre. */
     yacht.traverse(function(c) {
-      if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; }
+      if (c.isMesh) {
+        c.castShadow = true; c.receiveShadow = true;
+        c.userData.shadowReach = c === backHull ? (pos.type === 0 ? 4 : 3) : (c === bow ? 3 : 2);
+      }
     });
 
     yacht.position.set(pos.x, harbourY + 0.1, pos.z);
@@ -1556,6 +1709,10 @@ function buildMonacoTunnelAndUrbanScenery(track, scene) {
   var buildingMat2 = new THREE.MeshStandardMaterial({ map: buildingTex2, roughness: 0.8 });
   var buildingMat3 = new THREE.MeshStandardMaterial({ map: buildingTex3, roughness: 0.8 });
   var mats = [buildingMat1, buildingMat2, buildingMat3];
+  /* the lit windows, for an hour that has them: see makeWindowLightTex */
+  var windowLight = new THREE.CanvasTexture(makeWindowLightTex());
+  windowLight.wrapS = windowLight.wrapT = THREE.RepeatWrapping;
+  windowLight.repeat.set(0.25, 0.25);
 
   var step = 6;
   for (var bi = 0; bi < n; bi += step) {
@@ -1628,6 +1785,75 @@ function buildMonacoTunnelAndUrbanScenery(track, scene) {
       scene.add(bMesh);
     }
   }
+
+  /* `row` is the hour's row from the sky (TIME_OF_DAY in 32-sky.js) while the
+     sky is the physical one, and null under the dome. A change of hour only
+     sets uniforms of materials that are already built; what is built anew
+     (the buildings' three materials, the tunnel's second one) is built on a
+     change of tier. */
+  function setHour(row) {
+    var on = !!row, sm = on ? seaDeep : seaBuilt;
+    if (on) seaMat.color.copy(srgb(sm.color)); else seaMat.color.copy(sm.color);
+    seaMat.roughness = sm.roughness;
+    seaMat.metalness = sm.metalness;
+    seaMat.envMapIntensity = sm.envMapIntensity;
+    tunnelMesh.material = on ? tunnelLamplit : tunnelBuilt;
+    shadeMesh.visible = on;
+    lampMesh.visible = on;
+    /* the water takes no shadow under the physical sky: what it shows there
+       is a reflection, and the shadow of a tower 300 m long, in the metre
+       wide texels of the last cascade, lay on it as a dark staircase */
+    sea.receiveShadow = !on;
+    /* Lit windows. The map is on the three materials only while the sky is
+       the physical one, so under the dome each is the material it was built
+       as; putting it on or taking it off builds the three again, which
+       happens on a change of tier and never on a change of hour. */
+    var lit = (on && row.windows) || 0, wc = MONACO_PHYSICAL.windows;
+    for (var m = 0; m < mats.length; m++) {
+      var want = on ? windowLight : null;
+      if (mats[m].emissiveMap !== want) { mats[m].emissiveMap = want; mats[m].needsUpdate = true; }
+      mats[m].emissive.setRGB(wc[0] * lit, wc[1] * lit, wc[2] * lit);
+    }
+  }
+  return { setHour: setHour };
+}
+
+/* Which windows of Monaco's buildings are lit, as light and not as paint: the
+   emissive map of the three building materials under the physical sky.
+
+   The building texture (makeBuildingTex in 10-core.js) is a wall 6 m square
+   with windows 24 x 32 pixels on a grid of 32 x 40, the first at (8, 8).
+   This canvas is the same size and covers 4 x 4 of those walls (its repeat
+   is a quarter), so every window here is 6 x 8 pixels on a grid of 8 x 10
+   and lies over a painted window. Over 24 m the lit ones do not repeat on
+   every wall, and they are lit as rooms are: a storey that is mostly lit or
+   mostly dark, and neighbours lit together, so that a building far away
+   still shows bands and clusters where single windows have run together.
+
+   Its own generator, so the pattern is the same on every load and takes
+   nothing from Math.random. */
+function makeWindowLightTex() {
+  var s = 256, cv = makeCanvas(s, s), ctx = cv.getContext('2d'), rnd = mulberry32(1929);
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, s, s);
+  for (var ty = 0; ty < 4; ty++) {
+    for (var k = 0; k < 7; k++) {
+      var busy = rnd() < 0.2 ? 0.30 : 0.06, run = 0, tone = '';
+      for (var c = 0; c < 32; c++) {
+        if (run > 0) run--;
+        else if (rnd() < busy) {
+          run = Math.floor(rnd() * 3);
+          var b = 0.45 + 0.55 * rnd(), w = rnd();
+          /* mostly warm lamps, a few cold screens */
+          tone = w < 0.85 ? 'rgb(' + Math.round(255 * b) + ',' + Math.round((150 + 70 * w) * b) + ',' + Math.round((60 + 90 * w) * b) + ')'
+            : 'rgb(' + Math.round(170 * b) + ',' + Math.round(205 * b) + ',' + Math.round(255 * b) + ')';
+        } else continue;
+        ctx.fillStyle = tone;
+        ctx.fillRect(Math.floor(c / 8) * 64 + 2 + (c % 8) * 8, ty * 64 + 2 + k * 10, 6, 8);
+      }
+    }
+  }
+  return cv;
 }
 
 function pushCrossQuad(rb, x, y, z, w, h, rot) {

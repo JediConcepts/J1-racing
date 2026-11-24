@@ -115,7 +115,8 @@ Two build invariants belong to this, and both fail the build:
 
 **What an engine update must check.** A newer three.js is not a drop in, and
 the ways it can go wrong draw a picture with no error. The picture depends on
-two behaviours of three.js that are not part of its public promise:
+behaviours of three.js that are not part of its public promise. Every tier
+leans on the first two:
 
 1. The renderer copies a classic material's properties, `colorNode` included,
    on to the node material it builds from it. That is how the node the game
@@ -126,6 +127,66 @@ two behaviours of three.js that are not part of its public promise:
    node is written around that (see `decodeCanvasMaps` in `src/10-core.js`).
    If it changed, trees and anything else cut out by an alpha test would cast
    the wrong shadow, or the shadow shader would not build.
+
+Ultra leans on seven more. Each of them fails by drawing a wrong picture, or
+by leaking, with no error:
+
+3. Disposing of a light makes the engine let go of the shadow it built for
+   that light and build the lit materials again. `ShadowRig.setMode` in
+   `src/33-shadows.js` uses it to change between the single map and the
+   cascades. If it stopped, a change of tier would go on drawing the old
+   shadow.
+4. The insides of the engine's `CSMShadowNode`, by name, all used in
+   `src/33-shadows.js`: its `camera` is null until its `setup` has run once,
+   and it makes its cascades inside that first `setup` (the rig wraps
+   `setup` to lay them out its own way straight after); `lights[i].shadow`;
+   `updateFrustums()`; and `shadow.shadowNode` on the light, which is how
+   the engine is handed the node.
+5. `csm._shadowNodes`, a private field: one shadow node for each cascade,
+   each owning that cascade's depth material. The engine's own
+   `CSMShadowNode.dispose()` does not dispose of them, so
+   `ShadowRig.dropCascades` in `src/33-shadows.js` does. If the field went,
+   every visit to Ultra would again leave behind a render object for each
+   caster in each cascade. `test/picture.js` counts them, through
+   `renderer.info.memory` and the private `renderer._objects._renderObjects`,
+   and fails if either of those is gone.
+6. The bloom, in `src/40-game.js`: `updateBeforeType = 'render'` is the
+   value of the engine's `NodeUpdateType.RENDER`, typed as a string because
+   the bundle does not export the name; `bloomHighPass` relies on what
+   `BloomNode` hands its `highPassFn`; and the bloom sizes its buffers from
+   the canvas, not from the render target, which is why
+   `TIERS.ultra.canvas` has to stay `'target'`.
+7. The haze under the physical sky is written by the sky mesh's
+   `onBeforeRender` in `src/32-sky.js`. That has to run before any fogged
+   material sends its uniforms in the frame, and it does only because the
+   sky is sorted first (`renderOrder = -1`).
+8. `receivedShadowPositionNode` on the ground's material
+   (`applyShadowMode` in `src/40-game.js`): copied from the classic material
+   on to the node material, as `colorNode` is in 1, and honoured only while
+   `renderer.highPrecision` is off, because the engine builds one shadow
+   graph for all materials from the first one it meets.
+9. `skyLight` in `src/32-sky.js` is a copy, in plain JavaScript, of the
+   sums in the engine's `SkyMesh`. It gives the haze and the lights their
+   colour. A release that changes the sky's sums needs the copy changed with
+   it, and nothing tests that the two agree.
+10. The shadow pass draws with the shadow camera's own layers when they are
+    anything but plain layer 0. `layOutCascades` and `sortCasters` in
+    `src/33-shadows.js` use it to keep small casters out of the far cascades
+    at Monaco. If it stopped, the far cascades would draw everything, or
+    nothing.
+11. Four blend constants are written as numbers in `src/20-track.js`
+    (`BLEND_MULTIPLY`: 5, 100, 200, 202, for `CustomBlending`, `AddEquation`,
+    `ZeroFactor` and `SrcColorFactor`), because the bundle exports none of
+    the four names. Monaco's tunnel shade goes wrong with no error if a value
+    moves. Add the names to `tools/three-entry.webgpu.js` at the next bundle
+    rebuild and use them.
+12. A texture's own `repeat` is honoured on an `emissiveMap`. Monaco's lit
+    windows in `src/20-track.js` lean on it to line up with the painted ones.
+
+One dependency is on the scenery, not the engine: `TITLE_OPENING` in
+`src/40-game.js` places Monaco's opening camera to see the dusk sun through a
+gap between two towers. Move the sun (`TIME_OF_DAY_AT` in `src/32-sky.js`) or
+those buildings and the camera must be found again by looking.
 
 So after ANY change to `vendor/three.bundle.js`, a new release or only a new
 name in the entry, run all three of these before it is committed:
@@ -139,8 +200,25 @@ node tools/stills-compare.js stills/before-main <the new set> --max 6
 
 `test/picture.js` and the stills need Playwright on `NODE_PATH` and are not in
 CI. The stills tool fails on a console error, because a node material that
-fails to build is reported there and the frame is drawn all the same. Then, and
-only then, change `THREE_RELEASE` in `build.js`.
+fails to build is reported there and the frame is drawn all the same.
+
+**The order, for a new release.** `build.js` refuses to build a bundle whose
+header names a release other than `THREE_RELEASE`, and two of the three checks
+need a build. So the constant cannot be changed last:
+
+1. Rebuild the bundle (above) and change `THREE_RELEASE` in `build.js`, both
+   in the working tree. Commit neither yet.
+2. Run the three checks.
+3. Commit the bundle and the constant together, and only when all three have
+   passed. If one fails, put both back.
+
+For a new name in the entry on the same release the constant does not change,
+and the three checks are run as they stand.
+
+A refused build has already written `dist/` by the time it throws: the page is
+written first and the invariants are looked at after. So `dist/index.html` is
+then the refused page, and `node test/picture.js` run by hand would be testing
+it. `git checkout -- dist` puts the committed one back.
 
 ## Deploying
 

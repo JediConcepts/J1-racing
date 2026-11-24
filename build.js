@@ -116,7 +116,8 @@ const threeHead = threeHeadEnd === -1 ? '' : three.slice(0, threeHeadEnd);
 const threeVersion = (threeHead.match(/\/\* three\.js (\d+\.\d+\.\d+),/) || [])[1] || null;
 const threeCopyright = (threeHead.match(/Copyright [^\n]*Three\.js Authors/) || [])[0] || null;
 /* The release the game was ported to and measured on. A newer one is not a
-   drop in: see "The engine" in CLAUDE.md for what has to be checked first. */
+   drop in: see "The engine" in CLAUDE.md for what has to be checked, and the
+   invariant at the foot of this file for the order to do it in. */
 const THREE_RELEASE = '0.187';
 const template = read('src/index.template.html').replace('__MAPS_KEY__', process.env.GOOGLE_MAPS_PLATFORM_KEY || '');
 
@@ -197,7 +198,8 @@ const SITE = {
   publisher: 'Jedi Concepts',
   description:
     'A Formula 1 racer built the way a 1997 console would have built it: 240p, a ' +
-    'five-bit dither, three laps of a stylised Silverstone against a full grid. ' +
+    'five-bit dither, three laps of a stylised Monaco against a full grid, and three ' +
+    'more circuits. ' +
     'Plays in a browser, on desktop or phone, with a global leaderboard.'
 };
 
@@ -374,12 +376,25 @@ if (three.indexOf('Three.js Authors') === -1) {
 /* The header has to say which three.js this is, and it has to be the release
    the game was ported to. A bundle rebuilt from another release draws a
    different picture with no error at all, so this is where a vendor bump
-   stops until someone has changed THREE_RELEASE on purpose. */
+   stops until someone has changed THREE_RELEASE on purpose.
+
+   THE ORDER, which the message below once had backwards. It said to run the
+   checks and then change THREE_RELEASE. But two of the three checks need a
+   build, and this refusal is what stops the build, so that order cannot be
+   followed for a new release. The order that can: change THREE_RELEASE in
+   the working tree, uncommitted; run the checks; commit the bundle and the
+   constant together only when all of them pass.
+
+   The page is already on disk by the time this throws. dist/ is written
+   further up, before any invariant is looked at, so a refused build leaves
+   the refused page in dist/. It is not a page that passed anything. */
 if (!threeVersion) {
   problems.push('vendor/three.bundle.js does not say which three.js it is: its header has no "three.js <version>" line. Rebuild it with tools/vendor-three.js');
 } else if (threeVersion.indexOf(THREE_RELEASE + '.') !== 0) {
   problems.push('vendor/three.bundle.js is three.js ' + threeVersion + ' and this build expects ' + THREE_RELEASE +
-    ': read "The engine" in CLAUDE.md, run what it lists, then change THREE_RELEASE in build.js');
+    '. To try the new release: change THREE_RELEASE in build.js in the working tree first, then run every check listed under' +
+    ' "The engine" in CLAUDE.md, and commit the bundle and the constant together only when all of them pass.' +
+    ' dist/ has ALREADY been written from this refused bundle: do not test or commit that page as if it had built');
 }
 /* The size of the page a player downloads. The limit is the one the renderer
    decision was taken under (docs/v2-renderer-decision.md, criterion 3); the
