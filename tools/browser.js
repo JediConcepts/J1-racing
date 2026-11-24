@@ -4,7 +4,8 @@
    context it is taken in (STILL_CONTEXT), the part of the page it shows
    (stillClip), the pinned Math.random its page runs on (pinRandom) and the
    watch on its console (watchPage). The first three of those four are for
-   stills only; the bench watches its console too.
+   stills only; the bench watches its console too. And the page a tool
+   starts from (startFrom), which the stills and the bench share.
 
    Nothing is installed into this repo; Playwright is found through
    NODE_PATH. Point it at a node_modules that has it:
@@ -173,6 +174,32 @@ async function pinRandom(context) {
   });
 }
 
+/* THE PAGE A TOOL STARTS FROM. A tool's browser has nothing saved, so the
+   first page it loads is the one a new player is given, built and thrown
+   away before the first hook is called. Until 24 Nov 2026 that was Modern at
+   Silverstone at midday. Since then it is Ultra at dusk at Monaco: the
+   heaviest page the game has, which the software rasteriser takes many
+   seconds over, and whose console would fail a run of Retro stills that
+   never asked for it. A tool must not lean on what a new player is given.
+
+   So a tool saves settings of its own before the first load, as a player
+   who had picked them would have: the same Modern at Silverstone at midday
+   it always started from, so nothing a tool measured before has moved.
+   Every hook still names its own circuit, tier and hour.
+
+   Saved once for the context, and not again on a reload: a hook changes
+   circuit by saving its choice and reloading the page, and has to find what
+   it saved. `defaults` and `tierChosen` are what src/40-game.js writes for
+   settings saved since the defaults changed and a tier the player picked. */
+const TOOL_START = { quality: 'modern', tierChosen: true, timeOfDay: 'midday', trackId: 'silverstone-v1', defaults: 2 };
+async function startFrom(context) {
+  await context.addInitScript((saved) => {
+    if (sessionStorage.getItem('tool.started')) return;
+    sessionStorage.setItem('tool.started', '1');
+    localStorage.setItem('mcl64.settings.v1', saved);
+  }, JSON.stringify(TOOL_START));
+}
+
 /* The warnings a healthy stills page prints, by exact text. Every other
    warning fails the run (see watchPage), so each one here says why it is
    not a fault. Two things are taken off a message before it is compared,
@@ -264,4 +291,4 @@ async function waitForGame(page, circuit) {
   }
 }
 
-module.exports = { ROOT, CHROMIUM_ARGS, STILL_VIEWPORT, STILL_CONTEXT, stillClip, watchPage, requirePlaywright, distFile, serveDist, localOnly, pinRandom, callHook };
+module.exports = { ROOT, CHROMIUM_ARGS, STILL_VIEWPORT, STILL_CONTEXT, TOOL_START, stillClip, watchPage, requirePlaywright, distFile, serveDist, localOnly, pinRandom, startFrom, callHook };

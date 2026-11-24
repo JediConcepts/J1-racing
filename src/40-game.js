@@ -32,9 +32,8 @@ var STATE = { TITLE: 0, COUNTDOWN: 1, RACING: 2, FINISHED: 3 };
                   'target'  the size of the render target and no larger
      heavy        true for a tier that not every device is known to hold.
                   Such a tier is not trusted until it has drawn (see
-                  chooseTier), is given up for TIER_SAFE if the frames come
-                  too slowly in a race (see watchPace), and is not offered
-                  on a touch device (see tierCycle).
+                  chooseTier and loadSettings), and is given up for
+                  TIER_SAFE if the frames come too slowly (see watchPace).
 
    Retro and Modern are what main has always drawn, in every field, the two
    layers over the page included: main lays them over both.
@@ -114,7 +113,9 @@ function tierTrialWrite(value) {
   } catch (e) {}
 }
 
-/* What the player is told when a load finds the key, by how it was left. */
+/* What the player is told when a load finds the key, by how it was left.
+   Only a player who picked the tier is told: one who was given it as the
+   default never asked for it, and comes up in TIER_SAFE with no word. */
 var TIER_FELL = {
   failed: 'ULTRA OFF: IT DID NOT START LAST TIME',
   lost: 'ULTRA OFF: THE GRAPHICS DEVICE WAS LOST'
@@ -123,13 +124,20 @@ var TIER_FELL = {
 /* --- stepping down when the device cannot keep up ------------------------ */
 
 /* Ultra is 2.5 to 4.8 times the work of a Modern frame, and every figure
-   there is for it was measured on one fast machine. So the frames of a race
-   in a heavy tier are watched (Game.watchPace). The gap between frames is
+   there is for it was measured on one fast machine. So the frames of a
+   heavy tier are watched from the first one drawn (Game.watchPace), on the
+   title screen and in the attract demo as well as in a race: Ultra is the
+   tier a new player is given, so a device that cannot hold it has to be
+   found out before the player has done anything. The gap between frames is
    kept as a running mean over about `meanMs`; when the mean has stood over
-   `slowMs` for `forMs` of racing, the tier is given up for TIER_SAFE. A gap
-   over `ignoreMs` is not a slow frame, it is a change of tab or of tier,
-   and is left out altogether. 25 ms is 40 frames a second: under that the
-   car is felt to stutter. */
+   `slowMs` for `forMs`, the tier is given up for TIER_SAFE. A gap over
+   `ignoreMs` is not a slow frame, it is a change of tab or of tier, and is
+   left out altogether. 25 ms is 40 frames a second: under that the car is
+   felt to stutter.
+
+   PACE_SAID is for the player who picked the tier, and says why it went. A
+   player who never picked it is not told anything alarming: the tier
+   changes, and a race that is running flashes the name of the new one. */
 var PACE = { slowMs: 25, forMs: 3000, ignoreMs: 250, meanMs: 500 };
 var PACE_SAID = 'ULTRA TOO SLOW ON THIS DEVICE: NOW MODERN';
 
@@ -369,8 +377,8 @@ function Game(host, renderer) {
   this.noticeT = 0;
   /* the tier that is on the screen (applyQuality), the timer of a tier that
      has been clicked to and not yet built, the frames a heavy tier still has
-     to draw before it is trusted, and why the last one was given up at load
-     (see chooseTier and loadSettings) */
+     to draw before it is trusted, and why a tier the player picked was given
+     up at load (see chooseTier and loadSettings) */
   this.tierOn = null;
   this.tierTimer = null;
   this.trialLeft = 0;
@@ -1728,6 +1736,41 @@ function applyExpo(v, k) {
   return sign(v) * Math.pow(Math.abs(v), k);
 }
 
+/* WHO STARTS WHERE, AND WHO KEEPS WHAT. 24 Nov 2026, the owner, having played
+   the Ultra build on his phone: "seems to work.. well we need to default to
+   Ultra Dusk and Monaco as game 1 now". So a player who has never chosen
+   gets the Ultra tier, at dusk, at Monaco (monaco-gp-v1), on a phone as on
+   a desk, on the title screen and for the first race.
+
+   A player who picked a tier, an hour or a circuit keeps it. What was saved
+   before today cannot say which of its values were picked: the whole object
+   is written on any save, a change of music volume included, so it holds
+   the defaults of its day beside the choices. Hence the `defaults` field,
+   which every save from today writes as SETTINGS_DEFAULTS. A saved object
+   without it is from before today, and is read like this, once:
+
+     tier      'modern' was the default, on every device, on main and on
+               every build since (the comment there said Retro; the code
+               said Modern). A saved 'modern' is taken for never chosen and
+               becomes Ultra. 'retro' or 'ultra' was picked, and is kept.
+     circuit   'silverstone-v1' was the default, on every device. A saved
+               Silverstone becomes Monaco; any other circuit is kept.
+     hour      there was none on main, and 'midday' was the default on the
+               builds that had one. None, or midday, becomes dusk; morning
+               or golden was picked, and is kept.
+
+   The object is then saved, with the field, so that this happens once and
+   whatever the player picks afterwards is kept, the old defaults included.
+   A player who had truly picked Modern, Silverstone or midday is moved with
+   the rest, once: nothing saved could tell them apart.
+
+   `tierChosen` says whether the tier is one the player picked on the
+   Graphics button. The game's own pick is not: the default, and the tier a
+   failed or slow Ultra falls back to. Nobody is told off for a tier they
+   never asked for (see watchPace and TIER_FELL). */
+var SETTINGS_DEFAULTS = 2;
+var OLD_DEFAULTS = { quality: 'modern', trackId: 'silverstone-v1', timeOfDay: 'midday' };
+
 Game.prototype.loadSettings = function () {
   /* Phones default to auto throttle: one thumb cannot hold the gas and steer
      accurately at the same time. Tilt deliberately stays OFF — switching it on
@@ -1750,17 +1793,22 @@ Game.prototype.loadSettings = function () {
     camMode: 0,
     autoThrottle: touchLikely(),
     autoFullscreen: true,
-    /* Retro is the default because it is the point of the thing — modern is
-       there for anyone who wants to see the circuit without the dither. */
-    quality: 'modern',
-    timeOfDay: 'midday',
-    trackId: 'silverstone-v1',
+    /* see WHO STARTS WHERE above */
+    quality: 'ultra',
+    tierChosen: false,
+    timeOfDay: 'dusk',
+    trackId: 'monaco-gp-v1',
+    defaults: SETTINGS_DEFAULTS,
     userConfigured: false
   };
+  /* whether storage held settings at all, and whether they were saved before
+     today's defaults */
+  var found = false, old = false;
   try {
     var raw = window.localStorage ? localStorage.getItem(SETTINGS_KEY) : null;
     if (raw) {
       var p = JSON.parse(raw);
+      old = p.defaults !== SETTINGS_DEFAULTS;
       /* validate each field rather than trusting the blob — a stale or hand
          edited entry must not be able to wedge the controls */
       if (typeof p.steerTilt === 'boolean') s.steerTilt = p.steerTilt;
@@ -1768,15 +1816,18 @@ Game.prototype.loadSettings = function () {
       if (typeof p.autoThrottle === 'boolean') s.autoThrottle = p.autoThrottle;
       if (typeof p.autoFullscreen === 'boolean') s.autoFullscreen = p.autoFullscreen;
       if (typeof p.userConfigured === 'boolean') s.userConfigured = p.userConfigured;
-      /* anything that is not a tier, or not a time of day, keeps the default */
-      if (typeof p.quality === 'string' && TIERS.hasOwnProperty(p.quality)) s.quality = p.quality;
-      /* a heavy tier saved on a device that is not offered one (see
-         tierCycle) loads as the safe tier; what is saved is left alone */
-      if (TIERS[s.quality].heavy && touchLikely()) s.quality = TIER_SAFE;
-      if (TIME_OF_DAY_NAMES.indexOf(p.timeOfDay) >= 0) s.timeOfDay = p.timeOfDay;
+      /* Anything that is not a tier, or not a time of day, keeps the
+         default. So does a value that was the default when an object from
+         before today was saved; any other value in such an object was
+         picked. */
+      if (typeof p.quality === 'string' && TIERS.hasOwnProperty(p.quality) && !(old && p.quality === OLD_DEFAULTS.quality)) {
+        s.quality = p.quality;
+        s.tierChosen = old || p.tierChosen === true;
+      }
+      if (TIME_OF_DAY_NAMES.indexOf(p.timeOfDay) >= 0 && !(old && p.timeOfDay === OLD_DEFAULTS.timeOfDay)) s.timeOfDay = p.timeOfDay;
       /* Validated against the registry: a stale or hand-edited id must fall
          back to a real circuit rather than crashing the boot. */
-      if (typeof p.trackId === 'string' && trackById(p.trackId).id === p.trackId) {
+      if (typeof p.trackId === 'string' && trackById(p.trackId).id === p.trackId && !(old && p.trackId === OLD_DEFAULTS.trackId)) {
         s.trackId = p.trackId;
       }
       /* tiltSens is the old field name — read it so anyone who already set a
@@ -1790,16 +1841,22 @@ Game.prototype.loadSettings = function () {
       if (typeof p.engineOn === 'boolean') s.engineOn = p.engineOn;
       if (typeof p.engineVol === 'number' && isFinite(p.engineVol)) s.engineVol = clamp(Math.round(p.engineVol), 0, 10);
       if (typeof p.musicVol === 'number' && isFinite(p.musicVol)) s.musicVol = clamp(Math.round(p.musicVol), 0, 10);
+      found = true;
     }
   } catch (e) { /* blocked storage or corrupt JSON — defaults are fine */ }
+  /* the tier of this load is the game's pick and not the player's: nothing
+     was saved, or it was saved before today and held the old default */
+  var given = (!found || old) && !s.tierChosen;
+  var write = found && old;
 
   /* A TIER LEFT ON TRIAL (see TIER_TRIAL_KEY). The key is taken away
-     whatever it says, so one failure is acted on once. If it names the saved
-     tier, that tier either never drew its frames or lost the graphics device:
-     the load goes to TIER_SAFE instead, and that is saved here and now, or
-     the next load would try the same tier again. The constructor tells the
-     player. A key marked untried is the game's own reload, and the trial
-     starts again. */
+     whatever it says, so one failure is acted on once. If it names the tier
+     of this load, that tier either never drew its frames or lost the
+     graphics device: the load goes to TIER_SAFE instead, and that is saved
+     here and now, or the next load would try the same tier again. The
+     constructor tells a player who had picked the tier; one who was given it
+     is told nothing. A key marked untried is the game's own reload, and the
+     trial starts again. */
   var trial = tierTrialRead();
   if (trial) {
     tierTrialWrite(null);
@@ -1809,12 +1866,26 @@ Game.prototype.loadSettings = function () {
         tierTrialWrite(s.quality);
         this.trialLeft = TIER_TRIAL_FRAMES;
       } else {
+        if (s.tierChosen) this.tierFell = parts[1] === 'lost' ? 'lost' : 'failed';
         s.quality = TIER_SAFE;
-        this.tierFell = parts[1] === 'lost' ? 'lost' : 'failed';
-        try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch (e2) {}
+        s.tierChosen = false;
+        write = true;
       }
     }
   }
+
+  /* A HEAVY TIER NOBODY PICKED goes on trial exactly as a picked one does
+     (commitTier): the key is written before the world is built, and the
+     settings are saved with it, so a first load that dies before it has
+     drawn TIER_TRIAL_FRAMES frames leaves both behind and the load after it
+     comes up in TIER_SAFE. A load that draws them takes the key away, and
+     the saved tier is trusted from then on like any other. */
+  if (given && TIERS[s.quality].heavy && !(this.trialLeft > 0)) {
+    tierTrialWrite(s.quality);
+    this.trialLeft = TIER_TRIAL_FRAMES;
+    write = true;
+  }
+  if (write) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch (e2) {} }
   return s;
 };
 
@@ -1822,6 +1893,13 @@ Game.prototype.loadSettings = function () {
    to record that the defaults no longer apply. */
 Game.prototype.saveSettings = function () {
   this.settings.userConfigured = true;
+  this.storeSettings();
+};
+
+/* Writes the settings without saying the player set anything: for the game's
+   own changes (a tier given up, see watchPace). */
+Game.prototype.storeSettings = function () {
+  this.settings.defaults = SETTINGS_DEFAULTS;
   try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings)); } catch (e) {}
 };
 
@@ -3226,18 +3304,13 @@ Game.prototype.applyQuality = function () {
   this.resize();
 };
 
-/* The tiers the Graphics button steps through on this device, in order.
-
-   RULING, 24 Nov 2026: where touchLikely() is true, a heavy tier (Ultra) is
-   not offered until it has been run on a phone. Nobody has. Its four shadow
-   maps alone are 134 MB and its cascades are bound by the main thread, and
-   the player on a phone who finds Modern slow and reaches for Retro is the
-   one the button would have walked through Ultra. When it has been run on
-   a phone and holds, take the test out of here and out of loadSettings. */
+/* The tiers the Graphics button steps through, in order, on every device:
+   the ruling that kept Ultra off touch devices until it had been run on a
+   phone was lifted on 24 Nov 2026, when the owner ran it on his. */
 Game.prototype.tierCycle = function () {
-  var touch = touchLikely(), out = [];
+  var out = [];
   for (var name in TIERS) {
-    if (TIERS.hasOwnProperty(name) && !(touch && TIERS[name].heavy)) out.push(name);
+    if (TIERS.hasOwnProperty(name)) out.push(name);
   }
   return out;
 };
@@ -3267,6 +3340,8 @@ Game.prototype.commitTier = function () {
     tierTrialWrite(heavy ? name : null);
     this.applyQuality();
   }
+  /* the tier the clicks ended on is the player's own from here on */
+  this.settings.tierChosen = true;
   this.saveSettings();
 };
 
@@ -3278,18 +3353,24 @@ Game.prototype.countFrame = function () {
 
 /* Called by the frame loop with the gap since the frame before, in
    milliseconds (see PACE). It is given the gap and reads no clock, and it is
-   never called from tick: the simulation knows nothing of it. Only a race
-   that is running counts, because that is where a slow frame is felt; on
-   the title, in a pause or with the page hidden the count starts again.
+   never called from tick: the simulation knows nothing of it. Every frame of
+   a heavy tier counts, from the first, whatever is on the screen: the title,
+   the attract demo, a race, the results. In a pause or with the page hidden
+   the count starts again.
 
-   It steps down ONCE in a load. A player who is told and picks the heavy
-   tier again has chosen it, and is not argued with a second time. (A screen
-   or a power saving mode that holds the browser to 30 frames a second looks
-   the same from here as a device that cannot keep up, so the guard can be
-   wrong, and must not be able to be wrong over and over.) */
+   It steps down ONCE in a load. A player who picks the heavy tier again has
+   chosen it, and is not argued with a second time in that load; the load
+   after it watches again. (A screen or a power saving mode that holds the
+   browser to 30 frames a second looks the same from here as a device that
+   cannot keep up, so the guard can be wrong, and must not be able to be
+   wrong over and over.)
+
+   What it gives up is saved, so the device stays stepped down, and it is
+   saved as the game's pick and not the player's (storeSettings). A player
+   who had picked the tier is told why it went. One who was given it is not:
+   a race that is running flashes the new tier's name, and that is all. */
 Game.prototype.watchPace = function (gapMs) {
-  var racing = (this.state === STATE.RACING || this.state === STATE.COUNTDOWN) && !this.paused && !document.hidden;
-  if (this.paceDone || !racing || this.tierTimer || !this.tierOn || !TIERS[this.tierOn].heavy) {
+  if (this.paceDone || this.paused || document.hidden || this.tierTimer || !this.tierOn || !TIERS[this.tierOn].heavy) {
     this.paceMean = 0;
     this.paceSlow = 0;
     return;
@@ -3302,16 +3383,19 @@ Game.prototype.watchPace = function (gapMs) {
   this.paceSlow += gapMs;
   if (this.paceSlow < PACE.forMs) return;
 
+  var chosen = this.settings.tierChosen;
   this.paceDone = true;
   this.paceMean = 0;
   this.paceSlow = 0;
   this.settings.quality = TIER_SAFE;
+  this.settings.tierChosen = false;
   this.trialLeft = 0;
   tierTrialWrite(null);
   this.applyQuality();
   this.applySettings();
-  this.saveSettings();
-  this.notify(PACE_SAID);
+  this.storeSettings();
+  if (chosen) this.notify(PACE_SAID);
+  else this.flash(TIER_UI[TIER_SAFE].flash);
 };
 
 /* The graphics device has gone (boot's onDeviceLost). If a heavy tier was on,
@@ -3736,7 +3820,12 @@ Game.prototype.photo = function (opts) {
  * (shaders compile on the first frames after a tier change) and is not
  * counted. Releases a hold left by photo. `timeOfDay` is as photo takes it:
  * one of TIME_OF_DAY_NAMES, set and saved before the run, and anything else
- * is refused. It changes the picture in Ultra only. */
+ * is refused. It changes the picture in Ultra only.
+ *
+ * The step down guard (watchPace) is switched off for the rest of the load.
+ * It watches the attract demo too, and a bench of Ultra on a machine too slow
+ * for it would otherwise come back with Modern's frame times under Ultra's
+ * name. */
 Game.prototype.bench = function (opts) {
   var o = opts || {};
   try {
@@ -3746,6 +3835,7 @@ Game.prototype.bench = function (opts) {
       return Promise.reject(new Error('MCL64.bench: reloading to load ' + o.circuit + '; call again once the page has loaded'));
     }
     if (o.timeOfDay != null) this.setTimeOfDay(o.timeOfDay);
+    this.paceDone = true;
     this.photoHold = false;
     this.hudCanvas.style.visibility = '';
     this.resetRace(true);

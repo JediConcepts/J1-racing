@@ -28,7 +28,14 @@
  *
  * --tod sets the hour first: morning, midday, golden or dusk, handed to the
  * page as the stills tool hands it. It changes the picture in Ultra only.
- * The line carries the hour the page was at as `timeOfDay`, given or not.
+ * Left out, the hour is midday, as it is for the stills tool, and it is
+ * handed over by name all the same: what a new player is given (dusk, since
+ * 24 Nov 2026) is not what a bench is measured at unless it is asked for.
+ * The line carries the hour the page was at as `timeOfDay`.
+ *
+ * The page it starts from is the tools' own and not a new player's
+ * (startFrom in tools/browser.js), and the hook switches the step down
+ * guard off, so a figure asked for in Ultra is a figure for Ultra.
  *
  * A FIGURE FROM A BROKEN FRAME IS NOT PRINTED. The run prints what went
  * wrong and exits 1 with no JSON line if, at any point, the page throws,
@@ -50,7 +57,7 @@
  * Needs Playwright on NODE_PATH; see tools/browser.js. */
 'use strict';
 
-const { CHROMIUM_ARGS, requirePlaywright, serveDist, localOnly, callHook, watchPage } = require('./browser');
+const { CHROMIUM_ARGS, requirePlaywright, serveDist, localOnly, startFrom, callHook, watchPage } = require('./browser');
 
 const VIEWPORT = { width: 1728, height: 1028 };
 const BENCH_CHROME_ARGS = ['--disable-gpu-vsync', '--disable-frame-rate-limit'];
@@ -92,6 +99,7 @@ if (badArgs || !args.quality || !args.circuit || !(seconds > 0) || (args.rendere
     const displayDpr = await (await probe.newPage()).evaluate(() => window.devicePixelRatio);
     await probe.close();
     const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: args.headless ? 1 : displayDpr });
+    await startFrom(context);
     const page = await context.newPage();
     /* see the header: every line here is a frame that cannot be trusted */
     const broken = [];
@@ -101,8 +109,7 @@ if (badArgs || !args.quality || !args.circuit || !(seconds > 0) || (args.rendere
     await localOnly(page, server.url);
     /* the switch stays in the address when a change of circuit reloads the page */
     await page.goto(server.url + (args.renderer === 'webgl' ? '?renderer=webgl' : ''), { waitUntil: 'load', timeout: 60000 });
-    const hook = { circuit: args.circuit, quality: args.quality, seconds };
-    if (args.tod !== undefined) hook.timeOfDay = args.tod;
+    const hook = { circuit: args.circuit, quality: args.quality, seconds, timeOfDay: args.tod === undefined ? 'midday' : args.tod };
     const r = await callHook(page, 'bench', hook);
     /* The panel is where the game ends when its picture has stopped: a lost
        device, most of all. The engine says that on the console as well, so

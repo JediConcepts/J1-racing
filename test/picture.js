@@ -37,9 +37,23 @@
  * two layers lie over Retro and Modern and not over Ultra; the Graphics
  * button builds only the tier the clicks end on, and a heavy tier is on
  * trial until it has drawn; the cascades hold still round a field of view
- * step; a race too slow for Ultra steps down to Modern, and a touch device
- * is not offered Ultra; and a change of tier or of hour leaves nothing
- * behind in the renderer. Each check says what it is for where it stands.
+ * step; frames too slow for Ultra step down to Modern, and a touch device
+ * is offered Ultra like any other; and a change of tier or of hour leaves
+ * nothing behind in the renderer. Each check says what it is for where it
+ * stands.
+ *
+ * And, since 24 Nov 2026, when Ultra at dusk at Monaco became what a new
+ * player is given: a browser with nothing saved comes up there, on trial;
+ * what a player saved before that day is kept where it was picked and moved
+ * where it was only the old default, once; and a tier nobody picked is
+ * given up without a word, at load and on the title screen.
+ *
+ * WHERE A CHECK STARTS. A check that is not about the defaults starts from
+ * settings a player saved (PLAIN below): Modern at Silverstone at midday,
+ * which is what a browser with nothing saved came up in before that day.
+ * Ultra at Monaco is several times the work on the software rasteriser this
+ * run draws with, and most checks are about something else. A check that is
+ * about a browser with nothing saved asks for one by name (`null`).
  *
  * Headless Chromium has no WebGPU adapter, so the default run only ever sees
  * the fallback. --webgpu runs the checks that mean something on the real
@@ -60,7 +74,22 @@ const { CHROMIUM_ARGS, requirePlaywright, serveDist, localOnly } = require('../t
 
 const WEBGPU = process.argv.includes('--webgpu');
 const VIEWPORT = { width: 1280, height: 720 };
+/* How long a page may take to load and to build its world, in milliseconds.
+   Generous on purpose: the default page is Ultra at Monaco, which the
+   software rasteriser of the default run takes many seconds to build on a
+   quiet machine and far longer on a busy one, and a limit that is too short
+   fails a build that works. Every wait is on the game's own signal (a game,
+   or the fallback panel), so a quick machine never waits this long. */
+const LOAD_MS = 240000;
 const TRIAL_KEY = 'mcl64.tierTrial.v1';
+const SETTINGS_KEY = 'mcl64.settings.v1';
+
+/* See WHERE A CHECK STARTS in the header. `defaults: 2` marks the settings
+   as saved since the defaults changed (SETTINGS_DEFAULTS in src/40-game.js),
+   so the game reads them as they stand, and `tierChosen` says the player
+   picked the tier on the Graphics button. */
+const PLAIN_REST = { trackId: 'silverstone-v1', timeOfDay: 'midday', tierChosen: true, defaults: 2 };
+const PLAIN = Object.assign({ quality: 'modern' }, PLAIN_REST);
 
 let pass = 0, fail = 0;
 function check(ok, name, detail) {
@@ -137,8 +166,10 @@ function tamper(o) {
 
   /* A fresh context for every boot, so nothing a boot was denied, and no
      setting it saved, reaches the next one. Waits until the page has either
-     a game or the fallback panel: one of the two is how every boot ends. */
+     a game or the fallback panel: one of the two is how every boot ends.
+     `saved` left out is PLAIN; `null` is a browser with nothing saved. */
   async function bootWith(opts, query, saved, scale, more) {
+    if (saved === undefined) saved = PLAIN;
     if (context) await context.close();
     context = await browser.newContext({
       viewport: VIEWPORT, deviceScaleFactor: scale || 1, reducedMotion: 'no-preference', hasTouch: !!(more && more.touch)
@@ -151,11 +182,21 @@ function tamper(o) {
        the same for the key a tier on trial leaves (TIER_TRIAL_KEY in
        src/40-game.js). `more.touch` makes the browser one with a touch
        screen, which is what the game's touchLikely() asks about. */
-    const held = { 'mcl64.settings.v1': saved ? JSON.stringify(saved) : null, [TRIAL_KEY]: (more && more.trial) || null };
+    const held = { [SETTINGS_KEY]: saved ? JSON.stringify(saved) : null, [TRIAL_KEY]: (more && more.trial) || null };
     await context.addInitScript((h) => {
-      if (sessionStorage.getItem('picture.seeded')) return;
-      sessionStorage.setItem('picture.seeded', '1');
-      for (const k in h) if (h[k] != null) localStorage.setItem(k, h[k]);
+      if (!sessionStorage.getItem('picture.seeded')) {
+        sessionStorage.setItem('picture.seeded', '1');
+        for (const k in h) if (h[k] != null) localStorage.setItem(k, h[k]);
+      }
+      /* Every write the page makes to storage, in order, with whether the
+         game existed yet: MCL64 is assigned only once the world is built, so
+         a write with `game` false was made before it. */
+      window.__writes = [];
+      const setItem = Storage.prototype.setItem;
+      Storage.prototype.setItem = function (k, v) {
+        if (this === window.localStorage) window.__writes.push({ key: k, value: String(v), game: !!window.MCL64 });
+        return setItem.apply(this, arguments);
+      };
     }, held);
     page = await context.newPage();
     engineBroken = false;
@@ -177,20 +218,40 @@ function tamper(o) {
         await route.fulfill({ response, body: broken });
       });
     }
-    await page.goto(server.url + (query || ''), { waitUntil: 'load', timeout: 60000 });
+    await page.goto(server.url + (query || ''), { waitUntil: 'load', timeout: LOAD_MS });
     await settled();
+    /* THE STEP DOWN GUARD IS HELD, unless the check is about it
+       (`more.pace`). Since Ultra became the default it watches every frame
+       of a heavy tier, the title screen's included, and what it would make
+       of this machine's frames is not what any other check is asking. The
+       flag is the game's own for "has already stepped down once in this
+       load". It is set within a frame or two of the game arriving, and the
+       guard needs three seconds of frames; a reload inside a check starts
+       the guard again. */
+    if (!(more && more.pace)) await page.evaluate(() => { if (window.MCL64) window.MCL64.paceDone = true; });
   }
+  const QUERY = WEBGPU ? '' : '?renderer=webgl';
   const boot = (query) => bootWith({}, query);
-  /* a boot with settings already saved, at a device pixel ratio of `scale` */
-  const bootWithSettings = (saved, scale, more) => bootWith({}, WEBGPU ? '' : '?renderer=webgl', saved, scale, more);
+  /* A boot with settings already saved, at a device pixel ratio of `scale`.
+     What `saved` does not name is as PLAIN has it, so a check that names a
+     tier stays at Silverstone as a player's own pick. `more.raw` saves the
+     object exactly as given: what a browser held from before the defaults
+     changed has no `defaults` field, and that is the thing under test. */
+  const bootWithSettings = (saved, scale, more) =>
+    bootWith({}, QUERY, more && more.raw ? saved : Object.assign({}, PLAIN_REST, saved), scale, more);
+  /* a browser with nothing saved at all */
+  const bootFresh = (more) => bootWith({}, QUERY, null, 1, more);
   const setting = (key) => page.evaluate((k) => window.MCL64.settings[k], key);
+  /* what storage holds of the settings, and the page's writes to storage */
+  const storedSettings = () => page.evaluate((key) => { try { return JSON.parse(localStorage.getItem(key)); } catch (e) { return null; } }, SETTINGS_KEY);
+  const writes = () => page.evaluate(() => window.__writes.slice());
 
   async function settled(circuit) {
     await page.waitForFunction((id) => {
       const f = document.getElementById('fallback');
       if (f && getComputedStyle(f).display !== 'none') return true;
       return !!(window.MCL64 && window.MCL64.track && (!id || window.MCL64.track.def.id === id));
-    }, circuit || null, { timeout: 60000 });
+    }, circuit || null, { timeout: LOAD_MS });
   }
 
   const backend = () => page.evaluate(() => {
@@ -364,11 +425,12 @@ function tamper(o) {
       await context.close();
       context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, reducedMotion: 'no-preference' });
       await context.addInitScript(tamper, { slowInit: 4000 });
+      await context.addInitScript(([key, value]) => localStorage.setItem(key, value), [SETTINGS_KEY, JSON.stringify(PLAIN)]);
       page = await context.newPage();
       uncaught = [];
       page.on('pageerror', (e) => uncaught.push(e.message));
       await localOnly(page, server.url);
-      await page.goto(server.url + '?renderer=webgl', { waitUntil: 'load', timeout: 60000 });
+      await page.goto(server.url + '?renderer=webgl', { waitUntil: 'load', timeout: LOAD_MS });
       await page.waitForTimeout(2000);
       const waiting = { game: await page.evaluate(() => !!window.MCL64), loading: await isVisible('#loading'), fallback: await isVisible('#fallback') };
       await settled();
@@ -400,9 +462,118 @@ function tamper(o) {
 
     /* Review Focus 3: what storage holds is checked, field by field */
     await bootWithSettings({ quality: 'hyper', timeOfDay: 'midnight' });
-    check(await setting('quality') === 'modern' && await setting('timeOfDay') === 'midday' && uncaught.length === 0,
+    check(await setting('quality') === 'ultra' && await setting('timeOfDay') === 'dusk' && uncaught.length === 0,
       'an unknown tier or time of day falls back to the defaults',
       'quality ' + await setting('quality') + ', timeOfDay ' + await setting('timeOfDay') + ', uncaught ' + JSON.stringify(uncaught));
+
+    /* --- what a player starts in, and who keeps what ------------------- */
+
+    /* asked of the page by most of the checks from here on */
+    const hour = () => page.evaluate(() => {
+      /* the sky is asked which hour it drew, the sun light how high it
+         stands, and the shadows which way they take the sun to be */
+      const g = window.MCL64, sun = g.sun, rig = g.shadowRig;
+      const up = (v) => Math.round(Math.asin(v.y / v.length()) * 180 / Math.PI * 10) / 10;
+      return {
+        quality: g.settings.quality, saved: g.settings.timeOfDay, sky: g.skyRig.mode, drew: g.skyRig.drawn,
+        sunUp: up(sun.position.clone().sub(sun.target.position)), shadowsUp: up(rig.offset), shadows: rig.mode
+      };
+    });
+    const tierState = () => page.evaluate((key) => {
+      const g = window.MCL64;
+      let stored = null;
+      try { stored = JSON.parse(localStorage.getItem('mcl64.settings.v1')).quality; } catch (e) {}
+      return {
+        quality: g.settings.quality, on: g.tierOn, shadows: g.shadowRig.mode, built: g.__built || null,
+        label: document.getElementById('set-quality').textContent, stored, trial: localStorage.getItem(key), notice: g.notice
+      };
+    }, TRIAL_KEY);
+    const clickGraphics = () => page.evaluate(() => {
+      const b = document.getElementById('set-quality');
+      b.click();
+      return b.textContent;
+    });
+
+    /* A BROWSER WITH NOTHING SAVED comes up in Ultra, at dusk, at Monaco.
+       Dusk's sun is 4.5 degrees up (TIME_OF_DAY in 32-sky.js). And the tier
+       is on trial although nobody picked it: the key and the settings were
+       both written before the world was built, which is what leaves them
+       behind for the next load if this one dies while it builds. */
+    await bootFresh();
+    const firstLook = await canvasLook(), first = await hour(), firstTier = await tierState();
+    const firstTrack = await page.evaluate(() => window.MCL64.track.def.id);
+    const firstWrites = (await writes()).filter((w) => !w.game);
+    const keyEarly = firstWrites.some((w) => w.key === TRIAL_KEY && w.value === 'ultra');
+    const savedEarly = firstWrites.filter((w) => w.key === SETTINGS_KEY).map((w) => JSON.parse(w.value))
+      .some((v) => v.quality === 'ultra' && v.defaults === 2 && v.tierChosen === false && v.userConfigured === false);
+    check(firstTrack === 'monaco-gp-v1' && first.quality === 'ultra' && first.saved === 'dusk' && first.sky === 'physical' &&
+      first.drew === 'dusk' && first.sunUp === 4.5 && first.shadowsUp === 4.5 && first.shadows === 'cascades' &&
+      firstTier.on === 'ultra' && firstTier.label === 'ULTRA' && !firstTier.notice && notBlank(firstLook) &&
+      !(await isVisible('#fallback')) && consoleErrors.length === 0 && uncaught.length === 0,
+      'a browser with nothing saved comes up at Monaco, in Ultra, at dusk, and draws with no errors',
+      'circuit ' + firstTrack + ', ' + JSON.stringify(first) + ', ' + JSON.stringify(firstTier) + ', ' + lookText(firstLook) +
+      ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+    check(keyEarly && savedEarly,
+      'and its Ultra is on trial: the key and the settings are written before the world is built',
+      'written before the game existed: ' + JSON.stringify(firstWrites));
+
+    /* THE FIRST LOAD DIED before it had drawn its frames: a browser with the
+       key and nothing else that a player ever chose. The next load comes up
+       in Modern, saved, and says nothing: nobody asked for Ultra. The same
+       for a load that got as far as saving the default tier. */
+    await bootFresh({ trial: 'ultra' });
+    const died = await tierState(), diedSaved = await storedSettings();
+    await bootWithSettings({ quality: 'ultra', tierChosen: false, trackId: 'monaco-gp-v1', timeOfDay: 'dusk' }, 1, { trial: 'ultra' });
+    const died2 = await tierState(), died2Saved = await storedSettings();
+    check(died.quality === 'modern' && died.on === 'modern' && died.shadows === 'single' && died.trial === null && !died.notice &&
+      diedSaved && diedSaved.quality === 'modern' && diedSaved.tierChosen === false && diedSaved.defaults === 2 &&
+      died2.quality === 'modern' && died2.on === 'modern' && died2.trial === null && !died2.notice &&
+      died2Saved && died2Saved.quality === 'modern' && consoleErrors.length === 0 && uncaught.length === 0,
+      'a first load that died in the default Ultra is followed by one in Modern, saved, with nothing said',
+      'nothing saved: ' + JSON.stringify(died) + ', storage ' + JSON.stringify(diedSaved) + '; the default saved: ' + JSON.stringify(died2) +
+      ', storage ' + JSON.stringify(died2Saved) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+
+    /* SAVED BEFORE THE DEFAULTS CHANGED, and picked: Retro was never the
+       default, so a saved Retro is the player's own. It stays, and so does a
+       circuit that was not the old default. */
+    await bootWithSettings({ quality: 'retro', trackId: 'brands-hatch-v1', musicVol: 4, userConfigured: true }, 1, { raw: true });
+    const keptTier = await tierState(), keptSaved = await storedSettings();
+    const keptTrack = await page.evaluate(() => window.MCL64.track.def.id);
+    check(keptTier.quality === 'retro' && keptTier.on === 'retro' && keptTier.shadows === 'blob' && keptTier.trial === null &&
+      keptTrack === 'brands-hatch-v1' && keptSaved.quality === 'retro' && keptSaved.tierChosen === true && keptSaved.defaults === 2 &&
+      keptSaved.trackId === 'brands-hatch-v1' && keptSaved.musicVol === 4 && uncaught.length === 0,
+      'a Retro and a circuit saved before the defaults changed are the player\'s own, and stay',
+      JSON.stringify(keptTier) + ', circuit ' + keptTrack + ', storage ' + JSON.stringify(keptSaved) + ', uncaught ' + JSON.stringify(uncaught));
+
+    /* SAVED BEFORE THE DEFAULTS CHANGED, and never picked: the old default
+       tier and circuit, written out whole when the player turned the music
+       down. They become Ultra at Monaco at dusk, on trial, and the music
+       stays where it was put. ONCE: the player then picks Modern on the
+       button and Silverstone in the list, and the load after that keeps
+       both. */
+    await bootWithSettings({ quality: 'modern', trackId: 'silverstone-v1', musicVol: 4, userConfigured: true }, 1, { raw: true });
+    const movedLook = await canvasLook(), moved = await hour(), movedSaved = await storedSettings();
+    const movedTrack = await page.evaluate(() => window.MCL64.track.def.id);
+    const movedKey = (await writes()).some((w) => !w.game && w.key === TRIAL_KEY && w.value === 'ultra');
+    const movedSaid = [await clickGraphics(), await clickGraphics()];
+    await page.waitForFunction(() => window.MCL64.tierOn === 'modern', null, { timeout: LOAD_MS });
+    await Promise.all([
+      page.waitForEvent('load', { timeout: LOAD_MS }),
+      page.evaluate(() => window.MCL64.selectTrack('silverstone-v1'))
+    ]);
+    await settled('silverstone-v1');
+    const second = await tierState(), secondSaved = await storedSettings();
+    const secondTrack = await page.evaluate(() => window.MCL64.track.def.id);
+    check(moved.quality === 'ultra' && moved.saved === 'dusk' && moved.drew === 'dusk' && moved.shadows === 'cascades' &&
+      movedTrack === 'monaco-gp-v1' && notBlank(movedLook) && movedKey && movedSaved.quality === 'ultra' && movedSaved.tierChosen === false &&
+      movedSaved.defaults === 2 && movedSaved.trackId === 'monaco-gp-v1' && movedSaved.timeOfDay === 'dusk' && movedSaved.musicVol === 4 &&
+      movedSaid.join() === 'RETRO 240p,MODERN' && second.quality === 'modern' && second.on === 'modern' && secondTrack === 'silverstone-v1' &&
+      secondSaved.quality === 'modern' && secondSaved.tierChosen === true && secondSaved.trackId === 'silverstone-v1' &&
+      consoleErrors.length === 0 && uncaught.length === 0,
+      'the old default tier and circuit saved before the change become Ultra at Monaco at dusk, once: Modern and Silverstone picked afterwards are kept',
+      'first load ' + JSON.stringify(moved) + ', circuit ' + movedTrack + ', key written before the world ' + movedKey + ', storage ' +
+      JSON.stringify(movedSaved) + '; the button said ' + movedSaid.join(', ') + '; the load after ' + JSON.stringify(second) + ', circuit ' +
+      secondTrack + ', storage ' + JSON.stringify(secondSaved) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
 
     /* The canvas rule, on a display with two device pixels to the CSS pixel.
        Ultra's canvas is its render target and no larger; Modern's is the
@@ -434,19 +605,10 @@ function tamper(o) {
     /* A saved time of day is in force from the first frame, with nobody
        pressing the TIME OF DAY button: a player who chose ULTRA and GOLDEN
        and then loads the page again (choosing a circuit does that) must come
-       back at golden hour. The sky is asked which hour it drew, the sun
-       light how high it stands, and the shadows which way they take the sun
-       to be. Golden hour's sun is 11 degrees up (TIME_OF_DAY in 32-sky.js),
-       where the dome's is 48. Then the same through a change of tier at run
-       time, both ways. */
-    const hour = () => page.evaluate(() => {
-      const g = window.MCL64, sun = g.sun, rig = g.shadowRig;
-      const up = (v) => Math.round(Math.asin(v.y / v.length()) * 180 / Math.PI * 10) / 10;
-      return {
-        quality: g.settings.quality, saved: g.settings.timeOfDay, sky: g.skyRig.mode, drew: g.skyRig.drawn,
-        sunUp: up(sun.position.clone().sub(sun.target.position)), shadowsUp: up(rig.offset), shadows: rig.mode
-      };
-    });
+       back at golden hour (see `hour` above for what is asked). Golden
+       hour's sun is 11 degrees up (TIME_OF_DAY in 32-sky.js), where the
+       dome's is 48. Then the same through a change of tier at run time, both
+       ways. */
     await bootWithSettings({ quality: 'ultra', timeOfDay: 'golden' });
     const loaded = await hour();
     check(loaded.quality === 'ultra' && loaded.sky === 'physical' && loaded.drew === 'golden' &&
@@ -487,25 +649,12 @@ function tamper(o) {
        Retro passes Ultra. The button says the new tier at once and the tier
        is built only when the clicks have stopped, so two quick clicks must
        end in Retro with Ultra never built. Every call of applyQuality is
-       written down with the tier it was called for. */
-    const tierState = () => page.evaluate((key) => {
-      const g = window.MCL64;
-      let stored = null;
-      try { stored = JSON.parse(localStorage.getItem('mcl64.settings.v1')).quality; } catch (e) {}
-      return {
-        quality: g.settings.quality, on: g.tierOn, shadows: g.shadowRig.mode, built: g.__built || null,
-        label: document.getElementById('set-quality').textContent, stored, trial: localStorage.getItem(key), notice: g.notice
-      };
-    }, TRIAL_KEY);
+       written down with the tier it was called for. (tierState and
+       clickGraphics are above, with the checks on the defaults.) */
     const watchBuilds = () => page.evaluate(() => {
       const g = window.MCL64, real = g.applyQuality;
       g.__built = [];
       g.applyQuality = function () { g.__built.push(this.settings.quality); return real.apply(this, arguments); };
-    });
-    const clickGraphics = () => page.evaluate(() => {
-      const b = document.getElementById('set-quality');
-      b.click();
-      return b.textContent;
     });
     await bootWithSettings({ quality: 'modern' });
     await watchBuilds();
@@ -526,9 +675,9 @@ function tamper(o) {
     await bootWithSettings({ quality: 'modern' });
     await watchBuilds();
     await clickGraphics();
-    await page.waitForFunction(() => window.MCL64.tierOn === 'ultra', null, { timeout: 10000 });
+    await page.waitForFunction(() => window.MCL64.tierOn === 'ultra', null, { timeout: LOAD_MS });
     const onTrial = await tierState();
-    await page.waitForFunction((key) => localStorage.getItem(key) === null, TRIAL_KEY, { timeout: 60000 });
+    await page.waitForFunction((key) => localStorage.getItem(key) === null, TRIAL_KEY, { timeout: LOAD_MS });
     const trusted = await tierState();
     check(onTrial.built.join() === 'ultra' && onTrial.shadows === 'cascades' && onTrial.trial === 'ultra' && onTrial.stored === 'ultra' &&
       trusted.trial === null && trusted.on === 'ultra' && consoleErrors.length === 0 && uncaught.length === 0,
@@ -552,7 +701,7 @@ function tamper(o) {
     await loseContext();
     const lostKey = await page.evaluate((key) => localStorage.getItem(key), TRIAL_KEY);
     const lostPanel = await isVisible('#fallback');
-    await page.reload({ waitUntil: 'load', timeout: 60000 });
+    await page.reload({ waitUntil: 'load', timeout: LOAD_MS });
     await settled();
     const afterLoss = await tierState();
     check(beforeLoss.on === 'ultra' && lostKey === 'ultra lost' && lostPanel && afterLoss.quality === 'modern' && afterLoss.on === 'modern' &&
@@ -567,12 +716,12 @@ function tamper(o) {
     await bootWithSettings({ quality: 'modern', trackId: 'silverstone-v1' });
     await clickGraphics();
     await Promise.all([
-      page.waitForEvent('load', { timeout: 60000 }),
+      page.waitForEvent('load', { timeout: LOAD_MS }),
       page.evaluate(() => window.MCL64.selectTrack('brands-hatch-v1'))
     ]);
     await settled('brands-hatch-v1');
     const carried = await tierState();
-    await page.waitForFunction((key) => localStorage.getItem(key) === null, TRIAL_KEY, { timeout: 60000 });
+    await page.waitForFunction((key) => localStorage.getItem(key) === null, TRIAL_KEY, { timeout: LOAD_MS });
     check(carried.quality === 'ultra' && carried.on === 'ultra' && carried.shadows === 'cascades' && !carried.notice &&
       uncaught.length === 0,
       'Ultra clicked to and a circuit picked at once: the reload comes up in Ultra, with no word of a failure',
@@ -610,23 +759,23 @@ function tamper(o) {
       'a field of view hovering at a step lays the cascades out once, and a still lays them out afresh',
       JSON.stringify(hover) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
 
-    /* THE GUARD ON A SLOW DEVICE. In a race in Ultra the frame loop hands
-       every frame gap to watchPace, and a mean over 25 ms for 3 seconds of
-       racing gives Ultra up for Modern. The loop is held here and the gaps
-       are handed over by hand, so the figures are the test's and not this
-       machine's. What must NOT trip it comes first: gaps too long to be
-       frames, gaps of a healthy 60 a second, one long frame among those,
-       and slow frames while the race is paused. Then 74 gaps of 40 ms, a
-       shade under 3 seconds, and it must still be Ultra; six more and it
-       must be Modern, saved, with the player told. Last, Ultra picked again
-       in the same load is left alone. */
-    await bootWithSettings({ quality: 'ultra' });
+    /* THE GUARD ON A SLOW DEVICE. In Ultra the frame loop hands every frame
+       gap to watchPace, and a mean over 25 ms for 3 seconds gives Ultra up
+       for Modern. The loop is held here and the gaps are handed over by
+       hand, so the figures are the test's and not this machine's. First in
+       a race, in an Ultra the player picked. What must NOT trip it comes
+       first: gaps too long to be frames, gaps of a healthy 60 a second, one
+       long frame among those, and slow frames while the race is paused.
+       Then 74 gaps of 40 ms, a shade under 3 seconds, and it must still be
+       Ultra; six more and it must be Modern, saved, with the player told
+       why. Last, Ultra picked again in the same load is left alone. */
+    await bootWithSettings({ quality: 'ultra' }, 1, { pace: true });
+    await page.evaluate(() => { window.MCL64.photoHold = true; });
     await page.keyboard.press('Enter');
     const pace = await page.evaluate(() => {
       const g = window.MCL64;
       const feed = (ms, n) => { for (let i = 0; i < n; i++) g.watchPace(ms); return g.tierOn; };
       const stored = () => { try { return JSON.parse(localStorage.getItem('mcl64.settings.v1')).quality; } catch (e) { return null; } };
-      g.photoHold = true;
       const r = { racing: (g.state === 1 || g.state === 2) && !g.paused, start: g.tierOn };
       r.longGaps = feed(300, 200);
       r.healthy = feed(16.7, 400);
@@ -648,20 +797,85 @@ function tamper(o) {
       pace.paused === 'ultra' && pace.justUnder === 'ultra' && pace.over === 'modern' && pace.settings === 'modern' &&
       pace.stored === 'modern' && pace.shadows === 'single' && pace.label === 'MODERN' && /TOO SLOW/.test(pace.notice) &&
       pace.again === 'ultra' && consoleErrors.length === 0 && uncaught.length === 0,
-      'a race in Ultra with frames 40 ms apart for 3 seconds steps down to Modern, saves it and says so, and nothing else trips it',
+      'a race in an Ultra the player picked, with frames 40 ms apart for 3 seconds, steps down to Modern, saves it and says why, and nothing else trips it',
       JSON.stringify(pace) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
 
-    /* A touch device is not offered Ultra: the button steps past it, and a
-       saved Ultra loads as Modern. */
+    /* THE SAME GUARD ON THE TITLE SCREEN, for the Ultra nobody picked: a
+       browser with nothing saved, which never leaves the title. Healthy
+       frames, then 74 slow ones and it is still Ultra, six more and it is
+       Modern. QUIETLY: no notice, and nothing with the words of a fault in
+       it. Saved as the game's pick, so the load after it is Modern too, and
+       says nothing either. Then the player picks Ultra on the button: it is
+       built, it is theirs, and the guard, which runs afresh in every load,
+       says why when it takes it away again. */
+    await bootFresh({ pace: true });
+    const quietly = await page.evaluate(() => {
+      const g = window.MCL64;
+      const feed = (ms, n) => { for (let i = 0; i < n; i++) g.watchPace(ms); return g.tierOn; };
+      g.photoHold = true;
+      /* Game's STATE: 0 is the title */
+      const r = { title: g.state === 0, start: g.tierOn, chosen: g.settings.tierChosen };
+      r.healthy = feed(16.7, 400);
+      r.justUnder = feed(40, 74);
+      r.over = feed(40, 6);
+      r.settings = g.settings.quality; r.shadows = g.shadowRig.mode; r.notice = g.notice; r.message = g.message;
+      r.label = document.getElementById('set-quality').textContent;
+      r.trial = localStorage.getItem('mcl64.tierTrial.v1');
+      g.photoHold = false;
+      return r;
+    });
+    const quietSaved = await storedSettings();
+    await page.reload({ waitUntil: 'load', timeout: LOAD_MS });
+    await settled();
+    const stayed = await tierState(), stayedTrack = await page.evaluate(() => window.MCL64.track.def.id);
+    await page.evaluate(() => { window.MCL64.photoHold = true; });
+    const picked = await clickGraphics();
+    await page.waitForFunction(() => window.MCL64.tierOn === 'ultra', null, { timeout: LOAD_MS });
+    const byHand = await tierState(), byHandSaved = await storedSettings();
+    const loudly = await page.evaluate(() => {
+      const g = window.MCL64;
+      for (let i = 0; i < 400; i++) g.watchPace(16.7);
+      for (let i = 0; i < 80; i++) g.watchPace(40);
+      return { on: g.tierOn, notice: g.notice };
+    });
+    const loudSaved = await storedSettings();
+    check(quietly.title && quietly.start === 'ultra' && quietly.chosen === false && quietly.healthy === 'ultra' && quietly.justUnder === 'ultra' &&
+      quietly.over === 'modern' && quietly.settings === 'modern' && quietly.shadows === 'single' && quietly.label === 'MODERN' &&
+      quietly.notice === '' && !/SLOW|OFF|FAIL|LOST/.test(quietly.message) && quietly.trial === null &&
+      quietSaved.quality === 'modern' && quietSaved.tierChosen === false && quietSaved.userConfigured === false && quietSaved.defaults === 2 &&
+      stayed.quality === 'modern' && stayed.on === 'modern' && !stayed.notice && stayedTrack === 'monaco-gp-v1' &&
+      consoleErrors.length === 0 && uncaught.length === 0,
+      'slow frames on the title screen step a default Ultra down to Modern without a word, saved, and the next load stays there',
+      JSON.stringify(quietly) + ', storage ' + JSON.stringify(quietSaved) + '; the load after ' + JSON.stringify(stayed) + ' at ' + stayedTrack +
+      ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+    check(picked === 'ULTRA' && byHand.on === 'ultra' && byHand.shadows === 'cascades' && byHandSaved.quality === 'ultra' &&
+      byHandSaved.tierChosen === true && loudly.on === 'modern' && /TOO SLOW/.test(loudly.notice) &&
+      loudSaved.quality === 'modern' && loudSaved.tierChosen === false && consoleErrors.length === 0 && uncaught.length === 0,
+      'the stepped down player can still pick Ultra by hand, and when the guard takes that away it says why',
+      'the button said ' + picked + ', then ' + JSON.stringify(byHand) + ', storage ' + JSON.stringify(byHandSaved) + '; slow frames again: ' +
+      JSON.stringify(loudly) + ', storage ' + JSON.stringify(loudSaved) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+
+    /* A TOUCH DEVICE IS OFFERED ULTRA like any other (the ruling that kept
+       it off phones was lifted on 24 Nov 2026): a saved Ultra loads as
+       Ultra, and the Graphics button steps through all three tiers. The
+       three clicks are quick and end where they began, so nothing is built.
+       And with nothing saved, the tier a touch device is given is Ultra. */
     await bootWithSettings({ quality: 'ultra' }, 1, { touch: true });
     const touchLoad = await tierState();
     const touchSaid = [await clickGraphics(), await clickGraphics(), await clickGraphics()];
     const touchPoints = await page.evaluate(() => navigator.maxTouchPoints);
-    check(touchPoints > 0 && touchLoad.quality === 'modern' && touchLoad.on === 'modern' && touchLoad.shadows === 'single' &&
-      touchSaid.join() === 'RETRO 240p,MODERN,RETRO 240p' && uncaught.length === 0,
-      'a touch device is not offered Ultra: a saved Ultra loads as Modern and the Graphics button steps past it',
+    await page.waitForTimeout(1200);
+    const touchAfter = await tierState();
+    await bootWith({}, QUERY, null, 1, { touch: true });
+    const touchFresh = await tierState();
+    check(touchPoints > 0 && touchLoad.quality === 'ultra' && touchLoad.on === 'ultra' && touchLoad.shadows === 'cascades' &&
+      touchSaid.join() === 'RETRO 240p,MODERN,ULTRA' && touchAfter.on === 'ultra' &&
+      touchFresh.quality === 'ultra' && touchFresh.on === 'ultra' && touchFresh.shadows === 'cascades' &&
+      consoleErrors.length === 0 && uncaught.length === 0,
+      'a touch device is offered Ultra: a saved Ultra loads as Ultra, the Graphics button steps through it, and it is the default there too',
       'touch points ' + touchPoints + ', loaded ' + JSON.stringify(touchLoad) + ', the button said ' + touchSaid.join(', ') +
-      ', uncaught ' + JSON.stringify(uncaught));
+      ', after the clicks ' + JSON.stringify(touchAfter) + ', with nothing saved ' + JSON.stringify(touchFresh) +
+      ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
 
     /* NOTHING IS LEFT BEHIND by a change of tier or of hour. The renderer is
        asked what it holds: its textures and geometries, its uniform buffers,
@@ -745,7 +959,7 @@ function tamper(o) {
           g.settings.quality = q;
           g.saveSettings();
         }, [circuit, first]);
-        await page.reload({ waitUntil: 'load', timeout: 60000 });
+        await page.reload({ waitUntil: 'load', timeout: LOAD_MS });
         await settled(circuit);
         if (await backend() !== want) wrongBackend++;
         checkMaps(await canvasMaps(), circuit, first, 'loaded in ' + first);

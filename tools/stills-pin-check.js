@@ -32,7 +32,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
-const { CHROMIUM_ARGS, STILL_CONTEXT, stillClip, watchPage, requirePlaywright, distFile, serveDist, localOnly, pinRandom, callHook } = require('./browser');
+const { CHROMIUM_ARGS, STILL_CONTEXT, stillClip, watchPage, requirePlaywright, distFile, serveDist, localOnly, pinRandom, startFrom, callHook } = require('./browser');
 
 const SHOT = { circuit: 'monaco-gp-v1', tick: 600, cam: 'high', quality: 'modern', timeOfDay: 'midday' };
 
@@ -67,6 +67,7 @@ for (const dir of dirs) {
            are read from tools/browser.js, so the two cannot drift apart. */
         const context = await browser.newContext(STILL_CONTEXT);
         await pinRandom(context);
+        await startFrom(context);
         const page = await context.newPage();
         watchPage(page, (line) => { console.error(line); failed = true; });
         await localOnly(page, server.url);
