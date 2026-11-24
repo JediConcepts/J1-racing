@@ -76,11 +76,38 @@ var SHADOW_FOV_STEP = 8;
    the chase camera, so 82 km/h on the way down against 132 on the way up. */
 var SHADOW_FOV_HOLD = 1.5;
 
+/* WHO IS DRAWN INTO WHICH CASCADE, on a circuit that asks (ShadowRig.sparse).
+
+   Left alone, every caster in the scene that a cascade's box touches is
+   drawn into it. At Monaco that is 740 meshes, most of them parts of the
+   120 boats in the harbour, and the last cascade, whose box is the size of
+   the town, drew all but a handful of them in every frame: 1,100 to 1,600
+   shadow draws for a main pass of 150. A texel of the third cascade is
+   half a metre and one of the fourth about a metre, so a mast, a wheel or a
+   cabin roof drawn into them covers less than a texel and darkens nothing.
+
+   So each caster has a REACH: the number of cascades, counted from the
+   camera, that it is drawn into. The engine draws a shadow map with the
+   shadow camera's layers when those are anything but the plain layer 0, so
+   the third and fourth cascades are given a layer each and a caster is put
+   on the layers its reach covers. Layer 0 is not touched: the main camera,
+   Modern's single map and the first two cascades see what they always saw.
+
+   A mesh may say its own reach (userData.shadowReach, 2 to 4). Otherwise it
+   goes by size, the radius of the sphere round it in metres: under
+   `mid` it stays in the first two cascades, from `mid` it is in the third
+   as well (a car's body is 2.9 m), and from `far` in all four (the smallest
+   building is 13 m). */
+var SHADOW_REACH = { layers: [0, 0, 2, 3], mid: 1.5, far: 9 };
+
 function ShadowRig(scene, camera, sun) {
   this.scene = scene;
   this.camera = camera;
   this.sun = sun;
   this.mode = null;
+  /* whether small casters are left out of the far cascades (SHADOW_REACH);
+     the game sets it for the circuit before it sets a mode */
+  this.sparse = false;
   /* the point the shadows are centred on; the game sets it before update() */
   this.focus = new THREE.Vector3();
   this.csm = null;
@@ -141,7 +168,10 @@ ShadowRig.prototype.setMode = function (mode) {
   this.mode = mode;
   this.sun.castShadow = mode !== 'blob';
   if (had) this.dropCascades();
-  if (mode === 'cascades') this.buildCascades();
+  if (mode === 'cascades') {
+    if (this.sparse) this.sortCasters();
+    this.buildCascades();
+  }
   /* HOW THE ENGINE IS TOLD. The engine builds a light's shadow once and
      keeps it; switching castShadow makes it build every lit material again,
      which is all 'blob' against 'single' needs. Between 'single' and
@@ -184,6 +214,30 @@ ShadowRig.prototype.buildCascades = function () {
   };
 
   this.sun.shadow.shadowNode = csm;
+};
+
+/* Puts every mesh on the layers of the cascades its reach covers (see
+   SHADOW_REACH). Every mesh and not only those that cast now, because some
+   are only given their flag after the mode is set (wideShadow in
+   20-track.js); a layer on a mesh that casts nothing costs nothing. The
+   layers are left on when the mode goes: nothing but a sparse cascade looks
+   at them. */
+ShadowRig.prototype.sortCasters = function () {
+  var L = SHADOW_REACH.layers, scale = new THREE.Vector3();
+  this.scene.traverse(function (o) {
+    if (!o.isMesh || !o.geometry) return;
+    var reach = o.userData.shadowReach;
+    if (!reach) {
+      if (!o.geometry.boundingSphere) o.geometry.computeBoundingSphere();
+      o.updateWorldMatrix(true, false);
+      scale.setFromMatrixScale(o.matrixWorld);
+      var r = o.geometry.boundingSphere.radius * Math.max(scale.x, scale.y, scale.z);
+      reach = r >= SHADOW_REACH.far ? 4 : (r >= SHADOW_REACH.mid ? 3 : 2);
+    }
+    for (var i = 2; i < L.length; i++) {
+      if (reach > i) o.layers.enable(L[i]); else o.layers.disable(L[i]);
+    }
+  });
 };
 
 ShadowRig.prototype.dropCascades = function () {
@@ -277,6 +331,9 @@ ShadowRig.prototype.layOutCascades = function (force) {
       cam.far = width + SHADOW_WIDE.lightMargin + 1;
       cam.updateProjectionMatrix();
     }
+    /* which casters this cascade draws: all of them, or on a sparse circuit
+       those whose reach comes this far (see SHADOW_REACH) */
+    cam.layers.mask = this.sparse && SHADOW_REACH.layers[i] ? 1 << SHADOW_REACH.layers[i] : 1;
     sh.bias = -(0.05 + 1.5 * texel * slope) / (cam.far - cam.near);
     sh.normalBias = Math.max(0.035, 0.5 * texel);
   }

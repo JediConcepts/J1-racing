@@ -643,6 +643,7 @@ Game.prototype.applySkyMode = function (mode) {
   /* "ahead" for the sun's bearing is the way the cars leave the line */
   var t = this.track, a = t.p[t.startIndex], b = t.p[(t.startIndex + 1) % t.n];
   this.skyRig.setNorth(b.x - a.x, b.z - a.z);
+  this.skyRig.setCircuit(t.id);
   /* the hour first, so that a rig coming up from the dome draws its
      environment once, for the right hour */
   this.skyRig.setTimeOfDay(this.settings.timeOfDay);
@@ -659,6 +660,11 @@ Game.prototype.applySkyMode = function (mode) {
    hour. The shadows are told last, because the sun has just moved. */
 Game.prototype.applyTimeOfDay = function () {
   this.skyRig.setTimeOfDay(this.settings.timeOfDay);
+  /* scenery with a look of its own under the physical sky (Monaco's sea and
+     tunnel: setHour in 20-track.js) is told the hour, or told there is none */
+  if (this.scenery && this.scenery.setHour) {
+    this.scenery.setHour(this.skyRig.mode === 'physical' ? this.skyRig.row : null);
+  }
   if (this.shadowRig) this.shadowRig.update();
 };
 
@@ -750,7 +756,12 @@ Game.prototype.applyShadowMode = function (mode) {
   var mapped = mode !== 'blob';
   var wide = mode === 'cascades';
   this.renderer.shadowMap.enabled = mapped;
-  if (this.shadowRig) this.shadowRig.setMode(mode);
+  if (this.shadowRig) {
+    /* a circuit with hundreds of small casters asks for them to be left out
+       of the far cascades: see ShadowRig.sortCasters */
+    this.shadowRig.sparse = !!(this.scenery && this.scenery.sparseShadows);
+    this.shadowRig.setMode(mode);
+  }
   for (var ci = 0; ci < (this.cars || []).length; ci++) {
     if (this.cars[ci].shadow) this.cars[ci].shadow.visible = !mapped;
   }
@@ -782,6 +793,12 @@ Game.prototype.applyShadowMode = function (mode) {
     if (ground.userData.lowY === undefined) ground.userData.lowY = ground.position.y;
     ground.position.y = wide && sc.groundTop !== null ? Math.max(sc.groundTop, ground.userData.lowY) : ground.userData.lowY;
     ground.material.receivedShadowPositionNode = wide ? groundShadowPosition(ground, Math.max(sc.treeFeet, ground.position.y)) : null;
+    /* Monaco's plane cannot be lifted (it has to stay below the sea) and its
+       town stands on a hill, 10 to 40 m above it, so no one height puts the
+       shadows of the cascades where the buildings are: they fell fields away
+       from what cast them, in rows of dashes. There the plane takes no
+       shadow from the cascades at all. */
+    ground.receiveShadow = !(wide && sc.farGroundShadow === false);
     ground.material.needsUpdate = true;
   }
 };
