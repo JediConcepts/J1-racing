@@ -354,6 +354,7 @@
     border-bottom: 1px dashed rgba(255, 255, 255, 0.08);
   }
 
+  .srow[hidden] { display: none; }
   .srow-actions { border-bottom: 0; padding-top: 12px; gap: 8px; }
   .srow-actions .sval { flex: 1; }
 
@@ -1105,6 +1106,11 @@
           <button type="button" class="sval" id="set-quality">RETRO 240p</button>
         </div>
         <p class="shint" id="set-quality-hint">Retro: 240p with a 5-bit dither, as the hardware did it.</p>
+
+        <div class="srow" id="row-tod" hidden>
+          <span class="slabel">TIME OF DAY</span>
+          <button type="button" class="sval" id="set-tod">MIDDAY</button>
+        </div>
 
         <p class="shint" id="set-hint">Manual: push forward for gas, pull back to brake.</p>
 

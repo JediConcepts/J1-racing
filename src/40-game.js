@@ -11,6 +11,52 @@ var STEP = 1 / 60;
 
 var STATE = { TITLE: 0, COUNTDOWN: 1, RACING: 2, FINISHED: 3 };
 
+/* --- the picture tiers --------------------------------------------------- */
+
+/* ONE TABLE for everything that differs between the tiers. applyQuality and
+   resize read it, and nothing else asks which tier is on. The order of the
+   keys is the order the settings button cycles through.
+
+     target       'small'  the console's low framebuffer, stretched up
+                  'super'  drawn above the display size and scaled down
+     toneMapping  'none' | 'aces'. The post node does it (see buildPostNode),
+                  never the renderer.
+     exposure     renderer.toneMappingExposure, which the post node reads
+     shadows      'blob' | 'single' | 'cascades'    see applyShadowMode
+     sky          'dome' | 'physical'               see applySkyMode
+     post         'retro' | 'grade' | 'full'        see applyPostMode
+     overlays     whether the page lays its scanline and glow layers on top
+     canvas       the size of the canvas drawing buffer:
+                  'device'  the render target times the device pixel ratio,
+                            which is what main has always had
+                  'target'  the size of the render target and no larger
+
+   Ultra is Modern in every field but `canvas` for now: it is the place the
+   wide shadows, the real sky and the full post pass are switched on, one
+   field at a time. */
+var TIERS = {
+  retro: {
+    target: 'small', toneMapping: 'none', exposure: 1.0,
+    shadows: 'blob', sky: 'dome', post: 'retro',
+    overlays: true, canvas: 'device'
+  },
+  modern: {
+    target: 'super', toneMapping: 'aces', exposure: 1.12,
+    shadows: 'single', sky: 'dome', post: 'grade',
+    overlays: false, canvas: 'device'
+  },
+  ultra: {
+    target: 'super', toneMapping: 'aces', exposure: 1.12,
+    shadows: 'single', sky: 'dome', post: 'grade',
+    overlays: false, canvas: 'target'
+  }
+};
+
+/* The names settings.timeOfDay may hold, in the order the settings button
+   cycles through them. Only the names live here: what each one looks like
+   belongs to the sky. */
+var TIME_OF_DAY_NAMES = ['morning', 'midday', 'golden', 'dusk'];
+
 /* --- post-process: RGBA5551 quantise + ordered dither ------------------- */
 
 /* The pass is a node, not GLSL: WebGPURenderer draws node materials on both
@@ -244,6 +290,14 @@ Game.prototype.drawFrame = function (fade) {
   this.postQuad.render(this.renderer);
 };
 
+/* The post pass for a tier: TIERS[...].post, 'retro' | 'grade' | 'full'.
+   Called by applyQuality. 'retro' is the dither and the palette; 'grade' is
+   the tone map and the gentle grade. 'full' draws as 'grade' until the full
+   pass is built here. */
+Game.prototype.applyPostMode = function (mode) {
+  this.buildTarget(mode !== 'retro');
+};
+
 /* ENVIRONMENT MAP.
 
    A Standard material with nothing to reflect is just a Lambert with extra
@@ -317,6 +371,19 @@ Game.prototype.buildEnvironment = function (scene) {
   scene.environment = tex;
 };
 
+/* The sky for a tier: TIERS[...].sky, 'dome' | 'physical'. Called by
+   applyQuality. 'dome' is the painted dome and the lights buildWorld makes,
+   which is all there is today, so there is nothing to switch yet and
+   'physical' draws as 'dome' until the real sky is built here. */
+Game.prototype.applySkyMode = function (mode) {
+};
+
+/* The sky and the grade read this.settings.timeOfDay here (one of
+   TIME_OF_DAY_NAMES). Called by setTimeOfDay whenever the setting changes.
+   Nothing reads it yet, so nothing is drawn differently. */
+Game.prototype.applyTimeOfDay = function () {
+};
+
 /* THE HAZE COLOUR, IN THE FORM THIS ENGINE WANTS IT.
 
    SKY_HAZE is a colour as it should look on the screen. r128 mixed fog in
@@ -384,6 +451,21 @@ function hazeUnderToneMapping(hex, exposure) {
   v.applyMatrix4(acesIn.invert()).multiplyScalar(0.6 / exposure);
   return new THREE.Color(v.x, v.y, v.z);
 }
+
+/* The shadows for a tier: TIERS[...].shadows, 'blob' | 'single' | 'cascades'.
+   Called by applyQuality. 'blob' is the dark disc under each car and no
+   shadow map; 'single' is the one map that follows the player (set up in
+   buildWorld). The two never run together: both at once darken the road
+   under every car twice. 'cascades' draws as 'single' until the wide shadows
+   are built here. */
+Game.prototype.applyShadowMode = function (mode) {
+  var mapped = mode !== 'blob';
+  this.renderer.shadowMap.enabled = mapped;
+  if (this.sun) this.sun.castShadow = mapped;
+  for (var ci = 0; ci < (this.cars || []).length; ci++) {
+    if (this.cars[ci].shadow) this.cars[ci].shadow.visible = !mapped;
+  }
+};
 
 Game.prototype.buildWorld = function () {
   var scene = this.scene = new THREE.Scene();
@@ -790,11 +872,21 @@ Game.prototype.bindInput = function () {
   var qualitySet = document.getElementById('set-quality');
   if (qualitySet) qualitySet.addEventListener('click', function (e) {
     e.preventDefault();
-    self.settings.quality = self.settings.quality === 'modern' ? 'retro' : 'modern';
+    var names = Object.keys(TIERS);
+    self.settings.quality = names[(names.indexOf(self.settings.quality) + 1) % names.length];
     self.applyQuality();
     self.applySettings();
     self.saveSettings();
-    self.flash(self.settings.quality === 'modern' ? 'MODERN GRAPHICS' : 'RETRO 240p');
+    self.flash(TIER_UI[self.settings.quality].flash);
+  });
+
+  var todSet = document.getElementById('set-tod');
+  if (todSet) todSet.addEventListener('click', function (e) {
+    e.preventDefault();
+    var i = TIME_OF_DAY_NAMES.indexOf(self.settings.timeOfDay);
+    self.setTimeOfDay(TIME_OF_DAY_NAMES[(i + 1) % TIME_OF_DAY_NAMES.length]);
+    self.applySettings();
+    self.flash(self.settings.timeOfDay.toUpperCase());
   });
 
   var autoFsSet = document.getElementById('set-autofs');
@@ -1196,8 +1288,12 @@ Game.prototype.resize = function () {
   var cw = Math.max(160, this.host.clientWidth | 0);
   var ch = Math.max(120, this.host.clientHeight | 0);
 
+  /* The canvas drawing buffer is not sized here by name: renderer.setSize
+     below multiplies by the renderer's pixel ratio, and applyQuality sets
+     that from the tier's `canvas` rule. */
+  var tier = (this.settings && TIERS[this.settings.quality]) || TIERS.retro;
   var gw, gh;
-  if (this.settings && this.settings.quality === 'modern') {
+  if (tier.target === 'super') {
     /* Render ABOVE the display size and let the downscale do the smoothing.
        Supersampling rather than MSAA because it needs no WebGL2 path and no
        version-specific render-target API, and it anti-aliases the alpha-tested
@@ -1371,6 +1467,7 @@ Game.prototype.loadSettings = function () {
     /* Retro is the default because it is the point of the thing — modern is
        there for anyone who wants to see the circuit without the dither. */
     quality: 'modern',
+    timeOfDay: 'midday',
     trackId: 'silverstone-v1',
     userConfigured: false
   };
@@ -1385,7 +1482,9 @@ Game.prototype.loadSettings = function () {
       if (typeof p.autoThrottle === 'boolean') s.autoThrottle = p.autoThrottle;
       if (typeof p.autoFullscreen === 'boolean') s.autoFullscreen = p.autoFullscreen;
       if (typeof p.userConfigured === 'boolean') s.userConfigured = p.userConfigured;
-      if (p.quality === 'retro' || p.quality === 'modern') s.quality = p.quality;
+      /* anything that is not a tier, or not a time of day, keeps the default */
+      if (typeof p.quality === 'string' && TIERS.hasOwnProperty(p.quality)) s.quality = p.quality;
+      if (TIME_OF_DAY_NAMES.indexOf(p.timeOfDay) >= 0) s.timeOfDay = p.timeOfDay;
       /* Validated against the registry: a stale or hand-edited id must fall
          back to a real circuit rather than crashing the boot. */
       if (typeof p.trackId === 'string' && trackById(p.trackId).id === p.trackId) {
@@ -1434,6 +1533,23 @@ Game.prototype.applySettings = function () {
   this.syncSettingsUi();
 };
 
+/* What the settings panel says for each tier: the button, the line that
+   flashes on the screen when it is picked, and the hint under the row. */
+var TIER_UI = {
+  retro: {
+    label: 'RETRO 240p', flash: 'RETRO 240p',
+    hint: 'Retro: 240p with a 5-bit dither, as the hardware did it.'
+  },
+  modern: {
+    label: 'MODERN', flash: 'MODERN GRAPHICS',
+    hint: 'Modern: supersampled, tone mapped, no dither. Costs more GPU.'
+  },
+  ultra: {
+    label: 'ULTRA', flash: 'ULTRA GRAPHICS',
+    hint: 'Ultra: shadows across the whole view, a real sky and time of day.'
+  }
+};
+
 Game.prototype.syncSettingsUi = function () {
   var s = this.settings;
   function put(id, txt) { var e = document.getElementById(id); if (e) e.textContent = txt; }
@@ -1444,13 +1560,13 @@ Game.prototype.syncSettingsUi = function () {
   put('set-autofs', s.autoFullscreen ? 'AUTO' : 'MANUAL');
   this.syncTrackList();
 
-  put('set-quality', s.quality === 'modern' ? 'MODERN' : 'RETRO 240p');
-  var qh = document.getElementById('set-quality-hint');
-  if (qh) {
-    qh.textContent = s.quality === 'modern'
-      ? 'Modern: supersampled, tone mapped, no dither. Costs more GPU.'
-      : 'Retro: 240p with a 5-bit dither, as the hardware did it.';
-  }
+  put('set-quality', TIER_UI[s.quality].label);
+  put('set-quality-hint', TIER_UI[s.quality].hint);
+  /* the time of day means something in Ultra only, so its row is shown there
+     and nowhere else */
+  put('set-tod', s.timeOfDay.toUpperCase());
+  var todRow = document.getElementById('row-tod');
+  if (todRow) todRow.hidden = s.quality !== 'ultra';
 
   /* No point offering an automatic fullscreen the platform will refuse. */
   var fsRow = document.getElementById('row-autofs');
@@ -2766,27 +2882,46 @@ Game.prototype.selectTrack = function (id) {
   setTimeout(function () { location.reload(); }, 220);
 };
 
+/* Puts the tier in settings.quality on the screen. Everything a tier decides
+   comes from its row of TIERS, and each of the three big concerns has its own
+   method, which undoes what the last tier set up and sets up its own. */
 Game.prototype.applyQuality = function () {
-  var modern = this.settings.quality === 'modern';
+  var tier = TIERS[this.settings.quality];
 
   /* Tone mapping itself is in the post node, which buildTarget builds for the
      tier; the node reads the exposure from here. The renderer's own
      toneMapping stays off (see buildRenderer), so no material's shader holds
      any tone mapping, and a change of tier no longer has to rebuild every
      material in the scene as it did on r128. */
-  this.renderer.toneMappingExposure = modern ? 1.12 : 1.0;
+  this.renderer.toneMappingExposure = tier.exposure;
+  this.applyHaze(tier.toneMapping !== 'none');
 
-  /* Shadows are a modern-only cost, and the fake blob is a retro-only cheat.
-     Running both at once double-darkens under every car. */
-  this.renderer.shadowMap.enabled = modern;
-  if (this.sun) this.sun.castShadow = modern;
-  for (var ci = 0; ci < (this.cars || []).length; ci++) {
-    if (this.cars[ci].shadow) this.cars[ci].shadow.visible = !modern;
-  }
+  /* The canvas rule. renderer.setSize multiplies by this ratio, so resize
+     (below) gives a canvas of the render target times the device pixel ratio
+     for 'device', as buildRenderer sets it up and main has always had it,
+     and a canvas the size of the render target for 'target'. */
+  this.renderer.setPixelRatio(tier.canvas === 'target' ? 1 : (window.devicePixelRatio || 1));
 
-  this.applyHaze(modern);
-  this.buildTarget(modern);
+  this.applyShadowMode(tier.shadows);   /* 'blob' | 'single' | 'cascades': the shadows */
+  this.applySkyMode(tier.sky);          /* 'dome' | 'physical': the sky and time of day */
+  this.applyPostMode(tier.post);        /* 'retro' | 'grade' | 'full': the bloom and grading */
+
+  /* The page's scanline and glow layers. `display`, because photo hides the
+     same two layers through `visibility` and the two must not undo each
+     other. */
+  var layers = this.host.querySelectorAll('.scanlines, .glow');
+  for (var li = 0; li < layers.length; li++) layers[li].style.display = tier.overlays ? '' : 'none';
+
   this.resize();
+};
+
+/* Sets the time of day by name (one of TIME_OF_DAY_NAMES), saves it, and has
+   the picture follow. Anything else is refused. */
+Game.prototype.setTimeOfDay = function (name) {
+  if (TIME_OF_DAY_NAMES.indexOf(name) < 0) throw new Error('unknown time of day ' + name);
+  this.settings.timeOfDay = name;
+  this.saveSettings();
+  this.applyTimeOfDay();
 };
 
 Game.prototype.isTouch = function () {
@@ -2923,7 +3058,7 @@ var PHOTO_TICK_MAX = 72000;
    has loaded. Returns false when that reload is under way. */
 Game.prototype.hookSelect = function (circuit, quality) {
   if (circuit && trackById(circuit).id !== circuit) throw new Error('unknown circuit ' + circuit);
-  if (quality && quality !== 'retro' && quality !== 'modern') throw new Error('unknown quality ' + quality);
+  if (quality && !(typeof quality === 'string' && TIERS.hasOwnProperty(quality))) throw new Error('unknown quality ' + quality);
   if (circuit && circuit !== this.track.def.id) {
     this.settings.trackId = circuit;
     if (quality) this.settings.quality = quality;
@@ -3054,8 +3189,9 @@ Game.prototype.photoCamMissing = function (name) {
  * demo driver for exactly `tick` sim ticks without drawing, places camera
  * `cam`, and draws ONE frame with the HUD hidden. The frame loop is then held
  * so nothing draws over it before it is captured: the game is left frozen
- * afterwards, and needs a reload to be played. `timeOfDay` is ignored for now.
- * `tick` must be a finite whole number from 0 to PHOTO_TICK_MAX; anything
+ * afterwards, and needs a reload to be played. `timeOfDay`, when given, is
+ * set and saved through setTimeOfDay before the frame is drawn; an unknown
+ * name is refused before the game is touched. `tick` must be a finite whole number from 0 to PHOTO_TICK_MAX; anything
  * else is refused before the game is touched.
  *
  * Everything that would otherwise carry history into the frame is pinned:
@@ -3084,11 +3220,13 @@ Game.prototype.photo = function (opts) {
     if (typeof ticks !== 'number' || !isFinite(ticks) || Math.floor(ticks) !== ticks || ticks < 0 || ticks > PHOTO_TICK_MAX) {
       throw new Error('tick must be a whole number from 0 to ' + PHOTO_TICK_MAX);
     }
+    if (o.timeOfDay != null && TIME_OF_DAY_NAMES.indexOf(o.timeOfDay) < 0) throw new Error('unknown time of day ' + o.timeOfDay);
     if (!this.hookSelect(o.circuit, o.quality)) {
       return Promise.reject(new Error('MCL64.photo: reloading to load ' + o.circuit + '; call again once the page has loaded'));
     }
     var missing = this.photoCamMissing(cam);
     if (missing) return Promise.reject(new Error('MCL64.photo: ' + missing));
+    if (o.timeOfDay != null) this.setTimeOfDay(o.timeOfDay);
 
     this.photoHold = true;
     held = true;

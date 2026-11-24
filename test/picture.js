@@ -111,10 +111,13 @@ function tamper(o) {
   /* A fresh context for every boot, so nothing a boot was denied, and no
      setting it saved, reaches the next one. Waits until the page has either
      a game or the fallback panel: one of the two is how every boot ends. */
-  async function bootWith(opts, query) {
+  async function bootWith(opts, query, saved, scale) {
     if (context) await context.close();
-    context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, reducedMotion: 'no-preference' });
+    context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: scale || 1, reducedMotion: 'no-preference' });
     await context.addInitScript(tamper, opts || {});
+    /* `saved` is what a player's browser would hold from an earlier visit:
+       it is in storage before the page's first script reads it */
+    if (saved) await context.addInitScript((s) => { localStorage.setItem('mcl64.settings.v1', JSON.stringify(s)); }, saved);
     page = await context.newPage();
     consoleErrors = [];
     uncaught = [];
@@ -125,6 +128,9 @@ function tamper(o) {
     await settled();
   }
   const boot = (query) => bootWith({}, query);
+  /* a boot with settings already saved, at a device pixel ratio of `scale` */
+  const bootWithSettings = (saved, scale) => bootWith({}, WEBGPU ? '' : '?renderer=webgl', saved, scale);
+  const setting = (key) => page.evaluate((k) => window.MCL64.settings[k], key);
 
   async function settled(circuit) {
     await page.waitForFunction((id) => {
@@ -304,6 +310,39 @@ function tamper(o) {
       'a lost ' + (WEBGPU ? 'device' : 'context') + ' is reported or recovered, never a frozen black canvas',
       how + ' in a race: ' + (racing ? '' : 'THE RACE DID NOT START, ') + (panel ? 'panel shown, saying ' + JSON.stringify(await fallbackText()) : 'no panel') +
       ', race paused: ' + paused + ', canvas ' + lookText(after) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+
+    /* Review Focus 3: what storage holds is checked, field by field */
+    await bootWithSettings({ quality: 'hyper', timeOfDay: 'midnight' });
+    check(await setting('quality') === 'modern' && await setting('timeOfDay') === 'midday' && uncaught.length === 0,
+      'an unknown tier or time of day falls back to the defaults',
+      'quality ' + await setting('quality') + ', timeOfDay ' + await setting('timeOfDay') + ', uncaught ' + JSON.stringify(uncaught));
+
+    /* The canvas rule, on a display with two device pixels to the CSS pixel.
+       Ultra's canvas is its render target and no larger; Modern's is the
+       render target times the device pixel ratio each way, as on main. The
+       tier is loaded for Ultra and switched at run time for Modern, and then
+       switched back, so the rule is seen to follow the tier both ways. */
+    const sizes = () => page.evaluate(() => {
+      const g = window.MCL64;
+      return { quality: g.settings.quality, dpr: window.devicePixelRatio, cw: g.glCanvas.width, ch: g.glCanvas.height, gw: g.gw, gh: g.gh };
+    });
+    await bootWithSettings({ quality: 'ultra' }, 2);
+    const ultra = await sizes(), ultraLook = await canvasLook();
+    check(ultra.quality === 'ultra' && ultra.dpr === 2 && ultra.cw * ultra.ch === ultra.gw * ultra.gh &&
+      notBlank(ultraLook) && consoleErrors.length === 0 && uncaught.length === 0,
+      'Ultra draws, and at a device pixel ratio of 2 its canvas is the size of its render target',
+      JSON.stringify(ultra) + ', ' + lookText(ultraLook) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+    await page.evaluate(() => window.MCL64.hookSelect(null, 'modern'));
+    const modern = await sizes();
+    check(modern.quality === 'modern' && modern.cw === modern.gw * 2 && modern.ch === modern.gh * 2 &&
+      modern.gw === ultra.gw && modern.gh === ultra.gh,
+      'Modern at a device pixel ratio of 2 has a canvas twice its render target each way, as on main, and the same render target as Ultra',
+      JSON.stringify(modern));
+    await page.evaluate(() => window.MCL64.hookSelect(null, 'ultra'));
+    const back = await sizes();
+    check(back.quality === 'ultra' && back.cw === back.gw && back.ch === back.gh && uncaught.length === 0,
+      'switched back to Ultra at run time, the canvas is the render target again',
+      JSON.stringify(back) + ', uncaught ' + JSON.stringify(uncaught));
 
     /* The texture sweep: four circuits, each loaded in each tier and then
        switched at run time. Console errors count here, over all of it,

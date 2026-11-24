@@ -51,7 +51,7 @@ for (let i = 0; i < argv.length; i++) {
 }
 const seconds = Number(args.seconds);
 if (!args.quality || !args.circuit || !(seconds > 0) || (args.renderer !== undefined && args.renderer !== 'webgl')) {
-  console.error('usage: node tools/bench.js --quality <retro|modern> --circuit <id> --seconds <n> [--renderer webgl] [--headless]');
+  console.error('usage: node tools/bench.js --quality <retro|modern|ultra> --circuit <id> --seconds <n> [--renderer webgl] [--headless]');
   process.exit(2);
 }
 

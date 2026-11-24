@@ -1,12 +1,18 @@
 /* Takes repeatable stills of the game through MCL64.photo.
  *
- *   node tools/stills.js --out <dir> [--quality retro,modern] [--circuit <ids>]
+ *   node tools/stills.js --out <dir> [--quality retro,modern,ultra] [--circuit <ids>]
  *                        [--tod <names>] [--cam <names>] [--tick 900]
  *
  * Builds nothing: it serves whatever is in dist/ now, so run `node build.js`
  * first. Writes <dir>/<circuit>.<quality>.<tod>.<cam>.png for every
- * combination. Defaults: every circuit, both tiers, time of day `midday`,
- * all six cameras, tick 900.
+ * combination. Defaults: every circuit, Retro and Modern, time of day
+ * `midday`, all six cameras, tick 900.
+ *
+ * --quality takes any of retro, modern and ultra. --tod is a list like --cam,
+ * of morning, midday, golden and dusk: each still is taken once for each
+ * value, and the value is always in the file name, so a run without --tod
+ * writes the `.midday.` names it always has. The hook refuses a name it does
+ * not know.
  *
  * Every still is taken headless in a 1280 x 720 viewport with a device pixel
  * ratio of 1 and the launch arguments in tools/browser.js. The image is the
@@ -56,7 +62,7 @@ const list = (s) => s.split(',').map((x) => x.trim()).filter(Boolean);
   let args;
   try { args = parseArgs(process.argv.slice(2)); } catch (e) { console.error(e.message); process.exit(2); }
   if (!args.out) {
-    console.error('usage: node tools/stills.js --out <dir> [--quality retro,modern] [--circuit <ids>] [--tod <names>] [--cam <names>] [--tick 900]');
+    console.error('usage: node tools/stills.js --out <dir> [--quality retro,modern,ultra] [--circuit <ids>] [--tod morning,midday,golden,dusk] [--cam <names>] [--tick 900]');
     process.exit(2);
   }
   const { chromium } = requirePlaywright();
