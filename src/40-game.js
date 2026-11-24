@@ -49,7 +49,7 @@ var TIERS = {
     target: 'super', toneMapping: 'aces', exposure: 1.12,
     shadows: 'single',
     sky: 'physical',
-    post: 'grade',
+    post: 'full',
     overlays: false, canvas: 'target'
   }
 };
@@ -58,6 +58,74 @@ var TIERS = {
    cycles through them. Only the names live here: what each one looks like
    belongs to the sky. */
 var TIME_OF_DAY_NAMES = ['morning', 'midday', 'golden', 'dusk'];
+
+/* --- the full post pass: bloom and a grade for each time of day ---------- */
+
+/* Bloom is for what is truly bright: the sun's disc, a glint on paint, a lit
+   start light. It is taken from the scene BEFORE the tone map, so the
+   threshold is a figure in scene referred light and not a grey level on the
+   screen.
+
+   THE THRESHOLD IS MEASURED, NOT CHOSEN. Read back from the render target at
+   Silverstone at midday, with the lights buildWorld makes: sunlit asphalt is
+   about 0.3 to 0.5, the sky 0.5 to 1.0, and white paint in the sun (the track
+   limit lines, the white of a kerb) 2.4 to 2.8, because the sun, the sky
+   light and the ambient light add up to about 2.8 on a white surface. A
+   glint on a car reaches 15 to 18. At 1.0 every white line on the circuit
+   glowed. So the threshold stands just above sunlit white paint. If the
+   lights are made brighter, this figure has to follow them.
+
+   `cap` is the most any one pixel may give the bloom, in the same units,
+   counted from the threshold up (see bloomHighPass). */
+var BLOOM = { strength: 0.35, radius: 0.6, threshold: 3.0, cap: 4.0 };
+
+/* How much brighter than its plain colour a lit start light is drawn while
+   the full post pass is on. A lamp is a source of light and the brightest
+   thing on the start line; as plain red it is no brighter than a painted
+   kerb and far under the threshold. Only setLights reads it. */
+var START_LIGHT_GLOW = 6.0;
+
+/* What the bloom takes from the scene. `o` is what BloomNode hands its
+   highPassFn. The engine's own filter is not used, for two reasons, both
+   seen in the stills.
+
+   It measures luminance, in which red counts for a fifth: a pure red lamp
+   would have to be five times as bright as white paint to pass. This one
+   measures the strongest of the three channels, so a lamp of any colour
+   passes when it is bright.
+
+   And it passes the WHOLE of a pixel once the pixel is over the threshold,
+   so a surface a little over it glows as hard as a lamp. From the driver's
+   eye the highlight along the orange cockpit rim, a few thousand pixels at 4
+   to 18, laid an orange haze over half the car. This one passes only what a
+   pixel has ABOVE the threshold, in its own colour, and no more than
+   BLOOM.cap of that: the glow grows from nothing as a surface brightens, and
+   a wide highlight cannot outshine the frame. */
+function bloomHighPass(o) {
+  var c = o.input.rgb;
+  var v = c.r.max(c.g).max(c.b);
+  var over = THREE.TSL.clamp(v.sub(o.threshold), 0.0, BLOOM.cap);
+  return THREE.TSL.vec4(c.mul(over.div(v.max(0.0001))), 1.0);
+}
+
+/* The grade for each time of day, one row for each name in TIME_OF_DAY_NAMES.
+
+     gain        red, green, blue. Multiplies the scene's light before the
+                 tone map, as a filter on the lens would, so a strong gain
+                 rolls off into white through the tone curve and never clips.
+     lift        red, green, blue. Added to the dark end of the finished
+                 picture and fading to nothing at white: the colour of the
+                 shadows.
+     saturation  1 leaves the colour alone.
+
+   Midday is neutral: with it, the full pass differs from Modern's by the
+   bloom alone. */
+var GRADES = {
+  morning: { gain: [0.97, 1.00, 1.05], lift: [0.000, 0.004, 0.012], saturation: 0.94 },
+  midday:  { gain: [1.00, 1.00, 1.00], lift: [0.000, 0.000, 0.000], saturation: 1.00 },
+  golden:  { gain: [1.14, 0.98, 0.78], lift: [0.012, 0.004, 0.000], saturation: 1.08 },
+  dusk:    { gain: [0.74, 0.78, 0.94], lift: [0.000, 0.006, 0.024], saturation: 0.88 }
+};
 
 /* --- post-process: RGBA5551 quantise + ordered dither ------------------- */
 
@@ -82,8 +150,25 @@ var TIME_OF_DAY_NAMES = ['morning', 'midday', 'golden', 'dusk'];
    frame then never pays for a tone map it throws away.
 
    `frame` is the render target's texture, `uRes` its size in pixels and
-   `uFade` the fade from black. */
-function buildPostNode(frame, uRes, uFade, retro) {
+   `uFade` the fade from black.
+
+   THE FULL PASS (Ultra) is Modern's with three things added, and `full` holds
+   them: { bloom, uGain, uLift, uSat }. It is null for Retro and Modern, and
+   every line it adds is behind a test of it made here, in JavaScript, when
+   the node is built, so the other two tiers get the node they always had.
+
+     bloom   added to the scene's light before the tone map. The bloom node
+             draws its own small targets from `frame` just before this pass
+             is drawn.
+     uGain   the time of day's gain, on the scene's light, before the tone map
+     uLift   the time of day's lift and saturation, on the finished picture,
+     uSat    after Modern's own grade
+
+   The full pass also leaves out the round to 8 bits. That round is there to
+   hand the old maths what an 8 bit target used to hold; Ultra has no old
+   picture to match, and a grade laid over values already rounded shows as
+   bands in a smooth sky. */
+function buildPostNode(frame, uRes, uFade, retro, full) {
   var T = THREE.TSL;
 
   /* recursive 4x4 Bayer, built arithmetically, as the GLSL had it:
@@ -101,6 +186,8 @@ function buildPostNode(frame, uRes, uFade, retro) {
     var vUv = T.uv();
     var c = T.texture(frame, vUv).rgb;
 
+    if (full) c = c.add(T.vec4(full.bloom).rgb).mul(full.uGain);
+
     /* Modern: ACES, with the exposure read from renderer.toneMappingExposure.
        The colour space argument is the working space, so renderOutput tone
        maps and converts nothing. */
@@ -113,7 +200,7 @@ function buildPostNode(frame, uRes, uFade, retro) {
     var curve = c.pow(T.vec3(0.41666)).mul(1.055).sub(0.055);
     var toe = c.mul(12.92);
     c = T.mix(curve, toe, c.lessThanEqual(T.vec3(0.0031308)));
-    c = c.mul(255.0).add(0.5).floor().div(255.0);
+    if (!full) c = c.mul(255.0).add(0.5).floor().div(255.0);
 
     if (retro) {
       /* the console path: dither into a palette of 5 bits for each channel.
@@ -132,6 +219,11 @@ function buildPostNode(frame, uRes, uFade, retro) {
       var l = T.dot(c, T.vec3(0.2126, 0.7152, 0.0722));
       c = T.mix(T.vec3(l), c, 1.16);
       c = T.clamp(c.sub(0.5).mul(1.07).add(0.5), 0.0, 1.0);
+      if (full) {
+        c = c.add(full.uLift.mul(c.oneMinus()));
+        var lg = T.dot(c, T.vec3(0.2126, 0.7152, 0.0722));
+        c = T.clamp(T.mix(T.vec3(lg), c, full.uSat), 0.0, 1.0);
+      }
     }
 
     var q = vUv.sub(0.5).mul(2.0);
@@ -243,13 +335,18 @@ Game.prototype.buildRenderer = function (renderer) {
      outlive the node, which is built again whenever the target is. */
   this.postU = {
     uRes: THREE.TSL.uniform(new THREE.Vector2(320, 240)),
-    uFade: THREE.TSL.uniform(1)
+    uFade: THREE.TSL.uniform(1),
+    /* the grade of the full pass: see GRADES and drawFrame */
+    uGain: THREE.TSL.uniform(new THREE.Vector3(1, 1, 1)),
+    uLift: THREE.TSL.uniform(new THREE.Vector3(0, 0, 0)),
+    uSat: THREE.TSL.uniform(1)
   };
   this.postMat = new THREE.NodeMaterial();
   this.postMat.depthTest = false;
   this.postMat.depthWrite = false;
   this.postQuad = new THREE.QuadMesh(this.postMat);
-  this.buildTarget(false);
+  this.bloom = null;
+  this.buildTarget(false, false);
 };
 
 /* The target the scene is drawn into, and the post node that reads it.
@@ -265,19 +362,47 @@ Game.prototype.buildRenderer = function (renderer) {
              before. That keeps the dither on the palette steps r128 gave.
 
    Called with the tier whenever it may have changed. A change makes a new
-   target, so the node that samples it is built again too. */
-Game.prototype.buildTarget = function (modern) {
-  if (this.rt && this.rtModern === modern) return;
+   target, so the node that samples it is built again too.
+
+   `full` (Ultra) is Modern's target with the bloom fed from it, and with one
+   difference in the target itself: it is read with linear filtering. The
+   canvas is the size of the target in Ultra, so the post pass reads each
+   texel at its centre and gets the same value either way. The bloom's first
+   step reads the target at half size, and there linear filtering gives it the
+   mean of four texels where nearest would give it one of the four, which
+   makes a glint a pixel wide flicker as it moves.
+
+   What the last call built is taken down first: the old target, and the
+   bloom node with the eleven small targets and seven materials it owns. */
+Game.prototype.buildTarget = function (modern, full) {
+  full = !!full;
+  if (this.rt && this.rtModern === modern && this.rtFull === full) return;
   if (this.rt) this.rt.dispose();
+  if (this.bloom) { this.bloom.dispose(); this.bloom = null; }
   this.rtModern = modern;
+  this.rtFull = full;
+  var filter = full ? THREE.LinearFilter : THREE.NearestFilter;
   this.rt = new THREE.RenderTarget(this.gw || 320, this.gh || 240, {
-    minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter,
+    minFilter: filter, magFilter: filter,
     format: THREE.RGBAFormat,
     type: modern ? THREE.HalfFloatType : THREE.UnsignedByteType,
     colorSpace: modern ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace,
     depthBuffer: true, stencilBuffer: false
   });
-  this.postMat.fragmentNode = buildPostNode(this.rt.texture, this.postU.uRes, this.postU.uFade, !modern);
+  var extra = null;
+  if (full) {
+    this.bloom = THREE.bloom(THREE.TSL.texture(this.rt.texture), BLOOM.strength, BLOOM.radius, BLOOM.threshold);
+    /* The node draws its targets "before" the pass that uses it, and by
+       default at most once for each animation frame the renderer has counted.
+       photo draws a frame whenever it is called, which need not be once for
+       each of those, and a still must never carry the glow of the frame
+       before it. 'render' is the engine's NodeUpdateType.RENDER (the bundle
+       does not export the name): once for every draw of the post pass. */
+    this.bloom.updateBeforeType = 'render';
+    this.bloom.highPassFn = bloomHighPass;
+    extra = { bloom: this.bloom, uGain: this.postU.uGain, uLift: this.postU.uLift, uSat: this.postU.uSat };
+  }
+  this.postMat.fragmentNode = buildPostNode(this.rt.texture, this.postU.uRes, this.postU.uFade, !modern, extra);
   this.postMat.needsUpdate = true;
 };
 
@@ -289,15 +414,26 @@ Game.prototype.drawFrame = function (fade) {
   this.renderer.render(this.scene, this.camera);
   this.renderer.setRenderTarget(null);
   this.postU.uFade.value = fade;
+  if (this.rtFull) {
+    /* The grade follows settings.timeOfDay here, on every frame, so nothing
+       has to tell the post pass when the time of day is changed. */
+    var grade = GRADES[this.settings.timeOfDay] || GRADES.midday;
+    this.postU.uGain.value.set(grade.gain[0], grade.gain[1], grade.gain[2]);
+    this.postU.uLift.value.set(grade.lift[0], grade.lift[1], grade.lift[2]);
+    this.postU.uSat.value = grade.saturation;
+  }
   this.postQuad.render(this.renderer);
 };
 
 /* The post pass for a tier: TIERS[...].post, 'retro' | 'grade' | 'full'.
    Called by applyQuality. 'retro' is the dither and the palette; 'grade' is
-   the tone map and the gentle grade. 'full' draws as 'grade' until the full
-   pass is built here. */
+   the tone map and the gentle grade; 'full' is 'grade' with bloom in front
+   of the tone map and a grade for the time of day behind it. buildTarget
+   takes down what the last mode built. */
 Game.prototype.applyPostMode = function (mode) {
-  this.buildTarget(mode !== 'retro');
+  this.buildTarget(mode !== 'retro', mode === 'full');
+  /* the lit start lights are brighter under the full pass: see setLights */
+  if (this.gantry) this.setLights(this.lightsLit || 0);
 };
 
 /* THE SKY RIG, and with it the environment map.
@@ -671,8 +807,16 @@ Game.prototype.resetRace = function (toTitle) {
 };
 
 Game.prototype.setLights = function (count) {
+  /* Kept, so applyPostMode can set the same lights again for another tier.
+     Under the full post pass a lit lamp is drawn brighter than white paint,
+     which is what lets the bloom find it (see START_LIGHT_GLOW); in every
+     other mode it is the plain colour, as it has always been. */
+  this.lightsLit = count;
+  var glow = this.rtFull ? START_LIGHT_GLOW : 1;
   for (var i = 0; i < this.gantry.lights.length; i++) {
-    this.gantry.lights[i].material.color.setHex(i < count ? 0xff2b1c : 0x2a1a18);
+    var colour = this.gantry.lights[i].material.color;
+    colour.setHex(i < count ? 0xff2b1c : 0x2a1a18);
+    if (i < count && glow !== 1) colour.multiplyScalar(glow);
   }
 };
 
