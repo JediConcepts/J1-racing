@@ -114,14 +114,17 @@ function tamper(o) {
      a game or the fallback panel: one of the two is how every boot ends. */
   async function bootWith(opts, query, saved, scale, more) {
     if (context) await context.close();
-    context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: scale || 1, reducedMotion: 'no-preference' });
+    context = await browser.newContext({
+      viewport: VIEWPORT, deviceScaleFactor: scale || 1, reducedMotion: 'no-preference', hasTouch: !!(more && more.touch)
+    });
     await context.addInitScript(tamper, opts || {});
     /* `saved` is what a player's browser would hold from an earlier visit:
        it is in storage before the page's first script reads it. It is put
        there once, on the first load of the context, so that a reload later
        in the same context finds what the game itself left. `more.trial` is
        the same for the key a tier on trial leaves (TIER_TRIAL_KEY in
-       src/40-game.js). */
+       src/40-game.js). `more.touch` makes the browser one with a touch
+       screen, which is what the game's touchLikely() asks about. */
     const held = { 'mcl64.settings.v1': saved ? JSON.stringify(saved) : null, [TRIAL_KEY]: (more && more.trial) || null };
     await context.addInitScript((h) => {
       if (sessionStorage.getItem('picture.seeded')) return;
@@ -482,6 +485,59 @@ function tamper(o) {
       'Ultra clicked to and a circuit picked at once: the reload comes up in Ultra, with no word of a failure',
       JSON.stringify(carried) + ', uncaught ' + JSON.stringify(uncaught));
 
+    /* THE GUARD ON A SLOW DEVICE. In a race in Ultra the frame loop hands
+       every frame gap to watchPace, and a mean over 25 ms for 3 seconds of
+       racing gives Ultra up for Modern. The loop is held here and the gaps
+       are handed over by hand, so the figures are the test's and not this
+       machine's. What must NOT trip it comes first: gaps too long to be
+       frames, gaps of a healthy 60 a second, one long frame among those,
+       and slow frames while the race is paused. Then 74 gaps of 40 ms, a
+       shade under 3 seconds, and it must still be Ultra; six more and it
+       must be Modern, saved, with the player told. Last, Ultra picked again
+       in the same load is left alone. */
+    await bootWithSettings({ quality: 'ultra' });
+    await page.keyboard.press('Enter');
+    const pace = await page.evaluate(() => {
+      const g = window.MCL64;
+      const feed = (ms, n) => { for (let i = 0; i < n; i++) g.watchPace(ms); return g.tierOn; };
+      const stored = () => { try { return JSON.parse(localStorage.getItem('mcl64.settings.v1')).quality; } catch (e) { return null; } };
+      g.photoHold = true;
+      const r = { racing: (g.state === 1 || g.state === 2) && !g.paused, start: g.tierOn };
+      r.longGaps = feed(300, 200);
+      r.healthy = feed(16.7, 400);
+      g.watchPace(200);
+      r.oneLongFrame = feed(16.7, 400);
+      g.paused = true;
+      r.paused = feed(40, 200);
+      g.paused = false;
+      r.justUnder = feed(40, 74);
+      r.over = feed(40, 6);
+      r.settings = g.settings.quality; r.stored = stored(); r.shadows = g.shadowRig.mode; r.notice = g.notice;
+      r.label = document.getElementById('set-quality').textContent;
+      g.hookSelect(null, 'ultra');
+      r.again = feed(40, 200);
+      g.photoHold = false;
+      return r;
+    });
+    check(pace.racing && pace.start === 'ultra' && pace.longGaps === 'ultra' && pace.healthy === 'ultra' && pace.oneLongFrame === 'ultra' &&
+      pace.paused === 'ultra' && pace.justUnder === 'ultra' && pace.over === 'modern' && pace.settings === 'modern' &&
+      pace.stored === 'modern' && pace.shadows === 'single' && pace.label === 'MODERN' && /TOO SLOW/.test(pace.notice) &&
+      pace.again === 'ultra' && consoleErrors.length === 0 && uncaught.length === 0,
+      'a race in Ultra with frames 40 ms apart for 3 seconds steps down to Modern, saves it and says so, and nothing else trips it',
+      JSON.stringify(pace) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+
+    /* A touch device is not offered Ultra: the button steps past it, and a
+       saved Ultra loads as Modern. */
+    await bootWithSettings({ quality: 'ultra' }, 1, { touch: true });
+    const touchLoad = await tierState();
+    const touchSaid = [await clickGraphics(), await clickGraphics(), await clickGraphics()];
+    const touchPoints = await page.evaluate(() => navigator.maxTouchPoints);
+    check(touchPoints > 0 && touchLoad.quality === 'modern' && touchLoad.on === 'modern' && touchLoad.shadows === 'single' &&
+      touchSaid.join() === 'RETRO 240p,MODERN,RETRO 240p' && uncaught.length === 0,
+      'a touch device is not offered Ultra: a saved Ultra loads as Modern and the Graphics button steps past it',
+      'touch points ' + touchPoints + ', loaded ' + JSON.stringify(touchLoad) + ', the button said ' + touchSaid.join(', ') +
+      ', uncaught ' + JSON.stringify(uncaught));
+
     /* NOTHING IS LEFT BEHIND by a change of tier or of hour. The renderer is
        asked what it holds: its textures and geometries, its uniform buffers,
        and the render objects it keeps (one for each mesh drawn with each
@@ -495,7 +551,11 @@ function tamper(o) {
        stands still and the same things are in view every time: the counts
        must then come back to the figure exactly, not nearly. One trip round
        the tiers comes first, because the first visit to a tier builds things
-       that are kept on purpose. */
+       that are kept on purpose.
+
+       This is the slow one: about three minutes of the default run, nearly
+       all of it the fallback building its shaders again at each change. A
+       smaller page does not shorten it (tried at 480 x 270). */
     await boot(WEBGPU ? '' : '?renderer=webgl');
     const kept = await page.evaluate(([trips, hours]) => {
       const g = window.MCL64;
@@ -518,6 +578,16 @@ function tamper(o) {
       const hoursAfter = read();
       g.setTimeOfDay('midday');
       go('modern');
+      /* Wait for the GPU. Those were some 140 frames drawn back to back,
+         and the software rasteriser the default run uses is the best part
+         of a minute behind by now: reading a pixel back makes the page wait
+         for it here, where nothing has a time limit, and not in the load of
+         the next page, which has one. */
+      const c = document.createElement('canvas');
+      c.width = 8; c.height = 8;
+      const x = c.getContext('2d');
+      x.drawImage(g.glCanvas, 0, 0, 8, 8);
+      x.getImageData(0, 0, 1, 1);
       g.photoHold = false;
       return { tiersBase, tiersAfter, hoursBase, hoursAfter };
     }, [30, 40]);

@@ -32,7 +32,9 @@ var STATE = { TITLE: 0, COUNTDOWN: 1, RACING: 2, FINISHED: 3 };
                   'target'  the size of the render target and no larger
      heavy        true for a tier that not every device is known to hold.
                   Such a tier is not trusted until it has drawn (see
-                  chooseTier).
+                  chooseTier), is given up for TIER_SAFE if the frames come
+                  too slowly in a race (see watchPace), and is not offered
+                  on a touch device (see tierCycle).
 
    Ultra is Modern in every field but `canvas` for now: it is the place the
    wide shadows, the real sky and the full post pass are switched on, one
@@ -103,6 +105,19 @@ var TIER_FELL = {
   failed: 'ULTRA OFF: IT DID NOT START LAST TIME',
   lost: 'ULTRA OFF: THE GRAPHICS DEVICE WAS LOST'
 };
+
+/* --- stepping down when the device cannot keep up ------------------------ */
+
+/* Ultra is 2.5 to 4.8 times the work of a Modern frame, and every figure
+   there is for it was measured on one fast machine. So the frames of a race
+   in a heavy tier are watched (Game.watchPace). The gap between frames is
+   kept as a running mean over about `meanMs`; when the mean has stood over
+   `slowMs` for `forMs` of racing, the tier is given up for TIER_SAFE. A gap
+   over `ignoreMs` is not a slow frame, it is a change of tab or of tier,
+   and is left out altogether. 25 ms is 40 frames a second: under that the
+   car is felt to stutter. */
+var PACE = { slowMs: 25, forMs: 3000, ignoreMs: 250, meanMs: 500 };
+var PACE_SAID = 'ULTRA TOO SLOW ON THIS DEVICE: NOW MODERN';
 
 /* The names settings.timeOfDay may hold, in the order the settings button
    cycles through them. Only the names live here: what each one looks like
@@ -346,6 +361,12 @@ function Game(host, renderer) {
   this.tierTimer = null;
   this.trialLeft = 0;
   this.tierFell = null;
+  /* the running mean of the frame gap in a heavy tier, how long it has
+     stood over the limit, both in milliseconds, and whether this load has
+     already stepped down once (see watchPace) */
+  this.paceMean = 0;
+  this.paceSlow = 0;
+  this.paceDone = false;
   /* OFF to start. The halo is the one part of the car that sits between the
      camera and the driver, and the onboard mounts are framed through it — so
      the first thing anyone sees is the shot without a bar across it, and H
@@ -1105,7 +1126,7 @@ Game.prototype.bindInput = function () {
   var qualitySet = document.getElementById('set-quality');
   if (qualitySet) qualitySet.addEventListener('click', function (e) {
     e.preventDefault();
-    var names = Object.keys(TIERS);
+    var names = self.tierCycle();
     self.chooseTier(names[(names.indexOf(self.settings.quality) + 1) % names.length]);
   });
 
@@ -1735,6 +1756,9 @@ Game.prototype.loadSettings = function () {
       if (typeof p.userConfigured === 'boolean') s.userConfigured = p.userConfigured;
       /* anything that is not a tier, or not a time of day, keeps the default */
       if (typeof p.quality === 'string' && TIERS.hasOwnProperty(p.quality)) s.quality = p.quality;
+      /* a heavy tier saved on a device that is not offered one (see
+         tierCycle) loads as the safe tier; what is saved is left alone */
+      if (TIERS[s.quality].heavy && touchLikely()) s.quality = TIER_SAFE;
       if (TIME_OF_DAY_NAMES.indexOf(p.timeOfDay) >= 0) s.timeOfDay = p.timeOfDay;
       /* Validated against the registry: a stale or hand-edited id must fall
          back to a real circuit rather than crashing the boot. */
@@ -3188,6 +3212,22 @@ Game.prototype.applyQuality = function () {
   this.resize();
 };
 
+/* The tiers the Graphics button steps through on this device, in order.
+
+   RULING, 24 Nov 2026: where touchLikely() is true, a heavy tier (Ultra) is
+   not offered until it has been run on a phone. Nobody has. Its four shadow
+   maps alone are 134 MB and its cascades are bound by the main thread, and
+   the player on a phone who finds Modern slow and reaches for Retro is the
+   one the button would have walked through Ultra. When it has been run on
+   a phone and holds, take the test out of here and out of loadSettings. */
+Game.prototype.tierCycle = function () {
+  var touch = touchLikely(), out = [];
+  for (var name in TIERS) {
+    if (TIERS.hasOwnProperty(name) && !(touch && TIERS[name].heavy)) out.push(name);
+  }
+  return out;
+};
+
 /* THE PLAYER PICKS A TIER (the Graphics button). The button and its hint
    say the new tier at once, and nothing else happens until the clicks have
    stopped for TIER_SETTLE_MS: a tier that was only passed through on the way
@@ -3220,6 +3260,44 @@ Game.prototype.commitTier = function () {
    ends a trial takes the key away: the tier is trusted from then on. */
 Game.prototype.countFrame = function () {
   if (this.trialLeft > 0 && --this.trialLeft === 0) tierTrialWrite(null);
+};
+
+/* Called by the frame loop with the gap since the frame before, in
+   milliseconds (see PACE). It is given the gap and reads no clock, and it is
+   never called from tick: the simulation knows nothing of it. Only a race
+   that is running counts, because that is where a slow frame is felt; on
+   the title, in a pause or with the page hidden the count starts again.
+
+   It steps down ONCE in a load. A player who is told and picks the heavy
+   tier again has chosen it, and is not argued with a second time. (A screen
+   or a power saving mode that holds the browser to 30 frames a second looks
+   the same from here as a device that cannot keep up, so the guard can be
+   wrong, and must not be able to be wrong over and over.) */
+Game.prototype.watchPace = function (gapMs) {
+  var racing = (this.state === STATE.RACING || this.state === STATE.COUNTDOWN) && !this.paused && !document.hidden;
+  if (this.paceDone || !racing || this.tierTimer || !this.tierOn || !TIERS[this.tierOn].heavy) {
+    this.paceMean = 0;
+    this.paceSlow = 0;
+    return;
+  }
+  if (!(gapMs > 0) || gapMs > PACE.ignoreMs) return;
+  this.paceMean = this.paceMean > 0
+    ? this.paceMean + (gapMs - this.paceMean) * Math.min(1, gapMs / PACE.meanMs)
+    : gapMs;
+  if (this.paceMean <= PACE.slowMs) { this.paceSlow = 0; return; }
+  this.paceSlow += gapMs;
+  if (this.paceSlow < PACE.forMs) return;
+
+  this.paceDone = true;
+  this.paceMean = 0;
+  this.paceSlow = 0;
+  this.settings.quality = TIER_SAFE;
+  this.trialLeft = 0;
+  tierTrialWrite(null);
+  this.applyQuality();
+  this.applySettings();
+  this.saveSettings();
+  this.notify(PACE_SAID);
 };
 
 /* The graphics device has gone (boot's onDeviceLost). If a heavy tier was on,
@@ -3826,7 +3904,8 @@ Game.prototype.bench = function (opts) {
       /* photo() holds the loop so its frame is the one on screen when the
          stills tool captures it. Never set in normal play. */
       if (game.photoHold) { last = now; return; }
-      var dt = (now - last) / 1000;
+      var gap = now - last;
+      var dt = gap / 1000;
       last = now;
       if (dt > 0.25) dt = 0.25;          /* tab was backgrounded: don't fast forward */
       acc += dt;
@@ -3841,6 +3920,7 @@ Game.prototype.bench = function (opts) {
       for (var i = 0; i < game.cars.length; i++) game.cars[i].sync(dt, alpha);
       game.render(dt);
       game.countFrame();
+      game.watchPace(gap);
       game.updateAudio();
       if (window.updateMonacoLiveStreetView && game.playerCar && game.track) {
         window.updateMonacoLiveStreetView(game.playerCar, game.track);
