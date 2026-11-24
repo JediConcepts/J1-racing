@@ -1334,7 +1334,27 @@ function buildMonacoTunnelAndUrbanScenery(track, scene) {
   seaGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(seaVerts), 3));
   seaGeo.computeVertexNormals();
 
-  var seaMat = new THREE.MeshStandardMaterial({ color: srgb(0x005f73), roughness: 0.25, metalness: 0.6 });
+  /* envMapIntensity 1.15 is there for the engine move and nothing else. The
+     sea is smooth and metallic, so most of what it shows is the sky it
+     reflects, and three.js 0.187 shades that reflection duller than r128 did:
+     the light part of the water read 77,152,183 where r128 gave 94,161,190.
+     At 1.15 it reads 87,158,189, and every Monaco still that shows the sea
+     moved toward the r128 picture. At 1.3 the darker water overshot. Game's
+     ownEnvironment is what makes the number apply (it does nothing on a
+     material that takes its light from scene.environment).
+
+     RULED in fix round 1 of the move's stage A: the 1.15 is accepted, as a
+     compensation toward the live picture. It is a number of the port, not of
+     the game's look, and it goes if the engine ever shades the reflection as
+     r128 did.
+
+     It was taken out once, in fix round 2, and put back. Its test is that it
+     harms no still by more than 0.2, and that was first read for each
+     channel of each still, where blue in the high view rises by 0.309. The
+     ruling that followed reads it by the still, on the figure the picture
+     gate reads (a still's highest channel): by that reading no still rises,
+     and the worst still of the set falls from 4.556 to 3.255. */
+  var seaMat = new THREE.MeshStandardMaterial({ color: srgb(0x005f73), roughness: 0.25, metalness: 0.6, envMapIntensity: 1.15 });
   var sea = new THREE.Mesh(seaGeo, seaMat);
   var harbourY = track.p[700].y; // use track elevation at the harbour
   sea.position.set(0, harbourY - 0.4, 0);

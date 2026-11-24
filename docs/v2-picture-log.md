@@ -1448,3 +1448,65 @@ The crowd and the far buildings washing out, which was item 2 of the earlier lis
 ### Tests
 
 After the last change: `node test/sim-parity.test.js` 4 passed (and before every commit); `node test/physics.test.js` 37 passed; `node test/fpmath.test.js` 3 passed; `node test/track-bake.test.js` 8 passed; `node test/music.test.js` 31 passed; `node build.js` invariants OK (`dist/index.html` 1,593,262 bytes and `dist/artifact.html` 1,588,640 on the clean build of `1028956`); then `git checkout -- dist`. No warning in any test's output. Not run, as told: `tools/bench.js`, `test/csp.js`. Stage B and stage C are not started.
+
+## Task 6, stage B: failing politely, the tools and the tests
+
+Stage B of the engine move: a boot that can fail politely, a test of the picture's failure paths (`test/picture.js`), the tools made true on both backends, and the build's papers. One step was carried into it from the review of fix round 2 and is done first.
+
+### B0: the sea's light back, read by the still
+
+Fix round 2 took the sea's `envMapIntensity: 1.15` out (`f2aab8d`), because its test, "harms nothing by more than 0.2", was read for each channel of each still, and one channel of one still rose by 0.309 (blue, Monaco's `high` view in Modern, 2.445 to 2.754).
+
+RULED by the controller after that round: "harms nothing by more than 0.2" is read **per still**, on the figure the gate reads, which is a still's highest channel. It is not read per channel. By that reading the number harms nothing: no still's figure rises, and the worst still of the set falls from 4.556 to 3.255. So the number goes back.
+
+What was done: `f2aab8d` reverted as a new commit. The sea's material carries `envMapIntensity: 1.15` again, with its comment, which now also says how its test is read. `ownEnvironment`'s comment names the sea again beside the car paint. Nothing else changed.
+
+`stills/after-tuning-3`, the working tree of this commit (`v0.131 dev 9a88ce9*`), against `stills/before-main` (`node tools/stills-compare.js stills/before-main stills/after-tuning-3`, which exits 0):
+
+| still | R | G | B | pixels off by more than 24 | gate | highest channel with the number out | change |
+|---|---|---|---|---|---|---|---|
+| brands-hatch-v1.modern.chase | 2.169 | 1.618 | 2.940 | 5.984% | ok | 2.940 | +0.000 |
+| brands-hatch-v1.modern.high | 2.712 | 0.603 | 1.925 | 2.009% | ok | 2.712 | +0.000 |
+| brands-hatch-v1.retro.chase | 1.586 | 1.462 | 2.106 | 0.388% | ok | 2.106 | +0.000 |
+| brands-hatch-v1.retro.high | 1.503 | 1.083 | 1.098 | 0.055% | ok | 1.503 | +0.000 |
+| indianapolis-v1.modern.chase | 2.309 | 2.285 | 2.735 | 2.770% | ok | 2.735 | +0.000 |
+| indianapolis-v1.modern.high | 2.394 | 0.736 | 1.640 | 2.042% | ok | 2.394 | +0.000 |
+| indianapolis-v1.retro.chase | 1.978 | 1.991 | 2.262 | 0.459% | ok | 2.262 | +0.000 |
+| indianapolis-v1.retro.high | 1.438 | 1.073 | 1.087 | 0.341% | ok | 1.438 | +0.000 |
+| monaco-gp-v1.modern.apex | 1.595 | 1.882 | 1.866 | 0.544% | ok | 1.882 | +0.000 |
+| monaco-gp-v1.modern.chase | 2.486 | 2.141 | 2.198 | 1.891% | ok | 2.694 | -0.208 |
+| monaco-gp-v1.modern.grid | 1.710 | 1.971 | 1.969 | 1.412% | ok | 2.019 | -0.048 |
+| monaco-gp-v1.modern.high | 3.255 | 2.189 | 2.754 | 1.187% | ok | 4.556 | -1.301 |
+| monaco-gp-v1.retro.apex | 1.836 | 1.793 | 1.789 | 0.296% | ok | 1.836 | +0.000 |
+| monaco-gp-v1.retro.chase | 2.178 | 2.213 | 2.197 | 0.540% | ok | 2.378 | -0.165 |
+| monaco-gp-v1.retro.grid | 1.600 | 1.832 | 1.838 | 0.716% | ok | 1.896 | -0.058 |
+| monaco-gp-v1.retro.high | 2.712 | 1.739 | 1.872 | 0.178% | ok | 3.511 | -0.799 |
+| silverstone-v1.modern.apex | 1.360 | 1.599 | 1.875 | 1.865% | ok | 1.875 | +0.000 |
+| silverstone-v1.modern.chase | 2.030 | 1.627 | 2.717 | 4.302% | ok | 2.717 | +0.000 |
+| silverstone-v1.modern.grid | 1.717 | 1.773 | 2.192 | 2.315% | ok | 2.192 | +0.000 |
+| silverstone-v1.modern.helmet | 1.829 | 2.020 | 2.033 | 1.341% | ok | 2.033 | +0.000 |
+| silverstone-v1.modern.high | 2.248 | 0.610 | 2.058 | 2.142% | ok | 2.248 | +0.000 |
+| silverstone-v1.modern.stands | 1.634 | 1.185 | 2.143 | 0.299% | ok | 2.143 | +0.000 |
+| silverstone-v1.retro.apex | 1.103 | 1.375 | 1.513 | 0.125% | ok | 1.513 | +0.000 |
+| silverstone-v1.retro.chase | 1.481 | 1.373 | 1.950 | 0.255% | ok | 1.950 | +0.000 |
+| silverstone-v1.retro.grid | 1.418 | 1.564 | 1.767 | 0.293% | ok | 1.767 | +0.000 |
+| silverstone-v1.retro.helmet | 1.563 | 1.802 | 1.920 | 0.669% | ok | 1.920 | +0.000 |
+| silverstone-v1.retro.high | 1.373 | 0.919 | 1.212 | 0.048% | ok | 1.373 | +0.000 |
+| silverstone-v1.retro.stands | 1.399 | 1.160 | 1.621 | 0.059% | ok | 1.621 | +0.000 |
+
+**Stills over 6: none.** 28 compared; the range is 0.603 to 3.255. The average of the channel means is 1.638 in Retro, 1.970 in Modern and 1.804 over the 28 (1.681, 2.012 and 1.847 with the number out); the average of the highest channels over the 28 is 2.130 (2.222). The six stills that move are the six Monaco stills that show the sea; the other 22 are the same files as `stills/after-tuning-2`, and all 28 are the same files as `stills/fix2-filter`, the set fix round 2 took with the number still in (0.000 on every channel of every still).
+
+By the still, as ruled: of the six that move, every one has a lower figure than with the number out (the largest fall is 1.301, the smallest 0.048), and no still's figure rises. By the channel, for the record: one channel still rises by more than 0.2, the same one as before (blue in `monaco-gp-v1.modern.high`, 2.445 to 2.754).
+
+The sea itself, from the same rectangles as before, in Monaco's `high` view, to one decimal because the rounding matters here (see "Corrections to the record of fix round 2" further down):
+
+| surface | tier | live | with the number out | with 1.15 |
+|---|---|---|---|---|
+| sea, light part | Modern | 99.4, 164.0, 189.6 | 83.9, 157.3, 184.8 | 92.8, 162.8, 189.6 |
+| sea, middle | Modern | 0.7, 131.2, 174.7 | 0.0, 129.7, 174.0 | 0.1, 134.9, 179.4 |
+| sea, light part | Retro | 93.4, 135.6, 157.3 | 85.0, 130.6, 150.8 | 89.1, 134.2, 156.9 |
+| sea, middle | Retro | 32.8, 106.5, 136.6 | 26.8, 106.0, 136.3 | 29.0, 107.8, 139.8 |
+
+So the light part of the sea is 6.6 levels less red than live in Modern where it was 15.5 without the number, and the dark middle is 3.7 too green and 4.7 too blue where it was within 1.5. That is the trade the ruling accepts.
+
+The console of the page was watched on this capture by the script kept outside the repo, as in fix round 2: no error; 24 warnings of the three expected kinds (`No available adapters.`, the notice that the renderer is running on its WebGL 2 backend, and the driver's `GPU stall due to ReadPixels`). Step B3 puts that watch into the tool. `node test/sim-parity.test.js`: 4 passed.
