@@ -1510,3 +1510,59 @@ The sea itself, from the same rectangles as before, in Monaco's `high` view, to 
 So the light part of the sea is 6.6 levels less red than live in Modern where it was 15.5 without the number, and the dark middle is 3.7 too green and 4.7 too blue where it was within 1.5. That is the trade the ruling accepts.
 
 The console of the page was watched on this capture by the script kept outside the repo, as in fix round 2: no error; 24 warnings of the three expected kinds (`No available adapters.`, the notice that the renderer is running on its WebGL 2 backend, and the driver's `GPU stall due to ReadPixels`). Step B3 puts that watch into the tool. `node test/sim-parity.test.js`: 4 passed.
+
+### B1: a boot that can fail politely (`dfa4ce4`)
+
+The renderer starts asynchronously and can be taken away again, so the picture has ways to fail that r128 did not have. Each ends at the existing fallback panel (`fail()` and `#fallback`, in the closure at the foot of `src/40-game.js`) with a sentence a player can act on. What the panel says in each case, read off the page by `test/picture.js`:
+
+| case | what the panel says |
+|---|---|
+| no WebGPU and no WebGL 2 | "This browser has neither WebGPU nor WebGL 2. Try enabling hardware acceleration, or a newer browser." |
+| the fallback forced with `?renderer=webgl`, and no WebGL 2 | "WebGL 2 is unavailable in this browser. Try enabling hardware acceleration." (read in the source, not exercised by the test) |
+| `renderer.init()` rejects | "Neither WebGPU nor WebGL 2 could be started on this device. Try enabling hardware acceleration, or a newer browser. (the engine's own message)" |
+| WebGPU present, no adapter, no WebGL 2 | the same sentence, with "(Cannot read properties of null (reading 'getSupportedExtensions'))" |
+| a device or context lost mid race | first line "The graphics device was lost, and the picture has stopped.", then "Reload the page to carry on. If it keeps happening, try enabling hardware acceleration, or a newer browser." |
+
+- The probe. It asked for a WebGL 1 context whatever the browser had. It now asks for WebGL 2, and only when the game will draw through it: the browser has no `navigator.gpu`, or the address has `?renderer=webgl`. A browser with WebGPU is not asked.
+- A browser can have `navigator.gpu` and hand out no adapter (headless Chromium does). The renderer finds that out inside `init()` and takes its WebGL 2 backend by itself; if that is missing too, `init()` rejects. The engine's words are kept in brackets, for a bug report, behind a sentence of the game's own.
+- A loss mid race. The engine stops drawing and writes one line on the console. Boot takes `renderer.onDeviceLost`, lets the engine's handler run first (it is what makes every later `render()` return at once), pauses the race, fades the sound out, stops the frame loop and shows the panel. Nothing is recovered; the panel asks for a reload. The panel's fixed first line ("This game needs WebGL, and it could not start.") is replaced for this one case, because the game had started.
+- One thing found on the way. The engine does NOT call `onDeviceLost` for a WebGPU device that was destroyed: it drops the reason `destroyed` on purpose. Checked in the system Chrome with the game's own watch taken out: `device.destroy()` in a race gives no panel, a blank canvas, a race still running, and nothing on the console at all. So boot also watches the device's own `lost` promise and sends it down the same road.
+- Not changed: the panel's fixed first line in `src/index.template.html` still says the game "needs WebGL". The template is not one of this task's files. It is true as far as it goes (WebGL 2 is the least the game runs on) and the sentence under it says the rest.
+
+### B2: `test/picture.js`
+
+A Playwright test, local and not in CI, like `test/csp.js`. `node test/picture.js` runs headless Chromium, which has no WebGPU adapter, so it sees the fallback. `node test/picture.js --webgpu` runs the system Chrome, headed, on the real backend, and does the checks that mean something there.
+
+How "not blank" is decided: the page draws one frame with the game's own `drawFrame` and copies the game canvas to a 64 x 36 2D canvas in the same task, which is the only moment either kind of canvas can be read back. A frame that drew has many colours and a wide range of brightness (over 230 colours and a range over 230 on every run here); the test asks for at least 8 colours and a range of 32. A screenshot would not do, because the HUD lies over the canvas.
+
+Headless, the fallback, on the build of `dfa4ce4` (`v0.133 dev dfa4ce4*`), Chromium 159.0.8154.6: **24 passed, 0 failed.**
+
+| check | result |
+|---|---|
+| the fallback path draws with no errors (`?renderer=webgl`) | PASS: backend `webgl2`, no console error, nothing uncaught |
+| a browser with no WebGPU still gets a picture (`navigator.gpu` gone before load) | PASS: backend `webgl2` |
+| a browser that can run neither shows the fallback panel, and it says what is missing | PASS |
+| WebGPU with no adapter and no WebGL 2 shows the fallback panel, and it says what is missing | PASS (added to the brief's five: it is the one case where the engine's own fallback fails inside `init()`) |
+| a renderer that cannot start shows the fallback panel (`init()` made to reject) | PASS |
+| a lost context is reported or recovered, never a frozen black canvas (`WEBGL_lose_context`, in a race) | PASS: panel shown, race paused, nothing uncaught; one console error, the engine's `WebGL Device Lost` |
+| every canvas texture has its node: four circuits, each loaded in Retro and in Modern and switched at run time, 16 checks | PASS, all 16 |
+| the game lists four circuits; all of the 16 on `webgl2` with no console error and nothing uncaught | PASS, PASS |
+
+The texture guard is the carried item. The fix for texture smoothing is a sweep (`decodeCanvasMaps`, called from `Game.buildWorld`), and a canvas texture on a material the sweep misses is drawn far too bright with no error. The test walks `MCL64.scene` in the page and counts. A canvas texture that needs its node is known by the mark `texFromCanvas` already puts on it (`userData.decodeInShader`), so no new marker was needed. For each of the 16 it asks four things: at least one material carries such a texture; none of them is without its colour node and opacity node; all of them share ONE colour node (a node for each material draws the wrong texture with no error, as fix round 2 found); and no other canvas texture is used as a map but the 32 x 32 blob under each car, so one made by hand cannot slip past. Counts of materials carrying a canvas texture: Monaco 28, Silverstone 26, Indianapolis 17, Brands Hatch 22, the same loaded in either tier and after a switch.
+
+Shown to fail when it should, in a copy outside the working tree:
+
+- Against the game as it was before B1 (`b7c9d98`): 3 fail. The two with no WebGL 2 fail on the message (the panel said only "Cannot read properties of null (reading 'getSupportedExtensions')"), and the lost context fails outright: no panel, the race not paused, a canvas of one colour.
+- With the one call to `decodeCanvasMaps` commented out: all 16 texture checks fail (Monaco: "28 materials carry a canvas texture, 28 of them without a node").
+
+The real WebGPU backend, `node test/picture.js --webgpu`, the system Chrome 158.0.8127.38, headed, the same build: **20 passed, 0 failed.**
+
+| check | result |
+|---|---|
+| the WebGPU path draws with no errors (no switch in the address) | PASS: backend `webgpu` with a `GPUDevice`, no console error, nothing uncaught |
+| a lost device is reported or recovered, never a frozen black canvas (`device.destroy()`, in a race) | PASS: panel shown, race paused, nothing uncaught; one console error, the engine's `WebGPU Device Lost`, which is the game's watch handing the loss to the engine |
+| every canvas texture has its node, 16 checks, all on `webgpu` with no console error | PASS, all 16 |
+
+The three checks that take WebGPU or WebGL 2 away are about the fallback and are not run in that mode. The Chrome the run opened was closed by the run.
+
+Tests after B1 and B2: `node test/sim-parity.test.js` 4 passed; `node test/physics.test.js` 37 passed; `node test/fpmath.test.js` 3 passed; `node test/track-bake.test.js` 8 passed; `node test/music.test.js` 31 passed.
