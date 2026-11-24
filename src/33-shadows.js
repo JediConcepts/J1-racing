@@ -201,7 +201,7 @@ ShadowRig.prototype.dropCascades = function () {
      visit from the title screen at Silverstone, counted. Disposing of the
      node frees the material, which lets go of the render objects, and the
      map with it. `_shadowNodes` is a private field of the engine's node, so
-     it is on the list of things an engine update must check (CLAUDE.md). */
+     it is one of the things an engine update must check. */
   var nodes = csm._shadowNodes || [];
   for (var n = 0; n < nodes.length; n++) nodes[n].dispose();
   /* and their maps, for a cascade whose node was never made (a second
