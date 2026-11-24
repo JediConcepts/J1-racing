@@ -760,15 +760,22 @@ function tamper(o) {
       JSON.stringify(hover) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
 
     /* THE GUARD ON A SLOW DEVICE. In Ultra the frame loop hands every frame
-       gap to watchPace, and a mean over 25 ms for 3 seconds gives Ultra up
+       gap to watchPace, and a mean over 40 ms for 3 seconds gives Ultra up
        for Modern. The loop is held here and the gaps are handed over by
        hand, so the figures are the test's and not this machine's. First in
-       a race, in an Ultra the player picked. What must NOT trip it comes
-       first: gaps too long to be frames, gaps of a healthy 60 a second, one
-       long frame among those, and slow frames while the race is paused.
-       Then 74 gaps of 40 ms, a shade under 3 seconds, and it must still be
-       Ultra; six more and it must be Modern, saved, with the player told
-       why. Last, Ultra picked again in the same load is left alone. */
+       a race, in an Ultra the player picked, on the slowest device there
+       is: every gap 300 ms, which is over the 250 ms a gap may be and still
+       be taken for a frame. What must NOT trip it comes first: gaps of a
+       healthy 60 a second, one slow frame among those, one, two and three
+       gaps of 300 ms among those (a change of tab or of tier is a long gap
+       that stands alone), and slow frames while the race is paused. Then
+       the run of them. The first three are left out and each one after
+       counts as 250 ms, so 14 are a shade under 3 seconds and it must still
+       be Ultra; one more and it must be Modern, saved, with the player
+       told why. (Until 24 Nov 2026 every such gap was left out, however
+       many came in a row, and this check required 200 of them to leave
+       Ultra on: the guard did nothing for the devices that needed it
+       most.) Last, Ultra picked again in the same load is left alone. */
     await bootWithSettings({ quality: 'ultra' }, 1, { pace: true });
     await page.evaluate(() => { window.MCL64.photoHold = true; });
     await page.keyboard.press('Enter');
@@ -777,33 +784,62 @@ function tamper(o) {
       const feed = (ms, n) => { for (let i = 0; i < n; i++) g.watchPace(ms); return g.tierOn; };
       const stored = () => { try { return JSON.parse(localStorage.getItem('mcl64.settings.v1')).quality; } catch (e) { return null; } };
       const r = { racing: (g.state === 1 || g.state === 2) && !g.paused, start: g.tierOn };
-      r.longGaps = feed(300, 200);
       r.healthy = feed(16.7, 400);
       g.watchPace(200);
-      r.oneLongFrame = feed(16.7, 400);
+      r.oneSlowFrame = feed(16.7, 400);
+      r.longAlone = [1, 2, 3].map((n) => { feed(300, n); return feed(16.7, 400); }).join();
       g.paused = true;
-      r.paused = feed(40, 200);
+      r.paused = feed(300, 200);
       g.paused = false;
-      r.justUnder = feed(40, 74);
-      r.over = feed(40, 6);
+      r.justUnder = feed(300, 14);
+      r.over = feed(300, 1);
       r.settings = g.settings.quality; r.stored = stored(); r.shadows = g.shadowRig.mode; r.notice = g.notice;
       r.label = document.getElementById('set-quality').textContent;
       g.hookSelect(null, 'ultra');
-      r.again = feed(40, 200);
+      r.again = feed(300, 200);
       g.photoHold = false;
       return r;
     });
-    check(pace.racing && pace.start === 'ultra' && pace.longGaps === 'ultra' && pace.healthy === 'ultra' && pace.oneLongFrame === 'ultra' &&
-      pace.paused === 'ultra' && pace.justUnder === 'ultra' && pace.over === 'modern' && pace.settings === 'modern' &&
-      pace.stored === 'modern' && pace.shadows === 'single' && pace.label === 'MODERN' && /TOO SLOW/.test(pace.notice) &&
-      pace.again === 'ultra' && consoleErrors.length === 0 && uncaught.length === 0,
-      'a race in an Ultra the player picked, with frames 40 ms apart for 3 seconds, steps down to Modern, saves it and says why, and nothing else trips it',
+    check(pace.racing && pace.start === 'ultra' && pace.healthy === 'ultra' && pace.oneSlowFrame === 'ultra' &&
+      pace.longAlone === 'ultra,ultra,ultra' && pace.paused === 'ultra' && pace.justUnder === 'ultra' && pace.over === 'modern' &&
+      pace.settings === 'modern' && pace.stored === 'modern' && pace.shadows === 'single' && pace.label === 'MODERN' &&
+      /TOO SLOW/.test(pace.notice) && pace.again === 'ultra' && consoleErrors.length === 0 && uncaught.length === 0,
+      'a race in an Ultra the player picked, on a device under 4 frames a second, steps down to Modern after 3 seconds, saves it and says why, and a long gap that stands alone does not trip it',
       JSON.stringify(pace) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+
+    /* HELD TO 30 FRAMES A SECOND IS NOT SLOW. Low Power Mode on a phone, a
+       laptop saving energy and a 30 Hz screen all give gaps of 33 ms on a
+       device that may run Ultra with time to spare, and Modern would run at
+       the same 30 there. So 400 such gaps, 13 seconds of them, leave Ultra
+       on (the limit was a mean over 25 ms once, and took Ultra away from
+       every such device on every load). Gaps of 45 ms, 22 frames a second,
+       are a slow device: 60 of them are under 3 seconds however the mean
+       stood when they began, and it must still be Ultra; by 30 more it must
+       be Modern, saved, with the player who picked it told why. */
+    await bootWithSettings({ quality: 'ultra' }, 1, { pace: true });
+    const capped = await page.evaluate(() => {
+      const g = window.MCL64;
+      const feed = (ms, n) => { for (let i = 0; i < n; i++) g.watchPace(ms); return g.tierOn; };
+      g.photoHold = true;
+      const r = { start: g.tierOn };
+      r.thirty = feed(33.4, 400);
+      r.justUnder = feed(45, 60);
+      r.over = feed(45, 30);
+      r.settings = g.settings.quality; r.shadows = g.shadowRig.mode; r.notice = g.notice;
+      try { r.stored = JSON.parse(localStorage.getItem('mcl64.settings.v1')).quality; } catch (e) { r.stored = null; }
+      g.photoHold = false;
+      return r;
+    });
+    check(capped.start === 'ultra' && capped.thirty === 'ultra' && capped.justUnder === 'ultra' && capped.over === 'modern' &&
+      capped.settings === 'modern' && capped.stored === 'modern' && capped.shadows === 'single' && /TOO SLOW/.test(capped.notice) &&
+      consoleErrors.length === 0 && uncaught.length === 0,
+      'a browser held to 30 frames a second keeps its Ultra, and frames 45 ms apart for 3 seconds step it down',
+      JSON.stringify(capped) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
 
     /* THE SAME GUARD ON THE TITLE SCREEN, for the Ultra nobody picked: a
        browser with nothing saved, which never leaves the title. Healthy
-       frames, then 74 slow ones and it is still Ultra, six more and it is
-       Modern. QUIETLY: no notice, and nothing with the words of a fault in
+       frames, then 80 gaps of 45 ms and it is still Ultra, six more and it
+       is Modern. QUIETLY: no notice, and nothing with the words of a fault in
        it. Saved as the game's pick, so the load after it is Modern too, and
        says nothing either. Then the player picks Ultra on the button: it is
        built, it is theirs, and the guard, which runs afresh in every load,
@@ -816,8 +852,8 @@ function tamper(o) {
       /* Game's STATE: 0 is the title */
       const r = { title: g.state === 0, start: g.tierOn, chosen: g.settings.tierChosen };
       r.healthy = feed(16.7, 400);
-      r.justUnder = feed(40, 74);
-      r.over = feed(40, 6);
+      r.justUnder = feed(45, 80);
+      r.over = feed(45, 6);
       r.settings = g.settings.quality; r.shadows = g.shadowRig.mode; r.notice = g.notice; r.message = g.message;
       r.label = document.getElementById('set-quality').textContent;
       r.trial = localStorage.getItem('mcl64.tierTrial.v1');
@@ -835,7 +871,7 @@ function tamper(o) {
     const loudly = await page.evaluate(() => {
       const g = window.MCL64;
       for (let i = 0; i < 400; i++) g.watchPace(16.7);
-      for (let i = 0; i < 80; i++) g.watchPace(40);
+      for (let i = 0; i < 100; i++) g.watchPace(45);
       return { on: g.tierOn, notice: g.notice };
     });
     const loudSaved = await storedSettings();

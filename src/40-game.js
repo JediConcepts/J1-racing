@@ -130,15 +130,28 @@ var TIER_FELL = {
    tier a new player is given, so a device that cannot hold it has to be
    found out before the player has done anything. The gap between frames is
    kept as a running mean over about `meanMs`; when the mean has stood over
-   `slowMs` for `forMs`, the tier is given up for TIER_SAFE. A gap over
-   `ignoreMs` is not a slow frame, it is a change of tab or of tier, and is
-   left out altogether. 25 ms is 40 frames a second: under that the car is
-   felt to stutter.
+   `slowMs` for `forMs`, the tier is given up for TIER_SAFE.
+
+   WHY 40 ms. It is 25 frames a second. A phone in Low Power Mode, a laptop
+   saving energy and a 30 Hz screen all hold the browser to 30 frames a
+   second, which is a gap of 33 ms on a device that may be running the tier
+   with time to spare: a healthy device with a cap on it, and Modern would
+   run at the same 30 there. The limit has to stand clear of that, or such
+   a device has the tier taken away on every load for nothing (the limit
+   was 25 ms once, and did exactly that). Under 25 frames a second no cap
+   explains the gap, and the device is a slow one.
+
+   A gap over `ignoreMs` that stands alone is not a slow frame, it is a
+   change of tab or of tier, and is left out altogether: the first
+   `ignoreRun` of them in a row are. A device that takes that long over
+   every frame is the slowest there is, and the one the guard is most for,
+   so from the next long gap in the row each counts, as `ignoreMs` and no
+   more.
 
    PACE_SAID is for the player who picked the tier, and says why it went. A
    player who never picked it is not told anything alarming: the tier
    changes, and a race that is running flashes the name of the new one. */
-var PACE = { slowMs: 25, forMs: 3000, ignoreMs: 250, meanMs: 500 };
+var PACE = { slowMs: 40, forMs: 3000, ignoreMs: 250, ignoreRun: 3, meanMs: 500 };
 var PACE_SAID = 'ULTRA TOO SLOW ON THIS DEVICE: NOW MODERN';
 
 /* The names settings.timeOfDay may hold, in the order the settings button
@@ -384,10 +397,12 @@ function Game(host, renderer) {
   this.trialLeft = 0;
   this.tierFell = null;
   /* the running mean of the frame gap in a heavy tier, how long it has
-     stood over the limit, both in milliseconds, and whether this load has
-     already stepped down once (see watchPace) */
+     stood over the limit, both in milliseconds, how many gaps too long to
+     be a frame have come in a row, and whether this load has already
+     stepped down once (see watchPace) */
   this.paceMean = 0;
   this.paceSlow = 0;
+  this.paceLong = 0;
   this.paceDone = false;
   /* OFF to start. The halo is the one part of the car that sits between the
      camera and the driver, and the onboard mounts are framed through it — so
@@ -3360,10 +3375,10 @@ Game.prototype.countFrame = function () {
 
    It steps down ONCE in a load. A player who picks the heavy tier again has
    chosen it, and is not argued with a second time in that load; the load
-   after it watches again. (A screen or a power saving mode that holds the
-   browser to 30 frames a second looks the same from here as a device that
-   cannot keep up, so the guard can be wrong, and must not be able to be
-   wrong over and over.)
+   after it watches again. (A browser that something holds back looks the
+   same from here as a device that cannot keep up. The limit is set clear
+   of the common case, a cap at 30 frames a second, but the guard can still
+   be wrong, and must not be able to be wrong over and over.)
 
    What it gives up is saved, so the device stays stepped down, and it is
    saved as the game's pick and not the player's (storeSettings). A player
@@ -3373,9 +3388,18 @@ Game.prototype.watchPace = function (gapMs) {
   if (this.paceDone || this.paused || document.hidden || this.tierTimer || !this.tierOn || !TIERS[this.tierOn].heavy) {
     this.paceMean = 0;
     this.paceSlow = 0;
+    this.paceLong = 0;
     return;
   }
-  if (!(gapMs > 0) || gapMs > PACE.ignoreMs) return;
+  if (!(gapMs > 0)) return;
+  /* a long gap is left out while it stands alone, and counts once it is
+     plainly how this device draws (see PACE) */
+  if (gapMs > PACE.ignoreMs) {
+    if (++this.paceLong <= PACE.ignoreRun) return;
+    gapMs = PACE.ignoreMs;
+  } else {
+    this.paceLong = 0;
+  }
   this.paceMean = this.paceMean > 0
     ? this.paceMean + (gapMs - this.paceMean) * Math.min(1, gapMs / PACE.meanMs)
     : gapMs;
@@ -3387,6 +3411,7 @@ Game.prototype.watchPace = function (gapMs) {
   this.paceDone = true;
   this.paceMean = 0;
   this.paceSlow = 0;
+  this.paceLong = 0;
   this.settings.quality = TIER_SAFE;
   this.settings.tierChosen = false;
   this.trialLeft = 0;
