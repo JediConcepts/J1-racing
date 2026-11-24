@@ -379,9 +379,11 @@ Game.prototype.buildWorld = function () {
      light, where the same share of haze reads as far more of it on a dark
      surface. A surface part way into the haze therefore came out paler and
      redder than on the live game, most of all in the far views of Modern.
-     Starting the haze 100 m further out takes that back off, and is what
-     makes the picture match the live one again (the numbers for 150, 250 and
-     300 are in docs/v2-picture-log.md). The far limit, 980 m, is unchanged:
+     Starting the haze 100 m further out takes most of that back off. It
+     does not make the picture match the live one: of the three starts
+     measured (150, 250 and 300 m) it is the one that leaves the 28 stills
+     nearest the live ones on average, and the numbers are in
+     docs/v2-picture-log.md. The far limit, 980 m, is unchanged:
      a surface that far away is fully in the haze, as before, and reads as
      the same colour as before (see applyHaze). */
   scene.fog = new THREE.Fog(SKY_HAZE, 250, 980);
@@ -481,10 +483,13 @@ Game.prototype.buildWorld = function () {
    own map, which is all it takes for its number to apply again. The renderer
    filters the one texture once, whoever holds it. Materials that leave the
    strength at 1 are not touched: for them the scene's environment already
-   does the same thing. */
+   does the same thing.
+
+   The scene always has an environment by the time this runs: buildEnvironment
+   sets it before anything is swept and nothing takes it away again, so there
+   is no check for a missing one. */
 Game.prototype.ownEnvironment = function (root) {
   var env = this.scene.environment;
-  if (!env) return;
   root.traverse(function (o) {
     if (!o.material) return;
     var m = o.material.length ? o.material : [o.material];

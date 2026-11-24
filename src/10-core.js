@@ -22,7 +22,8 @@
    test that evaluates the source files with THREE gets the engine in the
    state the game runs it in, which a line in build.js's wrapper would not.
 
-   WHY GUARDED, and why it can throw. Three cases reach this line:
+   WHY GUARDED, and why it can throw. The guard says nothing in exactly two
+   cases, and each is silent because there is nothing to switch off:
 
      no THREE at all   test/music.test.js evaluates this file with no engine,
                        so the file must load without one. Nothing else at
@@ -30,13 +31,17 @@
      r128              tools/bake-tracks.js (and test/track-bake.test.js
                        through it) evaluates this file with the r128 it
                        samples the circuits with. r128 has no colour
-                       management to switch off. Nothing is done.
-     anything else     has to have THREE.ColorManagement. The bundle only
-                       carries the name because tools/three-entry.webgpu.js
-                       lists it, and a bundle rebuilt without it would run
-                       with management ON and no error, every lit surface
-                       about a third as bright. So that is an error here,
-                       at load, where it cannot be missed. */
+                       management at all: a colour is what it is handed.
+                       Nothing is done. It is known by THREE.REVISION being
+                       '128' and by nothing looser, so no other engine can
+                       pass for it.
+
+   Every other case is an engine that manages colour, and it has to have
+   THREE.ColorManagement. The bundle only carries the name because
+   tools/three-entry.webgpu.js lists it, and a bundle rebuilt without it
+   reports another revision, or none, and would run with management ON and
+   no error, every lit surface about a third as bright. So that is an error
+   here, at load, where it cannot be missed. */
 if (typeof THREE !== 'undefined') {
   if (THREE.ColorManagement) {
     THREE.ColorManagement.enabled = false;
