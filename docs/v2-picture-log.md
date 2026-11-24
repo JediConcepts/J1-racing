@@ -164,3 +164,113 @@ For the three older circuits (Silverstone, Indianapolis, Brands Hatch), against 
 Monaco is new with main, so it has no earlier picture. Its buildings are different on every load in the live game (see "913ee61: stills"); the stills show one fixed set of them.
 
 What is live is the reference picture. None of the above is a fault to be put back.
+
+## Task 4: the vendoring tool
+
+Written on ce5272a. `node tools/vendor-three.js <webgl|webgpu> <workdir>` turns three.js 0.187.0, which ships ES modules only, into one classic script that defines the global `THREE`. It was run with the scratchpad folder that already held both packages as `<workdir>`; nothing was downloaded. Nothing in the game changed: `vendor/three.min.js` (r128) is still what `build.js` reads. The two built files are on disk and not committed; task 5 decides which one stays.
+
+- three 0.187.0 (`REVISION` reads `187`), esbuild 0.28.2, node 22.22.2. The tool pins both package versions and fetches a package only when it is missing from `<workdir>` or there at another version.
+- esbuild options: `bundle`, `format: 'iife'`, `globalName: 'THREE'`, `minify`, `legalComments: 'inline'`, a banner (the licence header) and a footer (below). No target is set.
+
+| file | bytes | gzip -9 | SHA-256 |
+|---|---|---|---|
+| `vendor/three.webgl.js` | 594,148 | 148,333 | `1c5121c6aed776ba0d5f180dd63174727359ba4a85590ddd4ef387fbac38da46` |
+| `vendor/three.webgpu.js` | 853,346 | 232,390 | `525bee5ef2429c0e035ef0e67006f42573db46159da9031c5926c71537ae48b9` |
+| `vendor/three.min.js` (r128, for scale) | 603,445 | 148,752 | not taken |
+
+The page: `node build.js` at ce5272a gives a standalone page of 1,322,522 bytes and a fragment of 1,317,899. By arithmetic alone (take out r128, put in the new file), the standalone page would be about 1,313,000 bytes with the WebGL flavour and about 1,572,000 with the WebGPU flavour, against the limit of 2,500,000. That is an estimate. No page was built with either file; task 5 measures it.
+
+### Names each entry exports
+
+Step 1 of the task: every addon path and name in the plan was checked against the unpacked `three@0.187.0` package, by reading each file's `export` lines and its JSDoc. None differ from the plan, so the plan's list is unchanged. The three.js website was not consulted: the package is the authority, and its JSDoc is the text of the 0.187 documentation.
+
+| plan name | file in the package | what the file exports |
+|---|---|---|
+| `CSM` | `examples/jsm/csm/CSM.js` | `CSM` |
+| `Sky` | `examples/jsm/objects/Sky.js` | `Sky` |
+| `EffectComposer` | `examples/jsm/postprocessing/EffectComposer.js` | `EffectComposer` |
+| `RenderPass` | `examples/jsm/postprocessing/RenderPass.js` | `RenderPass` |
+| `ShaderPass` | `examples/jsm/postprocessing/ShaderPass.js` | `ShaderPass` |
+| `UnrealBloomPass` | `examples/jsm/postprocessing/UnrealBloomPass.js` | `UnrealBloomPass` |
+| `OutputPass` | `examples/jsm/postprocessing/OutputPass.js` | `OutputPass` |
+| `CSMShadowNode` | `examples/jsm/csm/CSMShadowNode.js` | `CSMShadowNode` |
+| `SkyMesh` | `examples/jsm/objects/SkyMesh.js` | `SkyMesh` |
+| the bloom node | `examples/jsm/tsl/display/BloomNode.js` | the function `bloom` by name, the class `BloomNode` as the default |
+
+`build/three.webgpu.js` has `class RenderPipeline`, and `PostProcessing` is a subclass of it that warns it was renamed in r183. `forceWebGL` is a parameter of `WebGPURenderer`.
+
+`grep -oh "THREE\.[A-Za-z0-9_]*" src/*.js | sort -u` on the tree gives 43 names. `sRGBEncoding` is gone from 0.187 and is in neither entry. `WebGLRenderer` is not in the WebGPU build.
+
+`vendor/three.webgl.js`, 56 names on `THREE`:
+
+- 42 the source uses today: `ACESFilmicToneMapping AmbientLight BackSide BoxGeometry BufferAttribute BufferGeometry CanvasTexture Color CylinderGeometry DirectionalLight DoubleSide EquirectangularReflectionMapping Euler Float32BufferAttribute Fog Group HemisphereLight LinearFilter LinearMipmapLinearFilter Matrix4 Mesh MeshBasicMaterial MeshStandardMaterial NearestFilter NearestMipmapLinearFilter NoToneMapping OrthographicCamera PCFSoftShadowMap PMREMGenerator PerspectiveCamera PlaneGeometry Quaternion RGBAFormat RepeatWrapping Scene ShaderMaterial SphereGeometry TorusGeometry Vector2 Vector3 WebGLRenderTarget WebGLRenderer`
+- 7 the move needs that the source does not name yet: `HalfFloatType LinearSRGBColorSpace MathUtils Object3D PCFShadowMap REVISION SRGBColorSpace`
+- 7 addons: `CSM Sky EffectComposer RenderPass ShaderPass UnrealBloomPass OutputPass`
+
+`vendor/three.webgpu.js`, 58 names on `THREE`:
+
+- 41 the source uses today: the 42 above less `WebGLRenderer`
+- the same 7 the move needs
+- 6 for this renderer: `MeshBasicNodeMaterial NodeMaterial QuadMesh RenderPipeline RenderTarget WebGPURenderer`
+- `TSL`, an object holding 16 functions from `three/tsl`: `Fn If clamp dot float floor mix mod pass renderOutput texture uniform uv vec2 vec3 vec4`
+- 3 addons: `CSMShadowNode SkyMesh bloom`
+
+Choices the plan did not make, each open to change in task 5 by editing an entry and running the tool again:
+
+- The `three/tsl` functions sit under `THREE.TSL`, the name three.js itself gives them, and not flat on `THREE`. They cannot be flat: `log` is a console helper in `three/webgpu` and a logarithm in `three/tsl`. The 16 are what `POST_FRAG` needs when it is written as nodes, plus `pass` and `renderOutput`. No game code uses them yet, so the list is a starting point.
+- The seven names "the move needs" are my reading of tasks 5 and 6, not a list from the plan.
+- `ShaderMaterial` is exported by the WebGPU build, but `WebGPURenderer` does not draw it, so the post pass has to become a node material on that path.
+
+What the lists save, measured by bundling `export *` in their place with the same options: WebGL 797,980 bytes against 594,148 (203,832 saved); WebGPU 1,134,480 against 853,346 (281,134 saved).
+
+One thing found while building, for whoever adds an addon: in the WebGPU flavour a plain `import ... from 'three'` inside an addon must resolve to the WebGPU build. `CSMFrustum.js` imports `Vector3` and `Matrix4` from `three`, and sent to `build/three.module.js` that one import pulled the whole WebGL shader library into the file: 1,016,492 bytes, where the same entry with `three` mapped to `build/three.webgpu.js` gives 853,346. The tool does the mapping. The WebGL flavour has no `three/webgpu` or `three/tsl` at all, so an addon written for the other renderer fails the build there.
+
+### Licence
+
+Each file begins with three.js's own header, read from the package at build time and not typed into the tool:
+
+```
+/**
+ * @license
+ * Copyright 2010-2026 Three.js Authors
+ * SPDX-License-Identifier: MIT
+ */
+```
+
+`legalComments: 'inline'` keeps every `@license` comment where it stands, so an addon that carries its own notice would keep it. The bundler's own list of inputs is 16 package files for the WebGL file and 7 for the WebGPU file. Apart from the three.js build files (`three.core.js`, `three.module.js`, `three.webgpu.js`, `three.tsl.js`), none of them has a licence notice of its own today (each was searched for `@license`, `@preserve`, `copyright` in any case, `SPDX`, `/*!` and `//!`). The header therefore appears 3 times in the WebGL file and 4 times in the WebGPU file: once at the top, and once at the head of each three.js build file that went in.
+
+### The CSP check
+
+`grep -c "new Function\|eval(\|WebAssembly" vendor/three.webgl.js vendor/three.webgpu.js` prints `0` for both files. There is no hit to explain. Counting each token by occurrence and not by line gives the same: `new Function` 0, `eval(` 0 and `WebAssembly` 0 in each file, and the bare word `eval` and the string `wasm` do not occur either.
+
+Wider than the brief's grep, since a minifier can hide things:
+
+- `Function(` occurs 29 times in the WebGPU file and never in the WebGL file. All 29 are the tails of method names: `parseFunction(`, `getNodeFunction(`, `generateWrapFunction(`, `setRenderObjectFunction(`, `getRenderObjectFunction(`, `getShadowRenderObjectFunction(`, `_handleObjectFunction(`, `_currentRenderObjectFunction(`, `getToneMappingFunction(` and `compareFunction(`. None is the `Function` constructor.
+- `import(`, `importScripts`, `new Worker`, `fetch(` and `XMLHttpRequest`: 0 in both files.
+- `</script`: 0 in both files, so `build.js` will not refuse either.
+- URLs: `http://www.w3.org/1999/xhtml` in both (the namespace passed to `createElementNS`); in the WebGL file one link inside a shader comment; in the WebGPU file one link inside a warning message and one shader comment link that occurs twice. Nothing fetches them.
+
+In a browser: each file was put into a page as an inline classic script, served with the `Content-Security-Policy` header from `deploy/.htaccess`, in the stills browser (Chromium 159.0.8154.6, headless, SwiftShader). Both defined `window.THREE`, drew a red box through a post chain (the WebGL file through `EffectComposer`, `RenderPass`, `UnrealBloomPass`, a `ShaderPass` and `OutputPass`, with a `Sky` and a `CSM` constructed; the WebGPU file through `RenderPipeline`, `TSL.pass` and `bloom`, with a `SkyMesh`, a `CSMShadowNode` and a `TSL.Fn` node constructed), read back 255,0,0,255 at the centre of the canvas, and raised no `securitypolicyviolation` event and no page error. **That browser has no WebGPU adapter, so the WebGPU file ran on its WebGL 2 fallback both times, with and without `forceWebGL`. The WebGPU backend itself has not been run by anything in this task.** `node test/csp.js` was not run, because no page was built with either file.
+
+### Under node
+
+Loaded the way `test/physics.test.js` loads the r128 file: `global.window = global; global.self = global; new Function(source)();` then `global.THREE`.
+
+- WebGL file: evaluates, `global.THREE` is defined with 56 names, none undefined.
+- WebGPU file: evaluates, `global.THREE` is defined with 58 names, none undefined. No global is missing; it needs nothing a browser has in order to load.
+- Both also evaluate in bare node, with neither `window` nor `self` set.
+- In each, a `Vector3` turned by a `Quaternion` made from an `Euler` gave the right answer, a `Mesh` of a `BoxGeometry` and a `MeshStandardMaterial` could be made and added to a `Group`, and `MathUtils.generateUUID()` returned a string.
+
+This works because of one line the plan did not have. esbuild's `--global-name=THREE` writes `var THREE = ...`, which is a global in a page but a local inside `new Function`, so `global.THREE` came out undefined. The tool adds the footer `globalThis.THREE=THREE;`. In a page it changes nothing.
+
+Past what the task asked, because task 5 has to know (criterion 6): `test/sim-parity.test.js` was run against each new file, with the one line that names the vendor file swapped in memory and the test left unchanged on disk, never with `--record`. All four digests match the golden file with the WebGL file and with the WebGPU file (4 passed, 0 failed, each time). The test as committed, on r128, also passes.
+
+### Repeatability
+
+Each flavour was built twice from the scratchpad workdir, and once more from a second workdir that the tool filled itself (its fetch path, run with `npm_config_offline=true` so npm could only read its own cache and nothing was downloaded). The three builds of each flavour are identical byte for byte (`cmp`), with the SHA-256 values in the table above. The second workdir is at a different path, so the path does not reach the output.
+
+The tool refuses, with exit code 2 and before doing anything, when `<workdir>` is the repo, a folder inside it, or a symlink to either; it also stops when `<workdir>` is not a folder or the flavour is not one of the two. An import in an entry that is not `three`, `three/webgpu`, `three/tsl` or `three/addons/...` fails the build, and a failed build leaves the file in `vendor/` as it was.
+
+### One thing for task 6 that this turned up
+
+`PCFSoftShadowMap` is still exported by 0.187 but is no longer drawn. Both renderers warn once and use `PCFShadowMap` (the WebGL message: `WebGLShadowMap: PCFSoftShadowMap has been removed. Using PCFShadowMap instead.`). The renderer's shadow map type is set to `PCFSoftShadowMap` in `buildRenderer` today, so "shadows as today" in task 6 step 7 cannot be the same filter. `PCFShadowMap` is in both entries for that reason. How different the shadow edge looks is not known; nothing was drawn with shadows here.
