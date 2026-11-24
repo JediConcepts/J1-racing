@@ -325,6 +325,7 @@ The console of the stills page was watched on every capture (a preloaded script 
 | reference | `stills/before-main`, r128 | 0 | 0 | the merged main |
 | A1 | `v0.113 dev 1308d33*` | 21.4 to 84.8 | 28 | the bundle; `WebGPURenderer`; boot waits for `init()`; `RenderTarget`; the post pass as a node; the environment handed over directly. Colours wrong, as expected |
 | A2 | `v0.114 dev c33c599*` | 6.0 to 29.9 | 28 | colour management off, as the first statement of the game. Lit surfaces come back up: nothing is converted twice any more |
+| A3 | `v0.115 dev 20abfe9*` | 11.6 to 35.4 | 28 | canvas textures and the environment canvas flagged sRGB. The means go UP: the textures stop reading too bright, and the lights are still short by a factor of pi (step A4) |
 
 ### A1: the bundle, and a game that draws through it
 
@@ -353,3 +354,9 @@ The Retro pass, checked the spike's way now that an unlit colour reaches it unch
 The spike had 99.56% for Retro headless with a half float target and 99.74% in Chrome with an 8 bit one. In Modern every differing pixel is out by 1 or 2 levels (11,537 by 1, 2,002 by 2): the tone mapping is the engine's own ACES on a half float frame, where r128 ran its own on the way into an 8 bit target.
 
 One thing this turned up about the stills themselves. The same two frames taken as screenshots, the way the stills tool takes them, are NOT 99.99% identical: 49.8% of pixels are identical, nearly all the rest differ by exactly 1 level, and the channel means are 0.21, 0.28 and 0.17. The canvas holds the same pixels; the browser scales and composites the new canvas a shade differently from the old one. So every Retro still carries about a quarter of a level that is not the game's picture. It is far below the gate and it is not hidden in any figure here, but a still that reads 0.3 against the reference is not evidence of a difference in the game. The cause was not looked for (the new canvas's context is made by the engine with an alpha channel, where r128's was opaque; that is a guess).
+
+### A3: texture colour space
+
+`texture.encoding = THREE.sRGBEncoding` became `texture.colorSpace = THREE.SRGBColorSpace` in `texFromCanvas` (`src/10-core.js`) and on the environment canvas (`buildEnvironment`). Between A1 and here the old line assigned `undefined` to a property the engine no longer reads, so every canvas texture was taken as linear and read too bright. The car's blob shadow texture (`src/30-cars.js`) never had the flag on r128 and is left without it.
+
+The means rise at this step (Retro 12.7 to 17.6, Modern 17.4 to 24.7 on the per still average), and that is the step working, not failing. At A2 two errors pulled against each other: textures too bright, lights too dim. This step removes the first, so textured surfaces are now darker than the reference everywhere, which is what a scene lit at 1/pi of its strength should look like. The sky, which is unlit and has no texture, did not move.

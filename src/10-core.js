@@ -207,7 +207,7 @@ function texFromCanvas(cv, repX, repY, nearest) {
      Flagging it lets the renderer decode to linear before lighting, which is
      the half of colour management that happens on the way IN. Skip it and
      every texture reads too bright and too contrasty under PBR. */
-  t.encoding = THREE.sRGBEncoding;
+  t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
 

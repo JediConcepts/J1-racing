@@ -280,7 +280,7 @@ Game.prototype.buildEnvironment = function (scene) {
 
     var tex = new THREE.CanvasTexture(cv);
     tex.mapping = THREE.EquirectangularReflectionMapping;
-    tex.encoding = THREE.sRGBEncoding;
+    tex.colorSpace = THREE.SRGBColorSpace;
 
     /* Kept, not disposed: the renderer filters it when it first draws and
        reads it again if the scene's environment is ever set anew. */
