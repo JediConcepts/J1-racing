@@ -3780,6 +3780,12 @@ Game.prototype.bench = function (opts) {
    ========================================================================= */
 
 (function boot() {
+  /* First of all: from here on, every failure is this function's to report.
+     The guard script at the head of the page (index.template.html) shows
+     the panel for a page that never got this far, and stands down when it
+     sees this. */
+  window.MCL64_BOOTED = true;
+
   /* One line on the console so a build is identifiable from a devtools
      screenshot, without anyone opening the settings panel. */
   if (window.MCL64_BUILD) {
@@ -3789,8 +3795,10 @@ Game.prototype.bench = function (opts) {
   var host = document.getElementById('screen');
   var fallback = document.getElementById('fallback');
 
-  /* Every way the picture can fail ends here: the panel, with a sentence a
-     player can act on. `lead` replaces the panel's own first line, which
+  /* Every way the picture can fail once boot has begun ends here: the
+     panel, with a sentence a player can act on. (A browser that cannot read
+     the engine's script never gets to boot; the guard script in the
+     template shows the same panel for it.) `lead` replaces the panel's own first line, which
      says the game could not start, for the one case where it had started. */
   function fail(msg, lead) {
     if (fallback) {

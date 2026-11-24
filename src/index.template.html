@@ -1230,7 +1230,7 @@
     <div class="overlay" id="fallback">
       <div class="overlay-mark">NO SIGNAL</div>
       <div class="overlay-note">
-        This game needs WebGL, and it could not start.
+        The game could not start.
         <br /><span id="fallback-detail"></span>
       </div>
     </div>
@@ -1336,6 +1336,48 @@
   </footer>
 </main>
 
+<script>
+/* THE GUARD FOR A BROWSER THAT CANNOT READ WHAT FOLLOWS. The three scripts
+   below are the whole game, and the first is the 3D engine, written in
+   syntax from 2021 (class static blocks: Chrome 94, Firefox 93, Safari
+   16.4). An older browser refuses the whole script before it runs a line of
+   it, the game's script then stops at its first use of the engine, and the
+   game's own way of failing politely (boot, in 40-game.js) is never
+   reached: the loading panel stayed up for ever. So this script is a
+   separate one, comes first, and is written in the oldest syntax there is:
+   it has to run where the others cannot.
+
+   What it does. It keeps the first uncaught error, and when the page has
+   loaded it asks one question: did the game's boot begin? The game's script
+   is inline, so by then it has either reached boot, which sets
+   window.MCL64_BOOTED as its first act, or it never will. If it did not,
+   the fallback panel is shown, saying so. From its first act on, boot
+   reports its own failures, and this script does nothing more.
+
+   It cannot fire on a start that is only slow: boot sets the mark before it
+   asks the renderer for anything, and nothing here waits on a clock. The
+   site's content security policy allows inline scripts (deploy/.htaccess),
+   and test/csp.js loads the page under it. */
+(function () {
+  var first = '';
+  window.addEventListener('error', function (e) {
+    if (!first && !window.MCL64_BOOTED) first = e && e.message ? String(e.message) : 'an error with no message';
+  });
+  window.addEventListener('load', function () {
+    if (window.MCL64_BOOTED) return;
+    var panel = document.getElementById('fallback');
+    var detail = document.getElementById('fallback-detail');
+    if (!panel) return;
+    if (detail) {
+      detail.textContent = (typeof THREE === 'undefined'
+        ? 'This browser is too old to read the game\'s 3D engine. Try a newer browser.'
+        : 'The game\'s own script stopped before it could begin. Try a newer browser.')
+        + (first ? ' (' + first + ')' : '');
+    }
+    panel.style.display = 'flex';
+  });
+})();
+</script>
 <script>/*INJECT_THREE*/</script>
 <script>/*INJECT_CLOUD*/</script>
 <script>/*INJECT_GAME*/</script>

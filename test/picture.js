@@ -32,6 +32,15 @@
  * after a change of tier at run time, no material carries a canvas texture
  * without its node.
  *
+ * And, since the Ultra tier: a browser that cannot read the engine's script
+ * ends at the panel while a start that is only slow does not; the page's own
+ * two layers lie over Retro and Modern and not over Ultra; the Graphics
+ * button builds only the tier the clicks end on, and a heavy tier is on
+ * trial until it has drawn; the cascades hold still round a field of view
+ * step; a race too slow for Ultra steps down to Modern, and a touch device
+ * is not offered Ultra; and a change of tier or of hour leaves nothing
+ * behind in the renderer. Each check says what it is for where it stands.
+ *
  * Headless Chromium has no WebGPU adapter, so the default run only ever sees
  * the fallback. --webgpu runs the checks that mean something on the real
  * backend: the default path draws, a destroyed device is reported, and the
@@ -78,6 +87,23 @@ function tamper(o) {
     deny(HTMLCanvasElement.prototype);
     if (typeof OffscreenCanvas !== 'undefined') deny(OffscreenCanvas.prototype);
   }
+  if (o.slowInit) {
+    /* the renderer takes this many milliseconds longer to start */
+    let slow;
+    Object.defineProperty(window, 'THREE', {
+      configurable: true, enumerable: true,
+      get() { return slow; },
+      set(v) {
+        slow = v;
+        if (v && v.WebGPURenderer) {
+          const init = v.WebGPURenderer.prototype.init;
+          v.WebGPURenderer.prototype.init = function () {
+            return new Promise((r) => setTimeout(r, o.slowInit)).then(() => init.apply(this, arguments));
+          };
+        }
+      }
+    });
+  }
   if (o.failInit) {
     /* The bundle is `var THREE = ...` in a classic script, so it lands on a
        property of window that is already there, through this setter. That
@@ -107,7 +133,7 @@ function tamper(o) {
     : await chromium.launch({ headless: true, args: CHROMIUM_ARGS });
 
   let context = null, page = null;
-  let consoleErrors = [], uncaught = [];
+  let consoleErrors = [], uncaught = [], engineBroken = false;
 
   /* A fresh context for every boot, so nothing a boot was denied, and no
      setting it saved, reaches the next one. Waits until the page has either
@@ -132,11 +158,25 @@ function tamper(o) {
       for (const k in h) if (h[k] != null) localStorage.setItem(k, h[k]);
     }, held);
     page = await context.newPage();
+    engineBroken = false;
     consoleErrors = [];
     uncaught = [];
     page.on('console', (m) => { if (m.type() === 'error') consoleErrors.push(m.text().split('\n')[0].slice(0, 200)); });
     page.on('pageerror', (e) => uncaught.push(e.message));
     await localOnly(page, server.url);
+    /* `more.breakEngine` hands the page an engine script no browser can
+       read: the page as built, with a syntax error put at the start of the
+       engine. That is what a browser too old for the engine's syntax sees.
+       Registered after localOnly, so it is asked first. */
+    if (more && more.breakEngine) {
+      await page.route((u) => u.href.split('?')[0] === server.url, async (route) => {
+        const response = await route.fetch();
+        const html = await response.text();
+        const broken = html.replace('var THREE=', () => 'var THREE=@ a browser too old for this script @;');
+        engineBroken = broken !== html;
+        await route.fulfill({ response, body: broken });
+      });
+    }
     await page.goto(server.url + (query || ''), { waitUntil: 'load', timeout: 60000 });
     await settled();
   }
@@ -270,14 +310,14 @@ function tamper(o) {
     if (WEBGPU) {
       await boot('');
       const b = await backend(), look = await canvasLook();
-      check(b === 'webgpu' && notBlank(look) && consoleErrors.length === 0 && uncaught.length === 0,
-        'the WebGPU path draws with no errors',
+      check(b === 'webgpu' && notBlank(look) && !(await isVisible('#fallback')) && consoleErrors.length === 0 && uncaught.length === 0,
+        'the WebGPU path draws with no errors, and no fallback panel',
         'backend ' + b + ', ' + lookText(look) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
     } else {
       await boot('?renderer=webgl');
       let b = await backend(), look = await canvasLook();
-      check(b === 'webgl2' && notBlank(look) && consoleErrors.length === 0 && uncaught.length === 0,
-        'the fallback path draws with no errors',
+      check(b === 'webgl2' && notBlank(look) && !(await isVisible('#fallback')) && consoleErrors.length === 0 && uncaught.length === 0,
+        'the fallback path draws with no errors, and no fallback panel',
         'backend ' + b + ', ' + lookText(look) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
 
       await bootWith({ noWebGPU: true });   /* navigator.gpu is gone before load */
@@ -302,6 +342,40 @@ function tamper(o) {
       check(await isVisible('#fallback') && /WebGL 2/.test(said) && uncaught.length === 0,
         'WebGPU with no adapter and no WebGL 2 shows the fallback panel, and it says what is missing',
         'panel says: ' + JSON.stringify(said) + ', uncaught ' + JSON.stringify(uncaught));
+
+      /* A BROWSER TOO OLD TO READ THE ENGINE. The engine's script is refused
+         whole, the game's script dies at its first use of the engine, and
+         boot, which shows the panel for every other failure, is never
+         reached. The guard script at the head of the page must show it. The
+         two uncaught errors are the fault itself, so here they are wanted. */
+      await bootWith({}, '?renderer=webgl', null, 1, { breakEngine: true });
+      said = await fallbackText();
+      const stuck = await isVisible('#loading') && !(await isVisible('#fallback'));
+      check(engineBroken && await isVisible('#fallback') && /too old to read/.test(said) && /SyntaxError/.test(said) &&
+        uncaught.length >= 1 && !(await page.evaluate(() => !!window.MCL64)),
+        'a browser that cannot read the engine script ends at the fallback panel, and it says why',
+        (engineBroken ? '' : 'THE ENGINE SCRIPT WAS NOT BROKEN, ') + (stuck ? 'THE LOADING PANEL IS STILL UP AND THERE IS NO FALLBACK PANEL, ' : '') +
+        'panel says: ' + JSON.stringify(said) + ', uncaught ' + JSON.stringify(uncaught));
+
+      /* And the guard must not take a slow start for a dead one: a renderer
+         that needs four more seconds to start. Two seconds after the page
+         has loaded the loading panel is up and the fallback panel is not;
+         then the game arrives. */
+      await context.close();
+      context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: 1, reducedMotion: 'no-preference' });
+      await context.addInitScript(tamper, { slowInit: 4000 });
+      page = await context.newPage();
+      uncaught = [];
+      page.on('pageerror', (e) => uncaught.push(e.message));
+      await localOnly(page, server.url);
+      await page.goto(server.url + '?renderer=webgl', { waitUntil: 'load', timeout: 60000 });
+      await page.waitForTimeout(2000);
+      const waiting = { game: await page.evaluate(() => !!window.MCL64), loading: await isVisible('#loading'), fallback: await isVisible('#fallback') };
+      await settled();
+      const arrived = { game: await page.evaluate(() => !!window.MCL64), loading: await isVisible('#loading'), fallback: await isVisible('#fallback') };
+      check(!waiting.game && waiting.loading && !waiting.fallback && arrived.game && !arrived.loading && !arrived.fallback && uncaught.length === 0,
+        'a start that is only slow is left alone: no fallback panel while it waits, and the game arrives',
+        'two seconds after load ' + JSON.stringify(waiting) + ', in the end ' + JSON.stringify(arrived) + ', uncaught ' + JSON.stringify(uncaught));
 
       await bootWith({ failInit: true });   /* renderer.init() rejects */
       said = await fallbackText();
