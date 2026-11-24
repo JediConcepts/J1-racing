@@ -377,6 +377,56 @@ function tamper(o) {
       'switched to Modern the sun is the dome\'s, and switched back to Ultra it is golden hour again',
       'Modern ' + JSON.stringify(left) + ', Ultra ' + JSON.stringify(again) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
 
+    /* NOTHING IS LEFT BEHIND by a change of tier or of hour. The renderer is
+       asked what it holds: its textures and geometries, its uniform buffers,
+       and the render objects it keeps (one for each mesh drawn with each
+       material in each pass, each with a uniform buffer of its own; the set
+       is the engine's private renderer._objects._renderObjects, and a
+       missing one fails the check and does not pass it). The last two are
+       where a cascade's depth material that is never disposed shows: every
+       caster it drew stays in that set for good.
+
+       The frame loop is held and the frames are drawn by hand, so the camera
+       stands still and the same things are in view every time: the counts
+       must then come back to the figure exactly, not nearly. One trip round
+       the tiers comes first, because the first visit to a tier builds things
+       that are kept on purpose. */
+    await boot(WEBGPU ? '' : '?renderer=webgl');
+    const kept = await page.evaluate(([trips, hours]) => {
+      const g = window.MCL64;
+      const read = () => {
+        const m = g.renderer.info.memory, set = g.renderer._objects && g.renderer._objects._renderObjects;
+        return { textures: m.textures, geometries: m.geometries, uniformBuffers: m.uniformBuffers, renderObjects: set ? set.size : -1 };
+      };
+      const go = (q) => { g.hookSelect(null, q); g.drawFrame(1); };
+      const round = () => { go('ultra'); go('retro'); go('modern'); };
+      g.photoHold = true;
+      round();
+      const tiersBase = read();
+      for (let i = 0; i < trips; i++) round();
+      const tiersAfter = read();
+      const names = ['morning', 'midday', 'golden', 'dusk'];
+      go('ultra');
+      for (let i = 0; i < 4; i++) { g.setTimeOfDay(names[i]); g.drawFrame(1); }
+      const hoursBase = read();
+      for (let i = 0; i < hours; i++) { g.setTimeOfDay(names[i % 4]); g.drawFrame(1); }
+      const hoursAfter = read();
+      g.setTimeOfDay('midday');
+      go('modern');
+      g.photoHold = false;
+      return { tiersBase, tiersAfter, hoursBase, hoursAfter };
+    }, [30, 40]);
+    const same = (a, b) => a.renderObjects > 0 && a.textures === b.textures && a.geometries === b.geometries &&
+      a.uniformBuffers === b.uniformBuffers && a.renderObjects === b.renderObjects;
+    check(same(kept.tiersBase, kept.tiersAfter) && consoleErrors.length === 0 && uncaught.length === 0,
+      'thirty trips round the tiers (ultra, retro, modern) leave the renderer holding what it held after one',
+      'after one ' + JSON.stringify(kept.tiersBase) + ', after thirty more ' + JSON.stringify(kept.tiersAfter) +
+      ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+    check(same(kept.hoursBase, kept.hoursAfter) && consoleErrors.length === 0 && uncaught.length === 0,
+      'forty changes of hour in Ultra leave the renderer holding what it held after the first four',
+      'after four ' + JSON.stringify(kept.hoursBase) + ', after forty more ' + JSON.stringify(kept.hoursAfter) +
+      ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+
     /* The texture sweep: four circuits, each loaded in each tier and then
        switched at run time. Console errors count here, over all of it,
        because a node that fails to build says so there and only there. */

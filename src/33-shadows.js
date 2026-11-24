@@ -180,7 +180,19 @@ ShadowRig.prototype.dropCascades = function () {
   delete this.sun.shadow.shadowNode;
   /* takes the cascades' own lights back out of the scene */
   csm.dispose();
-  /* and their maps, which nothing else frees */
+  /* THE ENGINE'S SHADOW NODE FOR EACH CASCADE, which the line above does not
+     free. Each owns the depth material its cascade is drawn with, and the
+     renderer keeps one render object, with its own uniform buffer, for every
+     caster drawn with that material until the material is disposed. Left
+     alone, every visit to Ultra left those behind for good: 62 of them a
+     visit from the title screen at Silverstone, counted. Disposing of the
+     node frees the material, which lets go of the render objects, and the
+     map with it. `_shadowNodes` is a private field of the engine's node, so
+     it is on the list of things an engine update must check (CLAUDE.md). */
+  var nodes = csm._shadowNodes || [];
+  for (var n = 0; n < nodes.length; n++) nodes[n].dispose();
+  /* and their maps, for a cascade whose node was never made (a second
+     dispose of a map the node has already freed does nothing) */
   for (var i = 0; i < csm.lights.length; i++) csm.lights[i].shadow.dispose();
 };
 
