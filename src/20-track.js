@@ -840,6 +840,18 @@ function pushWall(rb, track, i, i2, off, h, vAcc) {
   else rb.quad(capIn0, capIn1, top1, top0, [[u0, 0.2], [u1, 0.2], [u1, 0], [u0, 0]], WHITE_C);
 }
 
+/* Marks a mesh that joins the shadows only in a tier that has them across
+   the whole view. castShadow and receiveShadow themselves are left alone
+   here: Modern's one map reaches 70 m from the player and these meshes have
+   never been in it. Game.applyShadowMode reads the mark and sets the two
+   flags when such a tier comes on, and clears them when it goes. Meshes
+   that already cast or receive in Modern (the trees, the ground) set their
+   flags directly and carry no mark. */
+function wideShadow(mesh, cast, receive) {
+  mesh.userData.wideShadow = { cast: !!cast, receive: !!receive };
+  return mesh;
+}
+
 /* A speedway is not dotted with grandstands, it is enclosed by them, so a
    circuit can ask for `standRing` and get unbroken terracing round the whole
    lap on BOTH sides — the outside wall and the infield.
@@ -916,7 +928,9 @@ function buildStandRing(scene, track, crowdMat) {
       geo.setAttribute('uv', new THREE.Float32BufferAttribute(sg.uv, 2));
       geo.setIndex(sg.idx);
       geo.computeVertexNormals();
-      scene.add(new THREE.Mesh(geo, sg.mat));
+      /* the raked crowd face stands on nothing, so it is the face itself that
+         casts the stand's shadow; it also receives (the roof's) */
+      scene.add(wideShadow(new THREE.Mesh(geo, sg.mat), true, g === 0));
     }
   }
 }
@@ -936,13 +950,13 @@ function buildStartGantry(track, scene) {
 
   var pillarGeo = new THREE.BoxGeometry(1.1, 8.4, 1.1);
   for (var s = -1; s <= 1; s += 2) {
-    var pillar = new THREE.Mesh(pillarGeo, darkMat);
+    var pillar = wideShadow(new THREE.Mesh(pillarGeo, darkMat), true, false);
     pillar.position.set(mid.x + lat.x * s * (WALL_HALF + 1.2), groundY(track, idx, s * (WALL_HALF + 1.2)) + 4.2, mid.z + lat.z * s * (WALL_HALF + 1.2));
     g.add(pillar);
   }
 
   
-    var beam = new THREE.Mesh(new THREE.BoxGeometry((WALL_HALF + 1.8) * 2, 1.9, 1.3), darkMat);
+    var beam = wideShadow(new THREE.Mesh(new THREE.BoxGeometry((WALL_HALF + 1.8) * 2, 1.9, 1.3), darkMat), true, false);
     beam.position.set(mid.x, mid.y + 8.0, mid.z);
     beam.rotation.y = yaw;
     g.add(beam);
@@ -953,6 +967,7 @@ function buildStartGantry(track, scene) {
     banner.position.set(mid.x, mid.y + 6.4, mid.z);
     /* spans the track, lettered face turned back toward the approach */
     banner.rotation.y = yaw + Math.PI;
+    wideShadow(banner, true, false);
     g.add(banner);
   
 
@@ -981,6 +996,8 @@ function buildStartGantry(track, scene) {
      reflection gives. */
   startLine.rotation.z = yaw;
   startLine.position.set(mid.x, mid.y + 0.02, mid.z);
+  /* part of the road as far as a shadow is concerned */
+  wideShadow(startLine, false, true);
   g.add(startLine);
 
   scene.add(g);
@@ -1015,7 +1032,7 @@ function buildScenery(track, scene) {
     var dist = WALL_HALF + 20;
     var facing = yaw + (side > 0 ? -Math.PI / 2 : Math.PI / 2);
 
-    var base = new THREE.Mesh(new THREE.BoxGeometry(46, 8, 15), standMat);
+    var base = wideShadow(new THREE.Mesh(new THREE.BoxGeometry(46, 8, 15), standMat), true, true);
     base.position.set(p.x + l.x * side * dist, groundY(track, idx, side * dist) + 3.2, p.z + l.z * side * dist);
     /* -PI/2 turns the 46 m span ALONG the track. BoxGeometry puts that span
        on local X, and rotation.y = yaw alone sends local X to lat — across
@@ -1025,7 +1042,9 @@ function buildScenery(track, scene) {
     scene.add(base);
 
     var cd = dist - 8.2;
-    var crowd = new THREE.Mesh(new THREE.PlaneGeometry(44, 10.5), crowdMat);
+    /* the face receives (the roof shades the back rows); the shell behind it
+       casts the stand's shadow */
+    var crowd = wideShadow(new THREE.Mesh(new THREE.PlaneGeometry(44, 10.5), crowdMat), false, true);
     crowd.position.set(p.x + l.x * side * cd, groundY(track, idx, side * cd) + 5.4, p.z + l.z * side * cd);
     crowd.rotation.order = 'YXZ';
     crowd.rotation.y = facing;
@@ -1038,13 +1057,13 @@ function buildScenery(track, scene) {
     crowd.rotation.x = -0.42;
     scene.add(crowd);
 
-    var roof = new THREE.Mesh(new THREE.BoxGeometry(48, 0.7, 17), roofMat);
+    var roof = wideShadow(new THREE.Mesh(new THREE.BoxGeometry(48, 0.7, 17), roofMat), true, false);
     roof.position.set(p.x + l.x * side * (dist + 1.5), groundY(track, idx, side * (dist + 1.5)) + 11.2, p.z + l.z * side * (dist + 1.5));
     roof.rotation.y = yaw - Math.PI / 2;   /* same 90 degrees as the base */
     scene.add(roof);
 
     for (var pil = -1; pil <= 1; pil += 2) {
-      var post = new THREE.Mesh(new THREE.BoxGeometry(1, 12, 1), standMat);
+      var post = wideShadow(new THREE.Mesh(new THREE.BoxGeometry(1, 12, 1), standMat), true, false);
       post.position.set(
         p.x + l.x * side * (dist + 7) + f.x * pil * 21,
         groundY(track, idx, side * (dist + 7)) + 5.6,
@@ -1058,7 +1077,7 @@ function buildScenery(track, scene) {
   for (i = 0; i < 10; i++) {
     var pi = (track.startIndex - 20 + i * 4 + n) % n;
     var pp = track.p[pi], pl = track.lat[pi], pf = track.fwd[pi];
-    var board = new THREE.Mesh(new THREE.BoxGeometry(11, 2.0, 0.4), pitMat);
+    var board = wideShadow(new THREE.Mesh(new THREE.BoxGeometry(11, 2.0, 0.4), pitMat), true, false);
     board.position.set(pp.x + pl.x * (WALL_HALF + 2.6), groundY(track, pi, WALL_HALF + 2.6) + 1.6, pp.z + pl.z * (WALL_HALF + 2.6));
     /* -PI/2 runs the board along the track and turns its lettered face inward */
     board.rotation.y = datan2(pf.x, pf.z) - Math.PI / 2;
@@ -1080,7 +1099,7 @@ function buildScenery(track, scene) {
       side: THREE.DoubleSide
     });
     var signAspect = signTex.image.width / signTex.image.height;
-    var sign = new THREE.Mesh(new THREE.PlaneGeometry(2.75 * signAspect, 2.75), signMat);
+    var sign = wideShadow(new THREE.Mesh(new THREE.PlaneGeometry(2.75 * signAspect, 2.75), signMat), true, false);
 
     sign.position.set(sp.x + sl.x * sideS * (WALL_HALF + 3.6), groundY(track, si, sideS * (WALL_HALF + 3.6)) + 2.9, sp.z + sl.z * sideS * (WALL_HALF + 3.6));
     /* +PI so the lettered FRONT face turns back up the road to meet the
@@ -1089,7 +1108,7 @@ function buildScenery(track, scene) {
     scene.add(sign);
 
     for (var leg = -1; leg <= 1; leg += 2) {
-      var legMesh = new THREE.Mesh(new THREE.BoxGeometry(0.35, 3.0, 0.35), standMat);
+      var legMesh = wideShadow(new THREE.Mesh(new THREE.BoxGeometry(0.35, 3.0, 0.35), standMat), true, false);
       legMesh.position.set(
         sp.x + sl.x * sideS * (WALL_HALF + 3.6) + sf.x * leg * 4.6,
         groundY(track, si, sideS * (WALL_HALF + 3.6)) + 1.5,

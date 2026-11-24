@@ -47,7 +47,7 @@ var TIERS = {
   },
   ultra: {
     target: 'super', toneMapping: 'aces', exposure: 1.12,
-    shadows: 'single',
+    shadows: 'cascades',
     sky: 'physical',
     post: 'full',
     overlays: false, canvas: 'target'
@@ -360,7 +360,7 @@ Game.prototype.buildRenderer = function (renderer) {
   this.renderer.shadowMap.enabled = true;
   /* PCFSoftShadowMap, which r128 drew, is gone from 0.187 (asked for, it
      warns and draws this one). The two filters are not the same: see the
-     note on the shadow's radius in buildWorld. */
+     note on the shadow's radius in ShadowRig (33-shadows.js). */
   this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
   /* The post pass: one node material on a full screen quad. The uniforms
@@ -582,17 +582,34 @@ function hazeUnderToneMapping(hex, exposure) {
 
 /* The shadows for a tier: TIERS[...].shadows, 'blob' | 'single' | 'cascades'.
    Called by applyQuality. 'blob' is the dark disc under each car and no
-   shadow map; 'single' is the one map that follows the player (set up in
-   buildWorld). The two never run together: both at once darken the road
-   under every car twice. 'cascades' draws as 'single' until the wide shadows
-   are built here. */
+   shadow map; 'single' is the one map that follows the player; 'cascades' is
+   shadows across the whole view. The maps are the rig's (33-shadows.js). The
+   blob and a map never run together: both at once darken the road under
+   every car twice.
+
+   WHO CASTS AND WHO RECEIVES. The flags written where each mesh is built are
+   the ones Modern has always had, and they stand in every mode: the cars and
+   the trees cast, the road, kerbs, runoff and grass receive (and Monaco's
+   town casts and receives). The single map only reaches 70 m from the
+   player, so nothing else was ever worth drawing into it. With shadows
+   across the whole view the stands, the gantry and the signs cast as well,
+   and the stand faces receive. Those meshes are marked where they are built
+   (wideShadow in 20-track.js) and get their flags here, so that leaving the
+   mode takes them away again. */
 Game.prototype.applyShadowMode = function (mode) {
   var mapped = mode !== 'blob';
+  var wide = mode === 'cascades';
   this.renderer.shadowMap.enabled = mapped;
-  if (this.sun) this.sun.castShadow = mapped;
+  if (this.shadowRig) this.shadowRig.setMode(mode);
   for (var ci = 0; ci < (this.cars || []).length; ci++) {
     if (this.cars[ci].shadow) this.cars[ci].shadow.visible = !mapped;
   }
+  if (this.scene) this.scene.traverse(function (o) {
+    var mark = o.userData.wideShadow;
+    if (!mark) return;
+    o.castShadow = wide && mark.cast;
+    o.receiveShadow = wide && mark.receive;
+  });
 };
 
 Game.prototype.buildWorld = function () {
@@ -633,39 +650,10 @@ Game.prototype.buildWorld = function () {
   this.ambient = new THREE.AmbientLight(0x4d566a, 0.4 * Math.PI);
   scene.add(this.ambient);
 
-  /* SHADOWS. A tight ortho box that FOLLOWS THE CAR rather than one big enough
-     to cover the circuit: Silverstone is 1.8 km across, and a shadow map
-     stretched over that has metre-wide texels and casts nothing you would
-     recognise. 70 m around the player at 2048 gives roughly 7 cm per texel
-     (the box is 140 m across). */
-  sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
-  var sc = sun.shadow.camera;
-  sc.left = -70; sc.right = 70; sc.top = 70; sc.bottom = -70;
-  sc.near = 1; sc.far = 900;
-  /* Normal bias rather than a big constant bias: constant bias on a surface
-     this shallow detaches the shadow from the tyre and it floats. */
-  sun.shadow.bias = -0.0004;
-  sun.shadow.normalBias = 0.035;
-  /* THE FILTER, and why nothing here sets it. r128 drew PCFSoftShadowMap, a
-     fixed 3 x 3 kernel that took no radius. 0.187's PCFShadowMap takes five
-     samples on a small disc, turned by a different amount at each pixel, and
-     shadow.radius is the size of that disc in texels. It is left at the
-     engine's 1: at 0, 0.5 and 2 the picture is as far from r128's as at 1, to
-     within 0.02 of a level, because a texel here is under 7 cm and the edge
-     is thinner than a pixel from any camera the game has. shadow.intensity
-     stays at 1 too: lowering it only lightens the shadow, which moves it
-     away from r128's. The two bias values above carried over unchanged, with
-     no acne and no detached shadow.
-
-     One thing did change and is not a setting. A caster with an alpha test
-     (the trees) now casts its own outline. On r128 the shadow pass ignored
-     the alpha test, so a tree cast the shadow of its whole card. */
-  /* REQUIRED. Editing left/right/top/bottom does not rebuild the projection,
-     so without this the shadow camera keeps its default +/-5 box, the entire
-     circuit falls outside the frustum, and every surface samples as occluded —
-     the whole world renders black. */
-  sc.updateProjectionMatrix();
+  /* SHADOWS. The rig sets up the map Modern has always had, a tight box
+     that follows the car, and holds the wider ones for the tiers that ask
+     (see 33-shadows.js). applyShadowMode picks between them. */
+  this.shadowRig = new ShadowRig(scene, this.camera, sun);
 
   this.buildEnvironment(scene);
 
@@ -2542,15 +2530,11 @@ Game.prototype.updateCamera = function (dt, snap) {
 
   this.sky.position.set(this.camera.position.x, 0, this.camera.position.z);
 
-  /* Walk the shadow box along with the car. The light keeps its DIRECTION —
-     position and target move together — so the sun angle never changes as you
-     drive; only the volume being sampled does. */
-  if (this.sun && this.sun.castShadow) {
-    var sx2 = p.visX(), sz2 = p.visZ();
-    this.sun.target.position.set(sx2, 0, sz2);
-    this.sun.position.set(sx2 + this.skyRig.sunOffset.x, this.skyRig.sunOffset.y, sz2 + this.skyRig.sunOffset.z);
-    this.sun.target.updateMatrixWorld();
-  }
+  /* Walk the shadows along with the car, and lay the wide ones out from
+     where the camera now is. The rig keeps the sun's direction: see update
+     in 33-shadows.js. */
+  this.shadowRig.focus.set(p.visX(), 0, p.visZ());
+  this.shadowRig.update();
 };
 
 /* --- HUD ---------------------------------------------------------------- */
@@ -3304,6 +3288,8 @@ Game.prototype.placePhotoCamera = function (name) {
   this.camera.lookAt(at);
   this.camera.updateProjectionMatrix();
   this.sky.position.set(eye.x, 0, eye.z);
+  /* the wide shadows are laid out from the camera, and it has just moved */
+  this.shadowRig.update();
 };
 
 /* Why a camera cannot be placed on the loaded circuit, or '' when it can.
