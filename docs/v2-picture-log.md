@@ -324,6 +324,7 @@ The console of the stills page was watched on every capture (a preloaded script 
 |---|---|---|---|---|
 | reference | `stills/before-main`, r128 | 0 | 0 | the merged main |
 | A1 | `v0.113 dev 1308d33*` | 21.4 to 84.8 | 28 | the bundle; `WebGPURenderer`; boot waits for `init()`; `RenderTarget`; the post pass as a node; the environment handed over directly. Colours wrong, as expected |
+| A2 | `v0.114 dev c33c599*` | 6.0 to 29.9 | 28 | colour management off, as the first statement of the game. Lit surfaces come back up: nothing is converted twice any more |
 
 ### A1: the bundle, and a game that draws through it
 
@@ -335,3 +336,20 @@ The console of the stills page was watched on every capture (a preloaded script 
 - One post node for each tier, not one node switched by a uniform as the spike had it: the target is rebuilt on a tier change anyway (8 bit sRGB for Retro, half float for Modern), so the node is built for the tier then, and a Retro frame does not compute a tone map it discards.
 - The sweep in `applyQuality` that set `needsUpdate` on every material is gone: it existed because r128 compiled tone mapping into every material, and tone mapping is now in the post node. Checked that nothing else needed it: a tier change at run time gives the same picture as loading in that tier, in both directions, at Monaco (high camera, tick 600) and at Silverstone (chase, tick 900). Headless on the fallback the four pairs of stills are the same file byte for byte. In Chrome on WebGPU the four pairs agree to 0.000 on the grid mean and 0.00 on the worst cell, and so does a repeat of the loaded case. (Headed screenshots of the same pairs differed by up to 0.8 of a level, which is the compositor scaling the canvas for the screenshot, not the game: the canvas itself, read back, is the same.)
 - The pinned page. Node UUIDs are made lazily in 0.187 and are what a shader build uses to tell its nodes apart, so in a pinned page (where the stream starts again at every 2D context) two nodes of one shader can be dealt the same UUID if a 2D context is made between two shader builds. A throwaway check that read the canvas through a 2D context and then changed tier hit exactly that (`THREE.TSL: TypeError: i.getInputType is not a function`). The stills tool makes no 2D context after boot, and it is not affected: stills of the three older circuits (chase and high, both tiers), pinned against unpinned, are the same files byte for byte, with no console error. The live game is not pinned and cannot be affected. It is a thing to know for any tool that pins and also reads a canvas.
+
+### A2: colour management off
+
+`THREE.ColorManagement.enabled = false` is the first statement of `src/10-core.js`, guarded with `typeof THREE !== 'undefined'`. That file is the first in the build order that touches the engine, and the tables below it call `srgb()` as they load, so its first line is the first thing the game runs with the engine present. The guard is there because `test/music.test.js` evaluates the file with no `THREE` at all. The other place it could have gone, `build.js`'s wrapper, would have left every test that evaluates the source files running the engine in a state the game never runs it in.
+
+Per still average of the three channel means: Retro 33.6 at A1, 12.7 now; Modern 41.9 at A1, 17.4 now.
+
+The Retro pass, checked the spike's way now that an unlit colour reaches it unchanged: everything but the sky dome hidden, Retro, Silverstone, the canvas read back at full size in the task that drew it and compared pixel by pixel with r128 (the spike's saved r128 build, `v0.110 dev 77a37a5*`), headless on the fallback.
+
+| tier | pixels | differing | identical | largest difference |
+|---|---|---|---|---|
+| Retro, 8 bit sRGB target | 310,272 | 33 | 99.99% | 8 |
+| Modern, half float target | 1,418,688 | 13,539 | 99.05% | 2 |
+
+The spike had 99.56% for Retro headless with a half float target and 99.74% in Chrome with an 8 bit one. In Modern every differing pixel is out by 1 or 2 levels (11,537 by 1, 2,002 by 2): the tone mapping is the engine's own ACES on a half float frame, where r128 ran its own on the way into an 8 bit target.
+
+One thing this turned up about the stills themselves. The same two frames taken as screenshots, the way the stills tool takes them, are NOT 99.99% identical: 49.8% of pixels are identical, nearly all the rest differ by exactly 1 level, and the channel means are 0.21, 0.28 and 0.17. The canvas holds the same pixels; the browser scales and composites the new canvas a shade differently from the old one. So every Retro still carries about a quarter of a level that is not the game's picture. It is far below the gate and it is not hidden in any figure here, but a still that reads 0.3 against the reference is not evidence of a difference in the game. The cause was not looked for (the new canvas's context is made by the engine with an alpha channel, where r128's was opaque; that is a guess).

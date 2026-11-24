@@ -2,6 +2,30 @@
    MCL-64  —  core: math, bitmap font, texture forge, audio synth
    ========================================================================= */
 
+/* COLOUR MANAGEMENT IS OFF, and switching it off is the first thing the game
+   does with the engine.
+
+   The game decides for itself what each colour means, as it did for r128: a
+   hex passed through srgb() below is converted to linear by the game, and a
+   bare hex is taken as linear already (the sky dome, the lights, the fog).
+   three.js 0.187 would otherwise convert every hex it is handed, so the
+   srgb() ones would be converted twice and every lit surface would come out
+   about a third as bright. With management off a colour is exactly what r128
+   took it for. The price is that the engine's own output conversion does
+   nothing either, so the post pass in 40-game.js encodes by hand.
+
+   WHY HERE. It has to happen before the first Color is made, and colours are
+   made as the files load (the tables further down the chain call srgb() at
+   load, long before boot runs), so boot is too late. This file is the first
+   in the build order that touches THREE at all, which makes its first line
+   the first thing the game runs with the engine present. It also means a
+   test that evaluates the source files with THREE gets the engine in the
+   state the game runs it in, which a line in build.js's wrapper would not.
+
+   WHY GUARDED. test/music.test.js evaluates this file with no THREE at all,
+   so the file must load without it. Nothing else at load needs the engine. */
+if (typeof THREE !== 'undefined' && THREE.ColorManagement) THREE.ColorManagement.enabled = false;
+
 var TAU = Math.PI * 2;
 
 function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
