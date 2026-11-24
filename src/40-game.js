@@ -185,7 +185,10 @@ Game.prototype.buildRenderer = function (renderer) {
   /* a first value only: applyHaze sets the clear colour for the tier */
   this.renderer.setClearColor(SKY_HAZE, 1);
   this.renderer.shadowMap.enabled = true;
-  this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  /* PCFSoftShadowMap, which r128 drew, is gone from 0.187 (asked for, it
+     warns and draws this one). The two filters are not the same: see the
+     note on the shadow's radius in buildWorld. */
+  this.renderer.shadowMap.type = THREE.PCFShadowMap;
 
   /* The post pass: one node material on a full screen quad. The uniforms
      outlive the node, which is built again whenever the target is. */
@@ -395,6 +398,20 @@ Game.prototype.buildWorld = function () {
      this shallow detaches the shadow from the tyre and it floats. */
   sun.shadow.bias = -0.0004;
   sun.shadow.normalBias = 0.035;
+  /* THE FILTER, and why nothing here sets it. r128 drew PCFSoftShadowMap, a
+     fixed 3 x 3 kernel that took no radius. 0.187's PCFShadowMap takes five
+     samples on a small disc, turned by a different amount at each pixel, and
+     shadow.radius is the size of that disc in texels. It is left at the
+     engine's 1: at 0, 0.5 and 2 the picture is as far from r128's as at 1, to
+     within 0.02 of a level, because a texel here is under 7 cm and the edge
+     is thinner than a pixel from any camera the game has. shadow.intensity stays at 1
+     too: lowering it only lightens the shadow, which moves it away from
+     r128's. The two bias values above carried over unchanged, with no acne
+     and no detached shadow.
+
+     One thing did change and is not a setting. A caster with an alpha test
+     (the trees) now casts its own outline. On r128 the shadow pass ignored
+     the alpha test, so a tree cast the shadow of its whole card. */
   /* REQUIRED. Editing left/right/top/bottom does not rebuild the projection,
      so without this the shadow camera keeps its default +/-5 box, the entire
      circuit falls outside the frustum, and every surface samples as occluded —

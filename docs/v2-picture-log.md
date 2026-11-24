@@ -329,6 +329,7 @@ The console of the stills page was watched on every capture (a preloaded script 
 | A4 | `v0.116 dev c9cd75b*` | 1.7 to 14.0 | 10 | the hemisphere, directional and ambient lights multiplied by pi, which r128 did inside its shaders |
 | A5 | `v0.117 dev 11a8615*` | 1.2 to 8.4 | 6 | the haze colour handed over as the linear colour the output step turns back into the hex: the plain conversion for Retro, run backwards through ACES for Modern |
 | A6 | `v0.118 dev a13deb3*` | 1.2 to 7.1 | 4 | `envMapIntensity` made to apply again (0.187 ignores it for `scene.environment`): the car paint's 1.15 is back, and the sea at Monaco is given 1.15 |
+| A7 | `v0.119 dev 2faa079*` | 1.2 to 7.1 | 4 | `PCFShadowMap` asked for by name (the picture is A6's to the last digit: 0.187 was already drawing it in place of `PCFSoftShadowMap`). Radius and intensity tried, neither moves the picture, both left at the engine's values |
 
 ### A1: the bundle, and a game that draws through it
 
@@ -547,3 +548,106 @@ What it is at Indianapolis, and on grass everywhere. With fog off on both engine
 These are fully rough surfaces that are not metal (the crowd and the grass are both `roughness: 1.0`), seen at a shallow angle, and on 0.187 they are paler and greyer. The cause is in the two engines' source. r128 worked out how much of the environment a surface mirrors with a short approximation (`integrateSpecularBRDF`, with `F_Schlick_RoughnessDependent`), which for a fully rough surface gives about 1.6% at every angle. 0.187 looks the same quantity up in a table computed from the full model, and for a fully rough surface at a shallow angle that is several times more. So grass and seats seen along their surface now reflect some of the bright horizon they face. (For a smooth surface the difference goes the other way: r128's term added reflection at shallow angles that 0.187 does not have, which is the car and the sea being duller.) The r128 half of this was read in `tools/vendor/three-r128.min.js`; the size of the 0.187 figure is from knowing the model, not from a measurement of the table.
 
 No setting reaches it. `envMapIntensity` and `scene.environmentIntensity` scale all the light a surface takes from the environment, the matt part with the mirrored part, and the matt part is right (step A4's check). What would reach it is not a setting: a material that can turn its own mirror term down (`MeshPhysicalMaterial`'s specular intensity, which is not in the bundle), or a node on the grass and the crowd. That is a change of material, not of a number, and it was not tried. It goes to the controller as the main thing still open: see the stage summary.
+
+### A7: shadows
+
+`renderer.shadowMap.type = THREE.PCFShadowMap`. Since step A1 the game had asked for `PCFSoftShadowMap`, which 0.187 answers with a warning and `PCFShadowMap`, so the picture does not change at this step: the 28 comparisons are the same as A6's to the last digit, and the warning is gone from the console.
+
+The Modern shadow map works as before. It is 2048 across the 70 m box set up in `buildWorld`, `updateProjectionMatrix` is still called after the box is edited, the box follows the player's car (the photo frames at tick 900 and the race screenshots both show the cars' shadows under them, far from where the box started), and it switches with the tier: a tier change at run time gives the same picture as loading in the tier (steps A1 and A5). The two bias values are unchanged; no acne and no detached shadow in any still or in enlarged crops of the car and tree shadows.
+
+How much of what is left is shadows: almost none. Modern only (Retro has no shadow map), headless, the canvas grid against r128's for the same shot, mean over 576 cells and three channels, with the worst cell in brackets. "Shadows off on both" removes the shadow map from both engines.
+
+| variant | Silverstone chase | Silverstone apex | Silverstone high | Monaco high | Monaco chase | Monaco apex | Brands Hatch high |
+|---|---|---|---|---|---|---|---|
+| as it is: radius 1, intensity 1 | 2.396 (45) | 1.819 (27) | 2.998 (51) | 5.012 (49) | 3.782 (44) | 3.306 (41) | 3.420 (49) |
+| shadows off on both engines | 2.281 (33) | 1.794 (26) | 2.971 (49) | 4.900 (49) | 3.729 (44) | 3.303 (41) | 3.397 (46) |
+| attempt 1: radius 0.5 | 2.394 (45) | 1.819 (27) | 2.998 (51) | 5.011 (49) | 3.777 (44) | 3.306 (41) | 3.420 (49) |
+| attempt 1, further: radius 0 | 2.393 (45) | 1.819 (27) | 2.998 (51) | 5.011 (49) | 3.776 (44) | 3.306 (41) | 3.420 (49) |
+| attempt 2: radius 2 | 2.401 (45) | 1.819 (27) | 2.998 (51) | 5.012 (49) | 3.792 (44) | 3.306 (41) | 3.419 (49) |
+| attempt 3: intensity 0.95 | 2.421 (46) | 1.820 (27) | 2.999 (51) | 5.071 (49) | 3.841 (44) | 3.306 (41) | 3.420 (49) |
+| attempt 3, further: intensity 0.9 | 2.447 (46) | 1.821 (27) | 2.999 (51) | 5.133 (49) | 3.901 (44) | 3.307 (41) | 3.421 (49) |
+
+Three attempts, as the brief allows, and nothing to apply:
+
+- Radius. r128's filter was a fixed 3 x 3 kernel with no radius. 0.187's takes five samples on a disc of `shadow.radius` texels, turned differently at each pixel. From 0 to 2 the picture moves by 0.02 of a level at most. A shadow texel is under 7 cm (140 m over 2048), so the edge is thinner than a pixel from every camera in the set. Left at 1.
+- Intensity. It can only make the shadow lighter, and lighter is further from r128 on every shot where it shows. So the shadows are not too dark. Left at 1.
+- With the shadow map off on both engines the difference from r128 falls by 0.12 at most (Silverstone chase and Monaco high) and by 0.05 or less elsewhere. Shadows are not what keeps any still over 6.
+
+What the spike saw as "a slightly lighter shadow" is real and is not the shadow. Read off the stills at Silverstone (Modern, chase): the grass inside the tree's shadow is 7,100,13 on r128 and 38,112,52 on 0.187, while the lit grass beside it is 98,166,77 and 109,170,99, and the road inside the car's own shadow is 72,82,127 and 75,85,128. The road, seen steeply, matches. The grass, seen along its surface, carries the same pale extra in the shadow as out of it, and it shows more against the dark. That is the rough surface at a shallow angle of step A6, not the strength of the shadow.
+
+One real change in the shadows, and it is not a setting. On r128 the shadow pass ignored a material's alpha test, so a tree (two crossed cards with a cut out texture) cast the shadow of its whole cards: a dark slab on the grass. On 0.187 the shadow pass honours the alpha test and the tree casts its own outline. It is a small part of the picture and it is the better picture, but it differs from what is live, so it goes to Jamie with the pairs.
+
+### Tried after the steps and NOT applied: where the fog starts
+
+The fog colour of step A5 cannot put right a surface that is only part way into the haze, because the engines mix in different spaces. Mixed in linear light, the same fog factor reads as much more haze on a dark surface than it did mixed in encoded values. Starting the fog further out undoes most of that. `scene.fog` is `Fog(SKY_HAZE, 150, 980)`; the first number was changed, in a build that was thrown away, and the 28 stills taken each time:
+
+| fog starts at | Retro, per still average | Modern, per still average | range of means | over 6 |
+|---|---|---|---|---|
+| 150 m (as shipped, and as on r128) | 3.17 | 3.39 | 1.2 to 7.1 | 4 |
+| 250 m | 2.97 | 3.02 | 0.9 to 6.3 | 1 |
+| 300 m | 3.05 | 3.01 | 1.1 to 6.3 | 1 |
+| 350 m | 3.16 | 3.06 | 1.2 to 6.3 | 2 |
+| 390 m | 3.25 | 3.12 | 1.4 to 6.6 | 3 |
+
+At 250 m or 300 m every Modern still is under 6 (the highest is 5.7) and one still is left over: the Indianapolis chase view in Retro at 6.3, which is the stands and not fog. This was not asked for (the brief's step A5 is the fog's colour) and it changes a number of the game's look that players see at 150 to 300 m, so it is not in any commit. It is recorded because it is one line, it is measured, and it would take the count over 6 from four to one. It needs a ruling.
+
+### Stage A as it stands
+
+The build is `v0.119 dev 2faa079*` (the working tree of the A7 commit). 28 stills against `stills/before-main`, headless, the fallback: channel means from 1.2 to 7.1, four over 6. The spike had 1.4 to 7.4 and seven over 6.
+
+| still | R | G | B | pixels off by more than 24 | gate | highest channel with fog from 250 m | with fog from 300 m |
+|---|---|---|---|---|---|---|---|
+| brands-hatch-v1.modern.chase | 3.136 | 2.024 | 3.359 | 7.590% | ok | 3.3 | 3.3 |
+| brands-hatch-v1.modern.high | 6.753 | 1.418 | 2.157 | 6.295% | OVER | 3.1 | 2.8 |
+| brands-hatch-v1.retro.chase | 2.287 | 1.845 | 2.719 | 1.788% | ok | 2.6 | 2.6 |
+| brands-hatch-v1.retro.high | 3.205 | 1.618 | 1.975 | 1.944% | ok | 1.9 | 2.7 |
+| indianapolis-v1.modern.chase | 5.915 | 5.003 | 4.639 | 10.824% | ok | 5.7 | 5.7 |
+| indianapolis-v1.modern.high | 7.100 | 3.142 | 2.746 | 8.456% | OVER | 4.6 | 4.4 |
+| indianapolis-v1.retro.chase | 6.383 | 5.326 | 4.861 | 11.423% | OVER | 6.3 | 6.3 |
+| indianapolis-v1.retro.high | 5.473 | 3.863 | 3.127 | 8.711% | ok | 4.7 | 5.2 |
+| monaco-gp-v1.modern.apex | 3.693 | 3.458 | 3.817 | 6.355% | ok | 3.8 | 3.8 |
+| monaco-gp-v1.modern.chase | 4.742 | 4.029 | 4.141 | 6.564% | ok | 4.2 | 4.1 |
+| monaco-gp-v1.modern.grid | 2.728 | 2.794 | 2.873 | 2.847% | ok | 2.9 | 2.9 |
+| monaco-gp-v1.modern.high | 7.108 | 4.374 | 4.165 | 8.767% | OVER | 5.1 | 5.0 |
+| monaco-gp-v1.retro.apex | 3.932 | 3.567 | 3.955 | 5.829% | ok | 3.9 | 3.9 |
+| monaco-gp-v1.retro.chase | 4.513 | 4.190 | 4.309 | 5.986% | ok | 4.2 | 4.2 |
+| monaco-gp-v1.retro.grid | 3.721 | 3.443 | 3.465 | 4.656% | ok | 3.7 | 3.7 |
+| monaco-gp-v1.retro.high | 5.964 | 4.490 | 4.271 | 8.012% | ok | 5.4 | 5.8 |
+| silverstone-v1.modern.apex | 1.953 | 1.948 | 2.305 | 2.996% | ok | 2.3 | 2.3 |
+| silverstone-v1.modern.chase | 2.618 | 1.999 | 3.089 | 5.162% | ok | 3.1 | 3.1 |
+| silverstone-v1.modern.grid | 3.264 | 2.907 | 3.084 | 5.175% | ok | 3.2 | 3.1 |
+| silverstone-v1.modern.helmet | 2.221 | 2.261 | 2.387 | 2.125% | ok | 2.4 | 2.4 |
+| silverstone-v1.modern.high | 5.645 | 1.203 | 2.298 | 6.358% | ok | 2.7 | 2.4 |
+| silverstone-v1.modern.stands | 2.950 | 2.025 | 2.707 | 2.517% | ok | 2.8 | 2.8 |
+| silverstone-v1.retro.apex | 1.550 | 1.721 | 2.129 | 1.677% | ok | 2.1 | 2.1 |
+| silverstone-v1.retro.chase | 1.887 | 1.709 | 2.523 | 1.341% | ok | 2.5 | 2.5 |
+| silverstone-v1.retro.grid | 3.043 | 2.739 | 2.830 | 4.442% | ok | 3.0 | 3.0 |
+| silverstone-v1.retro.helmet | 1.877 | 2.023 | 2.422 | 1.748% | ok | 2.4 | 2.4 |
+| silverstone-v1.retro.high | 2.842 | 1.393 | 1.994 | 1.912% | ok | 1.8 | 2.4 |
+| silverstone-v1.retro.stands | 2.834 | 2.242 | 2.778 | 3.855% | ok | 2.8 | 2.9 |
+
+(The last two columns are the experiment above, not the shipped build.)
+
+The four over 6, and what each is:
+
+| still | figure | what it is | evidence |
+|---|---|---|---|
+| monaco-gp-v1.modern.high | 7.1 (red) | fog, part way into the haze, in Modern | 5.1 with the fog starting at 250 m |
+| indianapolis-v1.modern.high | 7.1 (red) | the same | 4.6 with the fog starting at 250 m |
+| brands-hatch-v1.modern.high | 6.8 (red) | the same | 3.1 with the fog starting at 250 m |
+| indianapolis-v1.retro.chase | 6.4 (red) | the stands: a fully rough surface seen at a shallow angle reflects more of the bright horizon on 0.187 | 6.3 whatever the fog does; the view differs from r128 as much with fog off on both engines (step A6) |
+
+The three causes the spike named, as they stand:
+
+- Where fog is mixed. Closed where a surface is fully fogged (exact, both tiers). Open part way into the haze; one line would close most of it (above), not applied.
+- Light from the environment. The car paint's strength applies again and the sea has one. What is left has a second, larger half the spike did not separate: fully rough surfaces at shallow angles (grass, the crowd) are paler. No setting reaches it.
+- The shadow filter. Not a cause of anything over 6. One change of behaviour (trees cast their own outline) for Jamie to see.
+
+Both backends, at the end of the stage, system Chrome 158.0.8127.38, headed, a race started and run for 9 s in each tier on each backend at Silverstone and at Monaco, nothing on the console (no warning, no error): the canvas grid on WebGPU against the forced fallback differs by 0.001 to 0.004 of a level on the mean, worst cell 0.06 at Silverstone (chase) and 0.20 at Monaco (high). Stage C repeats this formally.
+
+Other things checked at the end of the stage, each a quick check and not stage B's test:
+
+- `dist/artifact.html`, wrapped in a doctype, head and body as its host wraps it, boots and draws on the fallback with no console error. `dist/index.html` is 1,586,149 bytes and `dist/artifact.html` 1,581,526.
+- A renderer that cannot start ends at the fallback panel, with no uncaught error: with `getContext('webgl2')` made to return null in a browser with no WebGPU, `renderer.init()` rejects and the panel shows. The message is the engine's own (`Cannot read properties of null (reading 'getSupportedExtensions')`), which stage B replaces.
+- `node test/sim-parity.test.js`: 4 passed before every commit of the stage. `test/physics.test.js`, `test/fpmath.test.js`, `test/track-bake.test.js` and `test/music.test.js` pass too.
+- Not run, because they are stage B's and stage C's: `tools/bench.js`, `test/csp.js`, `tools/stills-pin-check.js`, Safari.
