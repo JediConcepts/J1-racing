@@ -519,7 +519,10 @@ function tamper(o) {
     });
 
     /* A BROWSER WITH NOTHING SAVED comes up in Ultra, at dusk, at Monaco.
-       Dusk's sun is 4.5 degrees up (TIME_OF_DAY in 32-sky.js). And the tier
+       Monaco has a dusk sun of its own, 7.5 degrees up (TIME_OF_DAY_AT in
+       32-sky.js), where the table every other circuit reads has 4.5: a new
+       player's page that drew the sun at 4.5 would be drawing the general
+       dusk, and that is the fault this figure is here to catch. And the tier
        is on trial although nobody picked it: the key and the settings were
        both written before the world was built, which is what leaves them
        behind for the next load if this one dies while it builds. */
@@ -531,7 +534,7 @@ function tamper(o) {
     const savedEarly = firstWrites.filter((w) => w.key === SETTINGS_KEY).map((w) => JSON.parse(w.value))
       .some((v) => v.quality === 'ultra' && v.defaults === 2 && v.tierChosen === false && v.userConfigured === false);
     check(firstTrack === 'monaco-gp-v1' && first.quality === 'ultra' && first.saved === 'dusk' && first.sky === 'physical' &&
-      first.drew === 'dusk' && first.sunUp === 4.5 && first.shadowsUp === 4.5 && first.shadows === 'cascades' &&
+      first.drew === 'dusk' && first.sunUp === 7.5 && first.shadowsUp === 7.5 && first.shadows === 'cascades' &&
       firstTier.on === 'ultra' && firstTier.label === 'ULTRA' && !firstTier.notice && notBlank(firstLook) &&
       !(await isVisible('#fallback')) && consoleErrors.length === 0 && uncaught.length === 0,
       'a browser with nothing saved comes up at Monaco, in Ultra, at dusk, and draws with no errors',
