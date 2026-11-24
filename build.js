@@ -97,13 +97,32 @@ function read(p) {
 
 const three = read('vendor/three.bundle.js');
 const supabase = read('vendor/supabase.js');
+
+/* WHICH three.js THIS IS, read from the vendored file and never typed here.
+
+   The notice below used to say "r131" for a vendored r128, because the
+   version was a string in this file and nothing held it to the file it
+   described. The bundle now says what it is in its own header: three.js's
+   licence comment, word for word, and after it one line written by
+   tools/vendor-three.js that names the release and the flavour. Both the
+   version and the copyright line of the notice are taken from there, so the
+   notice in the built page cannot name a release the page does not carry.
+   The invariants at the foot of this file refuse a bundle whose header does
+   not say, or says another release than the game was ported to. */
+const threeHeadEnd = three.indexOf('var THREE=');
+const threeHead = threeHeadEnd === -1 ? '' : three.slice(0, threeHeadEnd);
+const threeVersion = (threeHead.match(/\/\* three\.js (\d+\.\d+\.\d+),/) || [])[1] || null;
+const threeCopyright = (threeHead.match(/Copyright [^\n]*Three\.js Authors/) || [])[0] || null;
+/* The release the game was ported to and measured on. A newer one is not a
+   drop in: see "The engine" in CLAUDE.md for what has to be checked first. */
+const THREE_RELEASE = '0.187';
 const template = read('src/index.template.html').replace('__MAPS_KEY__', process.env.GOOGLE_MAPS_PLATFORM_KEY || '');
 
 /* MIT requires the copyright and permission notice to travel with the code, and
    dist/index.html inlines both of these libraries, so the built page is a copy
    that has to carry them.
 
-   three.min.js keeps its own @license header. The minified supabase build does
+   vendor/three.bundle.js keeps its own @license header. The minified supabase build does
    not — it ships with no notice at all, so until this existed both the repo and
    the deployed page carried supabase-js completely unattributed. That is a
    licence breach rather than an untidiness, and a silent one, which is why the
@@ -141,8 +160,8 @@ const MIT_TERMS =
 
 const NOTICE = {
   three:
-    '/*! three.js r131 — https://github.com/mrdoob/three.js\n'
-    + ' *  Copyright 2010-2021 Three.js Authors\n'
+    '/*! three.js ' + (threeVersion || 'UNKNOWN VERSION') + ' — https://github.com/mrdoob/three.js\n'
+    + ' *  ' + (threeCopyright || 'Copyright Three.js Authors') + '\n'
     + ' *  SPDX-License-Identifier: MIT\n'
     + ' *\n' + MIT_TERMS + ' */\n',
   supabase:
@@ -350,6 +369,25 @@ if (standalone.indexOf(CLOUD.key) === -1) problems.push('index.html is missing t
 if (three.indexOf('Three.js Authors') === -1) {
   problems.push('vendor/three.bundle.js has lost its own @license header: check the vendored file');
 }
+/* The header has to say which three.js this is, and it has to be the release
+   the game was ported to. A bundle rebuilt from another release draws a
+   different picture with no error at all, so this is where a vendor bump
+   stops until someone has changed THREE_RELEASE on purpose. */
+if (!threeVersion) {
+  problems.push('vendor/three.bundle.js does not say which three.js it is: its header has no "three.js <version>" line. Rebuild it with tools/vendor-three.js');
+} else if (threeVersion.indexOf(THREE_RELEASE + '.') !== 0) {
+  problems.push('vendor/three.bundle.js is three.js ' + threeVersion + ' and this build expects ' + THREE_RELEASE +
+    ': read "The engine" in CLAUDE.md, run what it lists, then change THREE_RELEASE in build.js');
+}
+/* The size of the page a player downloads. The limit is the one the renderer
+   decision was taken under (docs/v2-renderer-decision.md, criterion 3); the
+   page was 1.59 MB when this was written. The limit is on the standalone
+   page, which is the one that is deployed. */
+const PAGE_LIMIT = 2500000;
+const pageBytes = Buffer.byteLength(standalone);
+if (pageBytes > PAGE_LIMIT) {
+  problems.push('index.html is ' + pageBytes + ' bytes, over the limit of ' + PAGE_LIMIT);
+}
 if (fragment.indexOf(NOTICE.three) === -1) problems.push('artifact.html is missing the three.js notice');
 if (standalone.indexOf(NOTICE.three) === -1) problems.push('index.html is missing the three.js notice');
 if (standalone.indexOf(NOTICE.supabase) === -1) problems.push('index.html is missing the supabase-js notice');
@@ -378,4 +416,5 @@ if (standalone.indexOf('<meta name="build" content="' + BUILD.version + '"') ===
 if (problems.length) throw new Error('Build invariant failed:\n  - ' + problems.join('\n  - '));
 
 console.log('\n  invariants OK — fragment stays bare, standalone is a full document');
+console.log('  three.js ' + threeVersion + ', index.html ' + pageBytes + ' bytes (limit ' + PAGE_LIMIT + ')');
 console.log('  ' + BUILD.version + '  ' + BUILD.channel + '  ' + BUILD.sha + '  ' + BUILD.at);

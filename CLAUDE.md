@@ -80,6 +80,68 @@ v0.37 · dev · 0dd8205* · 2026-08-04 16:32Z
   stale cached copy still answers 200 with a valid title; it cannot carry a
   version that did not exist when it was cached.
 
+### The engine
+
+What is vendored. `vendor/three.bundle.js` is three.js 0.187.0, the WebGPU
+flavour, as one classic script that defines the global `THREE`: the
+`WebGPURenderer`, which uses WebGPU where the browser has it and its own WebGL
+2 backend where it does not, and the parts of the node system the game uses.
+It is not a file three.js ships. `tools/vendor-three.js` makes it from the npm
+package, with esbuild, out of the names listed in `tools/three-entry.webgpu.js`.
+A name the game uses that is not in that list is `undefined` at run time, so a
+new name goes into the entry first.
+
+How it is rebuilt, by hand, never by `node build.js`:
+
+```bash
+node tools/vendor-three.js webgpu <a folder outside the repo>
+mv vendor/three.webgpu.js vendor/three.bundle.js
+```
+
+The folder holds the two npm packages; nothing is ever installed into the
+repo. The same release and entry give the same bytes, and the tool prints the
+size and the SHA-256.
+
+`tools/vendor/three-r128.min.js` is the old engine, r128. It is not in the
+built page. `tools/bake-tracks.js` samples the circuits with it, so the baked
+track data does not move when the engine does.
+
+Two build invariants belong to this, and both fail the build:
+
+- The bundle's header must say which three.js it is, and it must be 0.187. The
+  notice in the built page takes its version and copyright line from that
+  header, so it cannot name a release the page does not carry.
+- `dist/index.html` must be at most 2,500,000 bytes.
+
+**What an engine update must check.** A newer three.js is not a drop in, and
+the ways it can go wrong draw a picture with no error. The picture depends on
+two behaviours of three.js that are not part of its public promise:
+
+1. The renderer copies a classic material's properties, `colorNode` included,
+   on to the node material it builds from it. That is how the node the game
+   puts on a `MeshStandardMaterial` comes to apply at all. If it stopped,
+   every canvas texture would be lit as if its painted values were light, and
+   the whole picture would come out far too bright.
+2. The shadow pass reads the alpha of a material's `colorNode`. The game's
+   node is written around that (see `decodeCanvasMaps` in `src/10-core.js`).
+   If it changed, trees and anything else cut out by an alpha test would cast
+   the wrong shadow, or the shadow shader would not build.
+
+So after ANY change to `vendor/three.bundle.js`, a new release or only a new
+name in the entry, run all three of these before it is committed:
+
+```bash
+node test/sim-parity.test.js      # the simulation must not have moved: 4 passed
+node build.js && node test/picture.js    # draws, fails politely, every canvas texture has its node
+# the 28 stills, then against the reference (see docs/v2-picture-log.md for the three capture commands)
+node tools/stills-compare.js stills/before-main <the new set> --max 6
+```
+
+`test/picture.js` and the stills need Playwright on `NODE_PATH` and are not in
+CI. The stills tool fails on a console error, because a node material that
+fails to build is reported there and the frame is drawn all the same. Then, and
+only then, change `THREE_RELEASE` in `build.js`.
+
 ## Deploying
 
 The site is `https://jediconcepts.com/mcl64/`. A push to `main` triggers

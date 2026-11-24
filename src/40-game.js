@@ -294,6 +294,22 @@ Game.prototype.buildEnvironment = function (scene) {
 
   var tex = new THREE.CanvasTexture(cv);
   tex.mapping = THREE.EquirectangularReflectionMapping;
+  /* THIS CANVAS KEEPS ITS sRGB FLAG, where texFromCanvas (10-core.js) takes
+     the flag off every other canvas texture that carries colour. The two are
+     not at odds. The flag makes the GPU turn each texel into light before it
+     smooths, where r128 smoothed the painted values first, and that matters
+     for a texture of strong contrast seen small: the crowd came out up to 42
+     levels too light. This canvas is a smooth sky with a soft sun, so the
+     two orders give almost the same answer. Worked out on the canvas as it
+     is painted here: averaging a 2 x 2 box of texels before or after turning
+     it into light differs by 0.080 of a level at worst, and a 4 x 4 box by
+     0.299. Those are the sizes the GPU smooths over when the engine reads
+     it; the wider blurs a rough surface needs are the engine's own
+     prefilter, which r128's did in light as well. Taking the flag off would
+     buy nothing that can be seen and would need a decode of its own inside
+     the engine's prefilter, which is not the game's to change. If the sky
+     ever gets hard edges (a horizon line, a small bright sun), measure it
+     again. */
   tex.colorSpace = THREE.SRGBColorSpace;
 
   /* Kept, not disposed: the renderer filters it when it first draws and
@@ -3301,11 +3317,12 @@ Game.prototype.bench = function (opts) {
 
        Two routes lead here, and both are needed. The engine calls
        renderer.onDeviceLost for a lost WebGL context and for a WebGPU device
-       the system took away, but NOT for a device that was destroyed (it
-       drops that reason on purpose, because its own dispose() destroys the
-       device). A destroyed device stops the picture all the same, so the
-       device's own promise is watched too and sent down the same road. The
-       engine's handler is called first in either case: it is what makes
+       the system took away, but NOT for a device that was destroyed: its
+       own watch on the device returns at once for that reason. (The engine
+       destroys the device itself when it is disposed, which is presumably
+       why.) A destroyed device stops the picture all the same, so the
+       device's own promise is watched here too and sent down the same road.
+       The engine's handler is called first in either case: it is what makes
        every later render() return at once. */
     var gone = false;
     var engineLost = renderer.onDeviceLost;

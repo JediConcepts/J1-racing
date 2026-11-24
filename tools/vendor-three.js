@@ -6,7 +6,9 @@
  * build.js inlines one vendored file to provide it. three.js stopped shipping
  * such a file: 0.187 is ES modules only. This tool bundles the entry for one
  * flavour (tools/three-entry.<flavour>.js, which lists what goes in) into
- * vendor/three.<flavour>.js and prints its byte size and SHA-256. It is run by
+ * vendor/three.<flavour>.js and prints its byte size and SHA-256. The file
+ * begins with three.js's own licence header and then one line that says which
+ * release and flavour it is (versionStamp below). It is run by
  * hand when the three.js version or an entry changes; `node build.js` never
  * runs it and needs no install.
  *
@@ -205,6 +207,19 @@ function licenceHeader() {
   return header;
 }
 
+/* What this file is, in the file itself: the second comment of the bundle,
+   straight after three.js's own licence header. The package's header names
+   no version, and a minified bundle says nothing a person can read about
+   which release it is, so until this line existed the only record was this
+   tool's source. build.js reads the version from it for the notice it puts
+   in the built page, and refuses to build if it is missing or names a
+   release other than the one build.js expects. The licence header stays
+   first and word for word, which is what the licence asks for. */
+function versionStamp() {
+  return '/* three.js ' + VERSIONS.three + ', the ' + flavour + ' flavour, as one classic script that defines the global THREE. ' +
+    'Made by tools/vendor-three.js from tools/three-entry.' + flavour + '.js with esbuild ' + VERSIONS.esbuild + '. Do not edit: run the tool again. */';
+}
+
 (async () => {
   const out = path.join(ROOT, 'vendor', 'three.' + flavour + '.js');
   const result = await esbuild.build({
@@ -220,7 +235,7 @@ function licenceHeader() {
        notice keeps it. (None of the addons in the entries has one today; the
        copies inside the file are the same header at the head of each three.js
        build file.) */
-    banner: { js: licenceHeader() },
+    banner: { js: licenceHeader() + '\n' + versionStamp() },
     legalComments: 'inline',
     /* The bundler writes `var THREE = ...`. In a page that is the global. In
        the node tests the file is run as the body of a function

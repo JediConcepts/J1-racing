@@ -1104,7 +1104,7 @@ As before, every trial was an edit to a copy outside the working tree, the still
 
 **What was done.** Two halves, both in `src/10-core.js`, and one call.
 
-- `texFromCanvas` no longer flags the texture sRGB. A texture with no colour space is stored as `RGBA8` on the fallback and `rgba8unorm` on WebGPU, the GPU builds its mip chain from the painted values and smooths on them, and that is what r128's GPU did. Filters, wrap, repeat and anisotropy are untouched. The texture carries a mark, `userData.decodeInShader`.
+- `texFromCanvas` no longer flags the texture sRGB. A texture with no colour space is stored as `RGBA8` on the fallback and `rgba8unorm` on WebGPU, the GPU builds its mip chain from the painted values and smooths on them, and that is what r128's GPU did. (CORRECTED in stage B: for the mip chain that is exact on the fallback and an approximation on WebGPU, where the engine builds the chain itself. See the corrections under stage B.) Filters, wrap, repeat and anisotropy are untouched. The texture carries a mark, `userData.decodeInShader`.
 - `decodeCanvasMaps(root)`, beside it, gives every material whose map carries the mark two nodes. `colorNode` is the material's colour times the smoothed sample put through the engine's own `sRGBTransferEOTF`. `opacityNode` is the material's opacity times the sample's alpha. `sRGBTransferEOTF` is r128's `sRGBToLinear` constant for constant (0.9478672986, 0.0521327014, 2.4, 0.0773993808, 0.04045, read in both sources), so the shader does to the sample what r128's shader did to it, in the same order: map, then vertex colours, then the alpha test, then the lighting.
 - `Game.buildWorld` calls it once, after the scene is built. The cars carry no canvas texture that needs it (the blob under a car is black, was never flagged, and is untouched).
 
@@ -1300,7 +1300,7 @@ By the rule: 2.066 at 150, 1.847 at 250, 1.927 at 300. **250 is kept**, by 0.080
 | silverstone-v1.retro.high | 1.373 | 0.919 | 1.212 | 0.048% | ok | 1.668 | -0.295 |
 | silverstone-v1.retro.stands | 1.399 | 1.160 | 1.621 | 0.059% | ok | 2.705 | -1.084 |
 
-**Stills over 6: none.** The range is 0.6 to 4.6; the average of the channel means is 1.681 in Retro, 2.012 in Modern and 1.847 over the 28 (2.749 at the end of fix round 1). Every still is lower than it was at the end of fix round 1. The one that gained least is Monaco's `high` view in Modern, 0.171 lower, with the sea's number out.
+**Stills over 6: none.** The range is 0.6 to 4.6; the average of the channel means is 1.681 in Retro, 2.012 in Modern and 1.847 over the 28 (2.749 at the end of fix round 1). Every still is lower than it was at the end of fix round 1. The one that gained least is Monaco's `high` view in Modern, 0.171 lower, with the sea's number out. (CORRECTED in stage B: that names the wrong still. Three gained less: `brands-hatch-v1.modern.chase` 0.116, `brands-hatch-v1.modern.high` 0.143 and `silverstone-v1.modern.high` 0.159. The one that gained least is `brands-hatch-v1.modern.chase`.)
 
 **The five highest, and what each is made of.** Three switches were thrown on both engines for this: fog off, fog and environment off, and (0.187 only) the sea at 1.15. r128 with fog off is `stills/fix1-evidence/r128-nofog`; the rest is under `stills/fix2-evidence/`.
 
@@ -1375,8 +1375,8 @@ What the table says:
 
 - **The crowd** agrees to within 3 levels in every view: far (150,141,133 against 148,140,134), near, and close from the stands (95,90,90 against 92,88,88). At the end of fix round 1 the far crowd was 34 levels lighter in red, the stands from the chase camera 9 to 25 lighter, and the close crowd 5 short in blue. It matches at every distance now, which a number on the whole surface could not do.
 - **Monaco's buildings** are 2 to 7 levels darker than live with the haze and 2 to 5 with fog off, on every face read. At the end of fix round 1 the shaded face of the near tower was 23 lighter and the small block by the hairpin 21 lighter. The roof at the bottom right in Retro, 25 lighter with the smoothing wrong, is within 2.
-- **The grass** is where it was, because its cause is another one: seen along the ground it is up to 14 levels redder and 26 bluer than live (Silverstone `chase`, Modern), seen from above within 6.
-- **The sea** is less red than live in its light part, by 15 levels in Modern and 8 in Retro, with its number out.
+- **The grass** is where it was, because its cause is another one: seen along the ground it is up to 14 levels redder and 26 bluer than live (Silverstone `chase`, Modern), seen from above within 6. (CORRECTED in stage B: the two Silverstone rectangles are not pure grass, and on pure grass the largest difference is larger: 17 levels redder and 33 bluer. See "Corrections to the record of fix round 2".)
+- **The sea** is less red than live in its light part, by 15 levels in Modern and 8 in Retro, with its number out. (NOTED in stage B: the commit that took the number out, `f2aab8d`, says 16 here and 7 with the number in, where this log says 15 and 6. The commit message is the one that is right. See the corrections under stage B.)
 - **The road, the quay and the far ground** agree to within 3 levels in every view.
 
 The grass, the sea and one tower face again with the environment switched off on both engines as well (`stills/fix2-evidence/r128-nofog-noenv` and `final-nofog-noenv`), beside the fog off figures from the table above:
@@ -1400,7 +1400,7 @@ The grass, the sea and one tower face again with the environment switched off on
 | silverstone.retro.chase | grass, left | 85,131,76 | 92,134,89 | +7,+3,+13 | 81,119,68 | 80,116,67 | -1,-3,-1 |
 | silverstone.retro.chase | grass, right | 107,138,83 | 113,139,94 | +6,+1,+11 | 96,120,66 | 95,117,65 | -1,-3,-1 |
 
-With no environment the grass agrees to within 4 levels, the tower to within 3 and the sea's red to within 1. So what is left on the grass and on the sea is light from the environment, as fix round 1 found for the grass, and no smoothing is in it. (With the environment off the sea is up to 7 levels lower in green and blue than on r128. That is the water under direct light alone, a picture the game never shows, and it was not looked into.)
+With no environment the grass agrees to within 4 levels, the tower to within 3 and the sea's red to within 1. (CORRECTED in stage B: on rectangles of pure grass, within 5.) So what is left on the grass and on the sea is light from the environment, as fix round 1 found for the grass, and no smoothing is in it. (With the environment off the sea is up to 7 levels lower in green and blue than on r128. That is the water under direct light alone, a picture the game never shows, and it was not looked into.)
 
 **The real WebGPU backend,** checked after the last change on the build of `1028956` (`v0.130`): the system Chrome 158, headed, WebGPU (`backend.isWebGPUBackend`, `backend.device` a `GPUDevice`) against the same Chrome with `?renderer=webgl`, the canvas read back in the task that drew it and reduced to the 32 x 18 grid of cell means.
 
@@ -1415,7 +1415,7 @@ With no environment the grass agrees to within 4 levels, the tower to within 3 a
 | Monaco, high, tick 600 | Retro | 17 to 207 | 0.003 | 0.24 |
 | Monaco, high, tick 600 | Modern | 0 to 223 | 0.004 | 0.11 |
 
-All eight within 1 level on the worst cell; the worst is 0.24. Nothing on the console of any of the sixteen pages. The far crowd and the far buildings were read on both backends from the screenshots of the same pages (`stills/fix2-evidence/gpu-final-webgpu` and `gpu-final-webgl`), with the rectangles of the table above: every crowd rectangle at Indianapolis and every building rectangle at Monaco reads the same on WebGPU as on the fallback, to the level, in both tiers (far crowd 151,143,134 on both in Modern; far tower 82,82,82 on both). The one Chrome the check opened was closed.
+All eight within 1 level on the worst cell; the worst is 0.24. Nothing on the console of any of the sixteen pages. The far crowd and the far buildings were read on both backends from the screenshots of the same pages (`stills/fix2-evidence/gpu-final-webgpu` and `gpu-final-webgl`), with the rectangles of the table above: every crowd rectangle at Indianapolis and every building rectangle at Monaco reads the same on WebGPU as on the fallback, to the level, in both tiers (far crowd 151,143,134 on both in Modern; far tower 82,82,82 on both). (CORRECTED in stage B: those two readings are not on the named surfaces. The shots are 1265 x 603 and the rectangles were drawn for stills of 1280 x 607, so each landed a little off. With the rectangles scaled to the shots the far crowd reads 148,141,134 on both backends and the far tower 80,81,80 on both. That the two backends agree stands.) The one Chrome the check opened was closed.
 
 **The console.** Every capture ran with the same script in front of the stills tool as in fix round 1 (`node -r`, kept outside the repo), which prints every console error, console warning and page error. In this round: 14 captures of the 28 stills on 0.187, one on r128, and 9 smaller ones. Errors: none, on any capture of a build that was kept. The one build that failed is the first try described above, and its errors are how it was found. Warnings on 0.187: the three kinds of fix round 1, and two more that came once each in three of the captures, as a run of the stills tool ends and its page goes away: `WebGL: CONTEXT_LOST_WEBGL: loseContext: context lost` and `A valid external Instance reference no longer exists.` The first is in an r128 capture of fix round 1 as well (`r128-noenv`), so it is the page going away and not the engine move. The stills of a capture that carried them are the same files as those of one that did not.
 
@@ -1433,6 +1433,8 @@ Each is marked where it stands in the text above this section.
 - Three kinds of console warning "and no other": five, as above.
 
 ### For Jamie, with the pairs
+
+(SUPERSEDED by the list of the same name under stage B, which adds a difference this one missed and has the sea's number back.)
 
 This replaces the list of fix round 1. Things that differ from the live game after this round:
 
@@ -1494,7 +1496,7 @@ What was done: `f2aab8d` reverted as a new commit. The sea's material carries `e
 | silverstone-v1.retro.high | 1.373 | 0.919 | 1.212 | 0.048% | ok | 1.373 | +0.000 |
 | silverstone-v1.retro.stands | 1.399 | 1.160 | 1.621 | 0.059% | ok | 1.621 | +0.000 |
 
-**Stills over 6: none.** 28 compared; the range is 0.603 to 3.255. The average of the channel means is 1.638 in Retro, 1.970 in Modern and 1.804 over the 28 (1.681, 2.012 and 1.847 with the number out); the average of the highest channels over the 28 is 2.130 (2.222). The six stills that move are the six Monaco stills that show the sea; the other 22 are the same files as `stills/after-tuning-2`, and all 28 are the same files as `stills/fix2-filter`, the set fix round 2 took with the number still in (0.000 on every channel of every still).
+**Stills over 6: none.** 28 compared; the range is 0.603 to 3.255. The average of the channel means is 1.638 in Retro, 1.970 in Modern and 1.804 over the 28 (1.681, 2.012 and 1.847 with the number out); the average of the highest channels over the 28 is 2.130 (2.222). The six stills that move are the six Monaco stills that show the sea; the other 22 are the same files as `stills/after-tuning-2`, and all 28 are the same files as `stills/fix2-filter`, the set fix round 2 took with the number still in (0.000 on every channel of every still). (CORRECTED under B3: 27 of the 28 are the same files. The 28th, the Silverstone Retro `stands` view, differs in 8 pixels by 5 levels at most, which the compare tool prints as 0.000. Why is under "B3: a finding". For the same reason "the other 22 are the same files as `stills/after-tuning-2`" is 21.)
 
 By the still, as ruled: of the six that move, every one has a lower figure than with the number out (the largest fall is 1.301, the smallest 0.048), and no still's figure rises. By the channel, for the record: one channel still rises by more than 0.2, the same one as before (blue in `monaco-gp-v1.modern.high`, 2.445 to 2.754).
 
@@ -1645,8 +1647,93 @@ What it touches and what it does not:
 
 - Only the six Silverstone Retro stills. Indianapolis, Brands Hatch and Monaco are reached by a reload with Retro already saved, so they are loaded in Retro and the sun never moves. Every Modern still sets the sun from the player's car, which the hook places.
 - The gate: nothing. The largest difference seen is one palette step in one pixel.
-- Any statement that two sets are "the same files". Earlier entries of this log say that of sets that include this still. Where they were compared with the compare tool they are right to three decimals and may be wrong to the byte for this one still. One such statement is B0's own: `stills/after-tuning-3` is the same as `stills/fix2-filter` in 27 files, and differs from it in the 8 pixels described above in the 28th. It is corrected here and not in place, so that the entry reads as it was written.
+- Any statement that two sets are "the same files". Earlier entries of this log say that of sets that include this still. Where they were compared with the compare tool they are right to three decimals and may be wrong to the byte for this one still. One such statement is B0's own: `stills/after-tuning-3` is the same as `stills/fix2-filter` in 27 files, and differs from it in the 8 pixels described above in the 28th. It is marked where it stands.
 - The same code is on `main` (`if (this.sun && this.sun.castShadow)`), so r128 had the same dependence. Its reference stills did not show it: that still is the same file in `stills/before-main`, `main-a`, `main-b` and the rebuilt r128 of fix round 1. Whether r128 could not show it or only did not in four captures was not looked into.
 - The stage A statement that a change of tier at run time gives the same picture as loading in the tier "to the pixel" is true of what it measured (Monaco `high` and Silverstone `chase`) and is not true in general, by one pixel, for the same reason.
 
 NOT FIXED, on purpose. The fix is three lines in `Game.prototype.photo` (place the sun as a page loaded in that tier would have it, before the frame is drawn), and it would make the hook's own claim true that everything carrying history into the frame is pinned. It is a change to the camera every later picture is judged with, it is not in this stage's brief, and it would move one pixel of up to six stills. It needs a ruling.
+
+### B4: the build and its papers
+
+**The notice names the real release.** `build.js` wrote "three.js r131" and "Copyright 2010-2021" into the notice it puts in the built page, from a string of its own, over a vendored r128 and then over 0.187. It now reads both from the head of `vendor/three.bundle.js`. The built page says:
+
+```
+/*! three.js 0.187.0 — https://github.com/mrdoob/three.js
+ *  Copyright 2010-2026 Three.js Authors
+ *  SPDX-License-Identifier: MIT
+```
+
+One thing the brief had wrong about the code: it says the version comes "from the bundle's own header", and the bundle's header named no version. It was three.js's licence comment and nothing else, which is all the package's own build files carry. So `tools/vendor-three.js` now writes one more line after that comment, naming the release, the flavour, the entry and the bundler, and the bundle was built again:
+
+| | bytes | SHA-256 |
+|---|---|---|
+| before (`34942be`) | 853,426 | `7fdd3961332e227708eb4e1b90660f7202b80d9c8d0a0409048bb6ef8087dd43` |
+| now | 853,640 | `2e8ae995106f0b89b907a1330c957e28b6a100ee778227590d43b129abd53325` |
+
+The 214 bytes are that line. With it taken out the new file is the old one, byte for byte, so no code in the engine moved. Built twice, the same bytes both times.
+
+**Two new invariants,** both of which fail the build:
+
+- The bundle's header must say which three.js it is, and it must be 0.187 (`THREE_RELEASE` in `build.js`).
+- `dist/index.html` must be at most 2,500,000 bytes, the limit the renderer decision was taken under.
+
+Each shown to fail in a copy outside the working tree: the bundle as it was before this step ("does not say which three.js it is"), the bundle with its line changed to 0.190.1 ("is three.js 0.190.1 and this build expects 0.187"), and the limit lowered to 1,500,000 ("index.html is 1598660 bytes, over the limit").
+
+**The papers.** `THIRD-PARTY.md` says what is vendored (0.187.0, the WebGPU flavour, made by the tool from the npm package), how it is rebuilt, that the notice is read from the file, and that r128 is still in the repo under `tools/vendor/` for the track bake and is not in the built page. `CLAUDE.md` has a new part of its build section, "The engine": what is vendored, how it is rebuilt, the two invariants, and what an update of the engine has to check. That last is the carried item: the picture leans on two behaviours of three.js that are not part of its public promise (the renderer copies a classic material's properties, `colorNode` included, on to the node material it builds; the shadow pass reads the alpha of `colorNode`), so after any change to `vendor/three.bundle.js` the sim parity test, `test/picture.js` and the 28 stills against the reference are run before it is committed. One paragraph of `THIRD-PARTY.md` was left as it is and is no longer true: it says the Artifact fragment leaves supabase-js out. On `main` it does not. That came with `main`, the brief names it as an open question for Jamie, and it is not this task's to settle.
+
+**A comment in the code** (`Game.buildEnvironment`): why the environment canvas keeps its sRGB flag when `texFromCanvas` takes it off every other canvas texture. The measurement is fix round 2's: 0.080 of a level at worst over a 2 x 2 box of texels, 0.299 over 4 x 4.
+
+**This step did what it tells the next one to do.** The bundle changed, so all three were run on the build with everything of this step in it (`v0.136 dev d4ed3eb*`):
+
+- `node test/sim-parity.test.js`: 4 passed.
+- `node test/picture.js`: 24 passed, 0 failed (headless, the fallback). `node test/picture.js --webgpu`: 20 passed, 0 failed (the system Chrome 158).
+- The 28 stills (`stills/stageB/after-b4`), taken with the tool's own console watch: exit 0, nothing on the console. Against `stills/before-main`: 28 compared, 0.603 to 3.255, none over 6, and the output of the compare tool is the same as B0's line for line. 27 of the 28 are the same files as `stills/after-tuning-3`; the 28th is the Silverstone Retro `stands` view, in the other of its two forms (see the finding under B3).
+
+Both outputs build: `dist/index.html` 1,599,826 bytes (479,100 with `gzip -9`), `dist/artifact.html` 1,595,203. `dist/artifact.html` boots: wrapped in a doctype, an empty head and a body, as its host wraps it, and served locally, it comes up in standards mode, draws (over 220 colours in the frame), its frames advance, and nothing is on the console or uncaught, on the fallback (headless) and on WebGPU (the system Chrome).
+
+Also run on that build: `node test/physics.test.js` 37 passed; `node test/fpmath.test.js` 3 passed; `node test/track-bake.test.js` 8 passed; `node test/music.test.js` 31 passed; `node test/csp.js` `RESULT: PASS`, booted on `webgl2`, 0 unexpected violations.
+
+### Corrections to the record of fix round 2
+
+From the review of that round. Each is marked where it stands in the text above; the figures are here.
+
+1. **The grass rectangles at Silverstone were not pure grass, and the largest difference left was understated.** In the `chase` view the rectangle called "grass, left" ran over the end of the slab a tree casts as its shadow on r128, and the one called "grass, right" took in kerb and the edge of the wall (about 71% of its pixels are grass). Two rectangles that are grass and nothing else in every set (every pixel green, checked): left `180,270,120,20`, right `948,282,42,18`. "Now" is `stills/after-tuning-3`; the sets with fog and the environment off are the ones fix round 2 used. Each difference is of the unrounded means, rounded once.
+
+| tier | surface | live | now | difference | r128, fog and environment off | now, fog and environment off | difference |
+|---|---|---|---|---|---|---|---|
+| Modern | grass, left | 97,162,77 | 108,166,101 | +11,+3,+24 | 86,147,63 | 84,142,62 | -2,-5,-1 |
+| Modern | grass, right | 75,157,54 | 92,163,87 | +17,+6,+33 | 61,140,36 | 58,135,35 | -3,-4,-1 |
+| Retro | grass, left | 86,132,76 | 93,135,91 | +7,+3,+14 | 83,121,69 | 81,117,68 | -1,-3,+0 |
+| Retro | grass, right | 76,130,63 | 86,133,83 | +9,+3,+19 | 70,116,53 | 69,114,52 | -1,-2,-1 |
+
+   So the largest difference left on the grass is **17 levels redder and 33 bluer than live** (Silverstone `chase`, Modern, the grass on the right), not 14 and 26. The fog off sets read the same as the fogged ones here to a tenth of a level: this grass is nearer than the haze starts. With the environment off on both engines the pure rectangles agree to within 5 levels (the round said 4). The cause given for the grass stands: it is light from the environment.
+2. **"The one that gained least"** named the wrong still. `brands-hatch-v1.modern.chase` gained least since fix round 1 (0.116), then `brands-hatch-v1.modern.high` (0.143) and `silverstone-v1.modern.high` (0.159). Monaco's `high` view in Modern, which the round named, gained 0.171. "Every still is lower" was true.
+3. **The sea's red, 16 and 7 or 15 and 6.** The commit that took the number out (`f2aab8d`) says the light part of the sea is 16 levels less red than live in Modern without the number and 7 with it. The log said 15 and 6. Both are from the same rectangle, whose red reads 99.40 live, 83.88 without the number and 92.81 with it: 15.5 and 6.6. The commit message rounded the differences and is right. The log subtracted figures it had already rounded. The message stands as written; with the number back (B0) the figure that applies is 7 (6.6).
+4. **A visible difference at Monaco was missing from the list for Jamie.** At Monaco a tree that stands against a tower is drawn in ragged scraps on the live game, cut up by the tower's wall, and whole on 0.187. Two places in the `high` view in Modern show it: near x 150 to 175, y 95 to 125, and near x 525, y 115. It has been so since stage A and no round listed it. The likely cause, read in both engines' source and not put to a test: r128 gives a render target with a depth buffer and no stencil 16 bits of depth, 0.187 gives it 24, and a tree a hair in front of a far wall cannot be told from the wall at 16. It is the better picture and it differs from what is live, so it is on the list below.
+5. **The surface readings quoted for the two backends** (far crowd 151,143,134 and far tower 82,82,82 "on both") were not on the named surfaces. The shots of that check are 1265 x 603 and the rectangles were drawn for stills of 1280 x 607. Scaled to the shots, on WebGPU and on the forced fallback alike:
+
+| still | surface | live (headless) | now (headless) | WebGPU, Chrome | fallback, Chrome |
+|---|---|---|---|---|---|
+| indianapolis.modern.high | crowd, right, far | 150,141,133 | 148,140,134 | 148,141,134 | 148,141,134 |
+| indianapolis.retro.high | crowd, right, far | 131,123,116 | 128,122,115 | 129,122,115 | 129,122,115 |
+| indianapolis.modern.chase | crowd, left stand | 134,131,135 | 136,134,137 | 137,134,138 | 137,134,138 |
+| monaco.modern.high | near tower, shaded face | 102,105,106 | 97,100,102 | 99,102,104 | 99,102,104 |
+| monaco.modern.high | far tower, top left | 86,84,82 | 79,79,78 | 80,81,80 | 80,81,80 |
+| monaco.retro.high | far tower, top left | 79,78,77 | 74,74,74 | 76,76,75 | 76,76,75 |
+
+   Every one of the sixteen rectangles read (the crowd at Indianapolis, the buildings at Monaco, both tiers) is the same on the two backends to the level, and within 2 levels of the headless still. The comparison between the backends was sound, since both shots were the same size; the two figures printed were wrong.
+6. **"The GPU builds its mip chain ... and that is what r128's GPU did"** is exact on the fallback and an approximation on WebGPU. On the fallback the engine calls `generateMipmap`, as r128 did, and the driver builds the chain. WebGPU has no such call: the engine builds each level itself, by drawing it from the level above through a linear sampler. Both work on the stored, painted values, which is the point of the fix, and both give the plain average of four texels for these textures; but on WebGPU it is the engine's pass and not the driver's routine, and r128 never ran on WebGPU, so there is no r128 to hold it against there. What is measured is that the two backends agree (0.24 of a level on the worst cell, fix round 2) and that the fallback matches the live picture.
+
+### For Jamie, with the pairs
+
+This replaces the list of fix round 2. Things that differ from the live game as stage B leaves it:
+
+1. **Trees cast their own outline** and not a slab. Not compensated, by ruling 4 of fix round 1.
+2. **The grass is paler and less green seen along the ground** on the three circuits that have grass: up to 17 levels redder and 33 bluer than live (Silverstone, `chase`, Modern). It is light from the environment and no number is on it. It is the largest thing left in the chase views.
+3. **The sea at Monaco** has its 1.15 back (B0). Its light part is 7 levels less red than live in Modern and 4 in Retro; its dark middle is 4 to 5 levels too green and too blue in Modern.
+4. **The haze starts at 250 m, not 150 m.** A compensation, kept by the rule of fix round 2.
+5. **Monaco's buildings are a shade darker,** by 2 to 7 levels.
+6. **The car body** is still a little darker than live at its own 1.15 (stage A). Not touched.
+7. **At Monaco, a tree standing against a tower is drawn whole.** On the live game it is cut into ragged scraps by the tower's wall. New on this list; see correction 4 above.
+
+And one thing that is not a difference in the picture but is new behaviour: when the browser takes the graphics device away, the game now stops at the NO SIGNAL panel and asks for a reload (B1). On r128 it carried on over a frozen or black canvas.
