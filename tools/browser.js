@@ -3,7 +3,8 @@
    launch arguments every still is taken with, and what a still is: the
    context it is taken in (STILL_CONTEXT), the part of the page it shows
    (stillClip), the pinned Math.random its page runs on (pinRandom) and the
-   watch on its console (watchPage). The last four are for stills only.
+   watch on its console (watchPage). The first three of those four are for
+   stills only; the bench watches its console too.
 
    Nothing is installed into this repo; Playwright is found through
    NODE_PATH. Point it at a node_modules that has it:
@@ -202,9 +203,15 @@ const KNOWN_WARNINGS = [
   'A valid external Instance reference no longer exists.'
 ];
 
-/* Watches a stills page for anything that says the picture may be wrong,
-   and hands each one to `report` as a line of text: a page error, a console
-   error, or a console warning that is not in KNOWN_WARNINGS.
+/* Watches a page for anything that says the picture may be wrong, and hands
+   each one to `report` as a line of text: a page error, a console error, or
+   a console warning that is not in KNOWN_WARNINGS.
+
+   The stills tool gives `report` alone, and all three fail its run. The
+   bench gives `note` as well, and an unknown warning then goes there and
+   not to `report`: KNOWN_WARNINGS is the list of a headless stills page,
+   and the bench runs headed on a real GPU, whose driver has warnings of its
+   own that say nothing about the frame. An error is an error on either.
 
    WHY THE CONSOLE AND NOT ONLY PAGE ERRORS. A node material that fails to
    build does not throw. The engine writes the failure on the console and
@@ -214,7 +221,7 @@ const KNOWN_WARNINGS = [
    because the engine reports some of its problems at that level and a new
    one should be read by a person once, and then either fixed or added
    above with its reason. */
-function watchPage(page, report) {
+function watchPage(page, report, note) {
   page.on('pageerror', (e) => report('PAGEERROR: ' + e.message));
   page.on('console', (m) => {
     const type = m.type();
@@ -222,7 +229,7 @@ function watchPage(page, report) {
     const text = m.text();
     const plain = text.replace(/^\[\.WebGL-0x[0-9a-f]+\]\s*/, '').replace(/ \(this message will no longer repeat\)$/, '');
     if (type === 'warning' && KNOWN_WARNINGS.indexOf(plain) >= 0) return;
-    report('CONSOLE ' + type.toUpperCase() + ': ' + text.split('\n')[0]);
+    (type === 'warning' && note ? note : report)('CONSOLE ' + type.toUpperCase() + ': ' + text.split('\n')[0]);
   });
 }
 

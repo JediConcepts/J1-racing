@@ -1,7 +1,7 @@
 /* Measures frame times through MCL64.bench, the same way every time.
  *
  *   node tools/bench.js --quality <q> --circuit <id> --seconds <n>
- *                       [--renderer webgl] [--headless]
+ *                       [--tod <name>] [--renderer webgl] [--headless]
  *
  * Opens the system Chrome (Playwright channel 'chrome'), headed, so the real
  * GPU does the drawing, in a 1728 x 1028 viewport at whatever device pixel
@@ -26,10 +26,22 @@
  * fallback, the canvas's current texture on WebGPU. Nothing here asks a
  * WebGPU canvas for a GL context, which it cannot give.
  *
- * If the page throws at any point the run prints the error and exits 1 with
- * no JSON line. A frame loop that throws part way through each frame still
- * asks for the next frame, so it would otherwise report a figure, and a
- * better one than a build that works.
+ * --tod sets the hour first: morning, midday, golden or dusk, handed to the
+ * page as the stills tool hands it. It changes the picture in Ultra only.
+ * The line carries the hour the page was at as `timeOfDay`, given or not.
+ *
+ * A FIGURE FROM A BROKEN FRAME IS NOT PRINTED. The run prints what went
+ * wrong and exits 1 with no JSON line if, at any point, the page throws,
+ * the page writes an error on its console, or the game ends at its fallback
+ * panel. Each of those gives a figure otherwise, and a better one than a
+ * build that works. A frame loop that throws part way through each frame
+ * still asks for the next frame. A node material that fails to build is
+ * reported on the console and the frame is drawn all the same, without it.
+ * And a lost graphics device stops the game's own loop while the hook's
+ * timer runs on, counting the frames of a canvas nothing draws to. The
+ * watch on the console is the one the stills tool uses (watchPage in
+ * tools/browser.js), except that a warning it does not know is printed and
+ * does not fail the run.
  *
  * --headless uses Playwright's own Chromium instead, with the stills launch
  * arguments. That figure is a SwiftShader frame time, not a GPU one; it is
@@ -38,20 +50,28 @@
  * Needs Playwright on NODE_PATH; see tools/browser.js. */
 'use strict';
 
-const { CHROMIUM_ARGS, requirePlaywright, serveDist, localOnly, callHook } = require('./browser');
+const { CHROMIUM_ARGS, requirePlaywright, serveDist, localOnly, callHook, watchPage } = require('./browser');
 
 const VIEWPORT = { width: 1728, height: 1028 };
 const BENCH_CHROME_ARGS = ['--disable-gpu-vsync', '--disable-frame-rate-limit'];
 
+const TIMES_OF_DAY = ['morning', 'midday', 'golden', 'dusk'];
+
 const argv = process.argv.slice(2);
 const args = {};
+let badArgs = false;
 for (let i = 0; i < argv.length; i++) {
   if (argv[i] === '--headless') args.headless = true;
-  else if (argv[i].startsWith('--')) args[argv[i].slice(2)] = argv[++i];
+  else if (argv[i].startsWith('--')) {
+    /* a switch with nothing after it is a mistake, not a switch left out */
+    if (argv[i + 1] === undefined) badArgs = true;
+    args[argv[i].slice(2)] = argv[++i];
+  }
 }
 const seconds = Number(args.seconds);
-if (!args.quality || !args.circuit || !(seconds > 0) || (args.renderer !== undefined && args.renderer !== 'webgl')) {
-  console.error('usage: node tools/bench.js --quality <retro|modern|ultra> --circuit <id> --seconds <n> [--renderer webgl] [--headless]');
+if (badArgs || !args.quality || !args.circuit || !(seconds > 0) || (args.renderer !== undefined && args.renderer !== 'webgl') ||
+    (args.tod !== undefined && TIMES_OF_DAY.indexOf(args.tod) < 0)) {
+  console.error('usage: node tools/bench.js --quality <retro|modern|ultra> --circuit <id> --seconds <n> [--tod <' + TIMES_OF_DAY.join('|') + '>] [--renderer webgl] [--headless]');
   process.exit(2);
 }
 
@@ -73,16 +93,33 @@ if (!args.quality || !args.circuit || !(seconds > 0) || (args.renderer !== undef
     await probe.close();
     const context = await browser.newContext({ viewport: VIEWPORT, deviceScaleFactor: args.headless ? 1 : displayDpr });
     const page = await context.newPage();
-    const pageErrors = [];
-    page.on('pageerror', (e) => { console.error('PAGEERROR: ' + e.message); pageErrors.push(e.message); });
+    /* see the header: every line here is a frame that cannot be trusted */
+    const broken = [];
+    watchPage(page,
+      (line) => { console.error(line); broken.push(line); },
+      (line) => console.error(line + '  (a warning this tool does not know: printed, not a failure)'));
     await localOnly(page, server.url);
     /* the switch stays in the address when a change of circuit reloads the page */
     await page.goto(server.url + (args.renderer === 'webgl' ? '?renderer=webgl' : ''), { waitUntil: 'load', timeout: 60000 });
-    const r = await callHook(page, 'bench', { circuit: args.circuit, quality: args.quality, seconds });
-    if (pageErrors.length) {
-      throw new Error('the page threw ' + pageErrors.length + ' error' + (pageErrors.length === 1 ? '' : 's') + ' during the run, so its frame times mean nothing and none are printed');
+    const hook = { circuit: args.circuit, quality: args.quality, seconds };
+    if (args.tod !== undefined) hook.timeOfDay = args.tod;
+    const r = await callHook(page, 'bench', hook);
+    /* The panel is where the game ends when its picture has stopped: a lost
+       device, most of all. The engine says that on the console as well, so
+       this is the second lock on the same door, and it is asked before
+       anything below touches a device that may be gone. */
+    const panel = await page.evaluate(() => {
+      const f = document.getElementById('fallback');
+      if (!f || getComputedStyle(f).display === 'none') return '';
+      return 'the game ended at its fallback panel: ' + f.textContent.replace(/\s+/g, ' ').trim();
+    });
+    if (panel) broken.push(panel);
+    if (broken.length) {
+      throw new Error('NO FIGURE. The frames of this run cannot be trusted, so its frame times mean nothing and none are printed:\n  ' +
+        broken.join('\n  '));
     }
     const dpr = await page.evaluate(() => window.devicePixelRatio);
+    const timeOfDay = await page.evaluate(() => window.MCL64.settings.timeOfDay);
     const drawn = await page.evaluate(async () => {
       const game = window.MCL64, canvas = game.glCanvas, b = game.renderer.backend;
       const out = { renderTarget: game.gw + 'x' + game.gh, canvas: canvas.width + 'x' + canvas.height };
@@ -118,7 +155,7 @@ if (!args.quality || !args.circuit || !(seconds > 0) || (args.renderer !== undef
          comes out at its refresh rate (60 or 120) with avgMs at 16.67 or
          8.33; an uncapped run lands wherever the cost puts it. */
       fps: Math.round(r.frames / seconds * 10) / 10,
-      circuit: args.circuit, quality: args.quality, seconds,
+      circuit: args.circuit, quality: args.quality, timeOfDay, seconds,
       chromeArgs: args.headless ? CHROMIUM_ARGS : BENCH_CHROME_ARGS,
       browser: (args.headless ? 'headless chromium (swiftshader) ' : 'chrome ') + browser.version(),
       viewport: VIEWPORT.width + 'x' + VIEWPORT.height, dpr,

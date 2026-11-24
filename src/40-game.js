@@ -3729,19 +3729,23 @@ Game.prototype.photo = function (opts) {
   }
 };
 
-/* MCL64.bench({ circuit, quality, seconds }) -> Promise<{ frames, avgMs, p95Ms }>
+/* MCL64.bench({ circuit, quality, seconds, timeOfDay }) -> Promise<{ frames, avgMs, p95Ms }>
  *
  * Runs the attract demo and times the gaps between animation frames, which
  * is the frame time a player actually gets. The first second is a warm up
  * (shaders compile on the first frames after a tier change) and is not
- * counted. Releases a hold left by photo. */
+ * counted. Releases a hold left by photo. `timeOfDay` is as photo takes it:
+ * one of TIME_OF_DAY_NAMES, set and saved before the run, and anything else
+ * is refused. It changes the picture in Ultra only. */
 Game.prototype.bench = function (opts) {
   var o = opts || {};
   try {
     var seconds = o.seconds > 0 ? o.seconds : 20;
+    if (o.timeOfDay != null && TIME_OF_DAY_NAMES.indexOf(o.timeOfDay) < 0) throw new Error('unknown time of day ' + o.timeOfDay);
     if (!this.hookSelect(o.circuit, o.quality)) {
       return Promise.reject(new Error('MCL64.bench: reloading to load ' + o.circuit + '; call again once the page has loaded'));
     }
+    if (o.timeOfDay != null) this.setTimeOfDay(o.timeOfDay);
     this.photoHold = false;
     this.hudCanvas.style.visibility = '';
     this.resetRace(true);
