@@ -291,7 +291,7 @@ var LAS_VEGAS_CONTROL = [
 ];
 
 var LAS_VEGAS_CORNERS = [
-  ['KOVAL', 4], ['TWAIN', 14], ['THE SPHERE', 22], ['SANDS', 30],
+  ['KOVAL', 4], ['TWAIN', 14], ['THE GLOBE', 22], ['SANDS', 30],
   ['THE STRIP', 34], ['HARMON', 38], ['PADDOCK', 42]
 ];
 
@@ -2201,7 +2201,7 @@ function buildLasVegasScenery(track, scene) {
   /* --- the sphere, placed first so the towers can keep clear of it ------- */
   var sphereAt = null, sphereR = 0;
   for (k = 0; k < track.corners.length; k++) {
-    if (track.corners[k].name !== 'THE SPHERE') continue;
+    if (track.corners[k].name !== 'THE GLOBE') continue;
     var si = track.corners[k].index;
     var inside = track.curv[si] > 0 ? 1 : -1;     /* +lat is the inside of a left hander */
     for (var R = 62; R >= 34 && !sphereAt; R -= 4) {
