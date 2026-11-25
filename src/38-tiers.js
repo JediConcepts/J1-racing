@@ -69,14 +69,15 @@ var TIERS = {
   }
 };
 
-/* The order the Graphics button steps through the tiers, on every device. */
-var TIER_ORDER = ['retro', 'modern', 'ultra'];
+/* The order the Graphics button steps through the tiers: Ultra, Modern,
+   Retro, and round to Ultra again. The step from Modern is Retro, so nobody
+   passes through Ultra on the way there (rule R6 below). */
+var TIER_ORDER = ['ultra', 'modern', 'retro'];
 
 /* How long the Graphics button waits after the last click before the tier it
-   shows is built, in milliseconds. The button steps through the tiers in one
-   direction, so the way from Modern to Retro passes Ultra, and Ultra takes
-   seconds to build the first time. With the wait, two quick clicks pass it
-   without building it. */
+   shows is built, in milliseconds. Ultra takes seconds to build the first
+   time, and from Retro the way to Modern passes it. With the wait, two quick
+   clicks pass it without building it. */
 var TIER_SETTLE_MS = 400;
 
 /* The tier a heavy tier falls back to. */
@@ -87,7 +88,7 @@ var TIER_SAFE = 'modern';
 
    A new player is given Ultra, the heavy tier, on a device nobody has
    measured. Everything from here to the end of the file exists to make these
-   seven things true, and test/tiers.test.js has a line for each.
+   eight things true, and test/tiers.test.js has a line for each.
 
    R1  ITS OWN SETTINGS. The live game is on the same origin, so it shares
        this build's storage, knows only Retro and Modern, and writes its
@@ -114,6 +115,13 @@ var TIER_SAFE = 'modern';
        the tier), and the load after it tries the tier again. A second loss
        in that load turns the tier off until the player picks it again. The
        player's own pick on the Graphics button always wins for that load.
+   R6  NOBODY PASSES THROUGH ULTRA ON THE WAY FROM MODERN TO RETRO (see
+       TIER_ORDER). And once the game itself has taken a heavy tier away on
+       this device, a tap on the Graphics button leaves the heavy tiers out
+       until the player has tapped all the way round the others once in
+       that load. After that the button offers Ultra again, where it always
+       was, after Retro. There is no second control: the hint under the row
+       says how (see tierTap).
    R7  STORAGE THAT IS BLOCKED OR FULL. The game still starts. Nothing it
        learns can be kept there, so it starts in TIER_SAFE, and the player
        may pick Ultra by hand for that visit.
@@ -158,7 +166,7 @@ var TIER_SAFE = 'modern';
 
    A key that names a heavy tier other than the saved one is dropped. If it
    says the tier failed, the tier was one the player had clicked to and that
-   died before it was saved: nothing else changes, but it is barred.
+   died before it was saved: nothing else changes, but it is barred (R6).
 
    THE TRIAL (R2, R3, R4). A heavy tier is on trial from before it is built
    until it has drawn TIER_TRIAL_FRAMES frames, PACE.warmMs have passed
@@ -267,7 +275,7 @@ var SETTINGS_KEY_OLD = 'mcl64.settings.v1';
    Graphics button. The game's own pick is not: the default, and the tier a
    failed or slow Ultra falls back to. Nobody is told off for a tier they
    never asked for. `tierBarred` says the game has taken a heavy tier away
-   on this device and the player has not picked it again since. */
+   on this device and the player has not picked it again since (R6). */
 var SETTINGS_DEFAULTS = 2;
 var OLD_DEFAULTS = { quality: 'modern', trackId: 'silverstone-v1', timeOfDay: 'midday' };
 
@@ -395,10 +403,12 @@ function tierFresh() {
     /* whether the graphics device has gone, and whether an error nobody
        caught has been seen on this page */
     tierGone: false, tierBroke: false,
-    /* whether the game has taken a heavy tier away on this device, and
-       why a tier the player picked was given up at load (a name in
-       TIER_FELL) */
-    tierBarred: false, tierFell: null,
+    /* whether the game has taken a heavy tier away on this device, so
+       that the Graphics button leaves the heavy tiers out; whether the
+       player has since tapped all the way round the others in this load,
+       so that it offers them again (R6); and why a tier the player picked
+       was given up at load (a name in TIER_FELL) */
+    tierBarred: false, tierRound: false, tierFell: null,
     /* the guard (see PACE): the tier it last saw, what is left of the
        warm up, the window being filled (its length, what it feeds the
        mean, its frames), how long the windows have been slow, and whether
@@ -491,6 +501,7 @@ function tierSlow(g) {
   g.settings.quality = TIER_SAFE;
   g.settings.tierChosen = false;
   g.settings.tierBarred = g.tierBarred = true;
+  g.tierRound = false;
   return { key: null, build: true, save: true, say: chosen ? 'slow' : 'quiet' };
 }
 
@@ -589,7 +600,8 @@ function tierDeviceLost(g, hidden, sinceMs) {
    Graphics button have stopped). A heavy tier goes on trial before it is
    built: the key is in storage first, so a build that takes the tab down
    with it leaves the key behind. The pick is the player's own from here
-   on, a heavy tier picked is no longer barred, and whatever second chance
+   on, a heavy tier picked is no longer barred (and one that is taken away
+   after this has to be tapped round to afresh), and whatever second chance
    was owed is forgotten: the key is written over. */
 function tierPick(g) {
   var name = g.settings.quality, heavy = TIERS[name].heavy;
@@ -605,16 +617,44 @@ function tierPick(g) {
     o.build = true;
   }
   g.settings.tierChosen = true;
-  if (heavy) g.settings.tierBarred = g.tierBarred = false;
+  if (heavy) g.settings.tierBarred = g.tierBarred = g.tierRound = false;
   return o;
 }
 
-/* The tiers the Graphics button steps through, in order, and the one after
-   the tier the button shows now. */
+/* THE GRAPHICS BUTTON (R6). tierTaps is the tiers a tap steps through, in
+   order: all of them, or the light ones only while the heavy ones are
+   barred and the player has not yet been all the way round.
+
+   tierTap is one tap: it answers the tier the button is to show next. A tap
+   that comes round to the start of the order with a heavy tier left out is
+   the player having been all the way round (`tierRound`), and from then on
+   the taps of that load take in every tier. So on a device the game took
+   Ultra away from, starting in Modern: Retro, Modern, Retro, and only then
+   Ultra. Nobody gets there with one tap, or with two, and nobody is shut
+   out of it either. The load after starts the count again, for as long as
+   the tier is barred.
+
+   tierHint is which line the hint under the row adds to say so: 'round'
+   while the heavy tiers are left out, 'offered' once they are back in the
+   order and one is still barred, and null when nothing is barred or a
+   heavy tier is the one on the button. */
 function tierTaps(g) {
-  return TIER_ORDER.slice();
+  var out = [];
+  for (var i = 0; i < TIER_ORDER.length; i++) {
+    if (!(g.tierBarred && !g.tierRound && TIERS[TIER_ORDER[i]].heavy)) out.push(TIER_ORDER[i]);
+  }
+  return out;
 }
 function tierTap(g) {
   var names = tierTaps(g);
-  return names[(names.indexOf(g.settings.quality) + 1) % names.length];
+  var i = names.indexOf(g.settings.quality) + 1;
+  if (i >= names.length) {
+    i = 0;
+    if (g.tierBarred) g.tierRound = true;
+  }
+  return names[i];
+}
+function tierHint(g) {
+  if (!g.tierBarred || TIERS[g.settings.quality].heavy) return null;
+  return g.tierRound ? 'offered' : 'round';
 }

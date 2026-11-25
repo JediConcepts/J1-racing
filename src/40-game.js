@@ -1764,6 +1764,16 @@ var TIER_UI = {
   }
 };
 
+/* WHILE THE HEAVY TIERS ARE BARRED (rule R6 in 38-tiers.js) the Graphics
+   button leaves Ultra out until the player has tapped all the way round
+   the other tiers once. One of these lines is added to the hint under the
+   row, by what tierHint answers, so a button that has stopped offering
+   Ultra says why, and says how to have it back. */
+var TIER_BARRED_HINT = {
+  round: 'Ultra was turned off on this device. Tap all the way round once and it is offered again.',
+  offered: 'Ultra was turned off on this device. It is offered again, after Retro.'
+};
+
 Game.prototype.syncSettingsUi = function () {
   var s = this.settings;
   function put(id, txt) { var e = document.getElementById(id); if (e) e.textContent = txt; }
@@ -1775,7 +1785,8 @@ Game.prototype.syncSettingsUi = function () {
   this.syncTrackList();
 
   put('set-quality', TIER_UI[s.quality].label);
-  put('set-quality-hint', TIER_UI[s.quality].hint);
+  var barred = tierHint(this);
+  put('set-quality-hint', TIER_UI[s.quality].hint + (barred ? ' ' + TIER_BARRED_HINT[barred] : ''));
   /* the time of day means something in Ultra only, so its row is shown there
      and nowhere else */
   put('set-tod', s.timeOfDay.toUpperCase());
@@ -3216,7 +3227,7 @@ Game.prototype.applyQuality = function () {
    Every decision is made there, by a function that is handed this Game and
    answers with what is to be done. The methods here are the events of a
    page, in the order a page meets them, and tierAct carries the answer out.
-   The rules they serve and the table of what the key holds are
+   The rules they serve (R1 to R8) and the table of what the key holds are
    at the top of 38-tiers.js. */
 
 /* Carries out an answer: the key first, so that it is in storage before a

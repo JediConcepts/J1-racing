@@ -4,7 +4,7 @@
  *
  * WHAT THIS IS FOR. A new player is given Ultra, the heavy tier, on a device
  * nobody has measured, and src/38-tiers.js decides when that device keeps it
- * and when it is given Modern. The rules it has to keep are
+ * and when it is given Modern. The eight rules it has to keep (R1 to R8) are
  * written out at the top of that file. Every one of them was broken at commit
  * c9fe9ff in a way a review found by running the real functions in node
  * against a fake storage, and this file is those runs kept: a table of cases,
@@ -35,7 +35,7 @@ const read = (p) => fs.readFileSync(path.join(REPO, p), 'utf8');
 const CIRCUITS = ['monaco-gp-v1', 'silverstone-v1', 'indianapolis-v1', 'brands-hatch-v1'];
 const NAMES = ['TIERS', 'TIER_ORDER', 'TIER_SAFE', 'TIER_TRIAL_FRAMES', 'TIER_TRIAL_MS', 'TIER_TRIAL_KEY', 'TIER_GRACE_MS', 'PACE',
   'SETTINGS_KEY', 'SETTINGS_KEY_OLD', 'settingsLoad', 'settingsWrite', 'tierFresh', 'tierFrame', 'tierPace', 'tierOut', 'tierBack',
-  'tierDeviceLost', 'tierPick', 'tierTaps', 'tierTap', 'tierKeyParse'];
+  'tierDeviceLost', 'tierPick', 'tierTaps', 'tierTap', 'tierHint', 'tierKeyParse'];
 const T = new Function('trackById', 'TIME_OF_DAY_NAMES', 'CAM_LABELS', 'clamp',
   read('src/38-tiers.js') + '\nreturn {' + NAMES.map((n) => n + ': ' + n).join(',') + '};'
 )(
@@ -111,6 +111,8 @@ Page.prototype.lost = function (sinceMs) { this.act(T.tierDeviceLost(this.g, thi
 Page.prototype.pick = function (name) { this.g.settings.quality = name; this.act(T.tierPick(this.g), true); return this; };
 /* a tap on the Graphics button, and the wait after it run out */
 Page.prototype.tap = function () { return this.pick(T.tierTap(this.g)).g.settings.quality; };
+/* taps with no wait between them: the button moves, and nothing is built */
+Page.prototype.flick = function (n) { const out = []; for (let i = 0; i < n; i++) out.push(this.g.settings.quality = T.tierTap(this.g)); return out; };
 Page.prototype.setting = function (k, v) { this.g.settings[k] = v; this.act({ save: true }, true); return this; };
 Page.prototype.circuit = function (id) { this.setting('trackId', id); this.act(T.tierOut(this.g)); return this; };
 Page.prototype.on = function () { return this.g.tierOn; };
@@ -495,6 +497,72 @@ q = new Page(st);
 q.run(steady(500), 60000);
 check(stepped === 'modern' && kept === 'ultra' && p.g.settings.tierChosen === true && q.on() === 'modern' && q.said.join() === 'slow',
   'Ultra picked by hand after a step down is not argued with in that load; the load after watches again, and says why', show(p) + '; next ' + show(q));
+
+/* --------------------------------------------------------------------------- */
+console.log('R6  nobody passes through Ultra on the way from Modern to Retro');
+
+st = new Store({});
+p = settledPage(st);
+r = [p.tap(), p.tap(), p.tap(), p.tap()];
+check(r.join() === 'modern,retro,ultra,modern', 'the button steps Ultra, Modern, Retro, Ultra (was: from Modern the next step was Ultra)', r.join());
+
+/* a device the game took Ultra away from: the button leaves it out until the
+   player has been all the way round the other tiers once */
+st = new Store({});
+p = new Page(st);
+p.run(steady(500), 60000);
+const hint0 = T.tierHint(p.g);
+r = [p.tap(), p.tap(), p.tap()];
+const hint3 = T.tierHint(p.g), built3 = p.on();
+check(r.join() === 'retro,modern,retro' && built3 === 'retro' && hint0 === 'round' && hint3 === 'offered' && st.saved().tierBarred === true,
+  'after a step down three taps from Modern give Retro, Modern, Retro and never Ultra, and the hint says how to have it back (was: one tap from Modern built Ultra)',
+  r.join() + ', hints ' + hint0 + ' then ' + hint3 + ', ' + show(p));
+r = p.tap();
+check(r === 'ultra' && p.on() === 'ultra' && p.g.trialOn && st.key() === 'ultra' && p.g.tierBarred === false && p.g.tierRound === false &&
+  st.saved().tierBarred === false && st.saved().tierChosen === true && T.tierHint(p.g) === null,
+  'the tap after that, all the way round once, is Ultra: on trial, the player\'s own, and no longer barred', r + ', ' + show(p));
+r = [p.tap(), p.tap(), p.tap()];
+check(r.join() === 'modern,retro,ultra', 'and from then on the button steps through all three again', r.join());
+
+st = new Store({});
+p = new Page(st);
+p.run(steady(500), 60000);
+p.tap();
+p.leave();
+q = new Page(st);
+const startsIn = q.on(), hintQ = T.tierHint(q.g);
+r = [q.tap(), q.tap()];
+check(startsIn === 'retro' && q.g.tierBarred && hintQ === 'round' && r.join() === 'modern,retro' && q.on() === 'retro',
+  'the load after a step down counts afresh: from Retro the taps give Modern, Retro, and Ultra is not built by them', startsIn + ', hint ' + hintQ + ', then ' + r.join());
+r = q.tap();
+check(r === 'ultra' && q.g.trialOn && st.saved().tierBarred === false, 'and the third tap in that load, once round, is Ultra', r + ', ' + show(q));
+
+st = new Store({});
+p = new Page(st);
+p.run(steady(500), 60000);
+r = p.flick(4);
+const flicked = p.on(), flickKey = st.key();
+p.g.settings.quality = p.on();                     /* the page is left inside the wait: nothing was picked */
+p.leave();
+q = new Page(st);
+check(r.join() === 'retro,modern,retro,ultra' && flicked === 'modern' && flickKey === null && q.on() === 'modern' && q.g.tierBarred && q.g.tierRound === false,
+  'four quick taps show Ultra and build nothing; left there, the next load is Modern, barred, and counts afresh', r.join() + ', on ' + flicked + ', then ' + show(q));
+
+st = new Store({});
+settledPage(st).lost();
+p = new Page(st);
+r = [p.g.tierBarred, st.saved().tierBarred, T.tierHint(p.g), T.tierTap(p.g)];
+check(r.join() === 'true,false,round,retro', 'in the Modern load after a first loss a tap leaves Ultra out, and nothing about that is saved', r.join());
+
+/* finding 7: clicked from Modern to Ultra, and the build took the tab down */
+st = new Store({ [V2]: JSON.stringify({ quality: 'modern', tierChosen: true, defaults: 2 }) });
+p = new Page(st);
+p.g.settings.quality = 'ultra';
+const o = T.tierPick(p.g);
+st.set(KEY, o.key);                                /* the key is written, and the build never returns */
+q = new Page(st);
+check(o.key === 'ultra' && q.on() === 'modern' && q.g.tierBarred && T.tierTap(q.g) === 'retro' && st.key() === null,
+  'Ultra clicked to from Modern, and the tab died building it: Modern, and the next tap leads to Retro', show(q));
 
 /* --------------------------------------------------------------------------- */
 console.log('R7  storage that is blocked or full');
