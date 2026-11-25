@@ -737,6 +737,73 @@ var MONACO_KICK = [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
 var MONACO_SNARE = [0, 0, 0.45, 0, 0.45, 0, 0, 0, 0.45, 0, 0.45, 0,
                     0, 0, 0.45, 0, 0.45, 0, 0, 0, 0.45, 0, 0.45, 0];
 
+/* NEON MILE: Las Vegas, the Strip at night. The first theme here in a major
+   key, because the other four are all minor and this circuit is the one that
+   should sound pleased with itself: a long flat out run between lit towers,
+   not a fight with the road.
+
+   A major, 124 bpm, eight bars rather than four. The tempo is a strut, below
+   every other 4/4 theme here: fast enough to race to, slow enough to sound
+   in control. The eight bars are for three laps of a long circuit; a four bar
+   loop heard forty times starts to nag.
+
+     A - C#m - D - E - F#m - D - F - G
+
+   Six bars inside the key, then F and G borrowed from A minor for the lift
+   home: a common rock cadence that lands back on A at the top of the loop.
+
+   The bass pumps the octave on every eighth, which is the engine of the
+   piece. The chord is a short stab on a three, three, two count across the
+   bar (steps 0, 3 and 6), so the harmony pushes against the straight kick
+   instead of sitting on it. The lead is a single square voice: it plays in
+   every bar, more than any other theme's, and a detuned second voice on top
+   of that measured about 2 dB louder than the rest of the set.
+
+   The tune was written from the chords up: every lead note that falls on a
+   chord stab is a note of that bar's chord (test/music.test.js checks this),
+   and the hook is a repeated chord tone on the off beats, a fall down the
+   chord, and a turn back up at the end of the bar. It is stated on A, D, F#m
+   and F, and the last bar climbs G to B so the loop falls a step on to the
+   top A.
+
+   Original, like the other four. Nothing is quoted, transposed or
+   paraphrased. Octave bass, four on the floor and I-iii-IV-V are common
+   stock and belong to nobody. */
+var VEGAS_BASS = [
+  33, 45, 33, 45, 33, 45, 33, 45,
+  37, 49, 37, 49, 37, 49, 37, 49,
+  38, 50, 38, 50, 38, 50, 38, 50,
+  40, 52, 40, 52, 40, 52, 45, 44,
+  42, 54, 42, 54, 42, 54, 42, 54,
+  38, 50, 38, 50, 38, 50, 38, 50,
+  41, 53, 41, 53, 41, 53, 41, 53,
+  43, 55, 43, 55, 43, 55, 31, 32
+];
+var VEGAS_LEAD = [
+  81, 76, null, 76, 73, null, 69, 71,
+  73, null, 71, null, 69, 71, 68, null,
+  null, 78, null, 78, 74, null, 69, 74,
+  76, null, 71, null, 68, null, null, 76,
+  null, 78, null, 78, 73, null, 69, 71,
+  74, null, 73, null, 71, null, 69, null,
+  null, 77, null, 77, 72, null, 69, 72,
+  71, null, 74, null, 79, null, 83, null
+];
+/* A, C#m, D, E, F#m, D, F, G: each voicing a step or less from the last. */
+var VEGAS_CHORDS = [[57, 61, 64], [56, 61, 64], [57, 62, 66], [56, 59, 64],
+                    [57, 61, 66], [57, 62, 66], [57, 60, 65], [59, 62, 67]];
+/* Four on the floor all the way through. */
+var VEGAS_KICK = [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+                  1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+                  1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+                  1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0];
+/* Backbeat on two and four, a ghost on the and of three, and a short fill
+   in the last bar that leads back into the top. */
+var VEGAS_SNARE = [0, 0, 1, 0, 0, 0.3, 1, 0, 0, 0, 1, 0, 0, 0.3, 1, 0,
+                   0, 0, 1, 0, 0, 0.3, 1, 0, 0, 0, 1, 0, 0, 0.3, 1, 0.5,
+                   0, 0, 1, 0, 0, 0.3, 1, 0, 0, 0, 1, 0, 0, 0.3, 1, 0,
+                   0, 0, 1, 0, 0, 0.3, 1, 0, 0, 0, 1, 0, 0.5, 0.6, 1, 0.8];
+
 /* Chord on the downbeat: what every 4/4 theme here does, and the default. */
 var COMP_DOWNBEAT = [0];
 
@@ -748,7 +815,9 @@ var MUSIC_THEMES = {
   /* comp/compDur/detune/leadWave are the waltz-only fields; every one of them
      defaults to the 4/4 behaviour above when a theme omits it. */
   monaco:   { bpm: 168, bass: MONACO_BASS,   lead: MONACO_LEAD,   chords: MONACO_CHORDS,   kick: MONACO_KICK,   snare: MONACO_SNARE,
-              comp: [2, 4], compDur: 0.16, detune: 1.007, leadWave: 'sawtooth' }
+              comp: [2, 4], compDur: 0.16, detune: 1.007, leadWave: 'sawtooth' },
+  vegas:    { bpm: 124, bass: VEGAS_BASS,    lead: VEGAS_LEAD,    chords: VEGAS_CHORDS,    kick: VEGAS_KICK,    snare: VEGAS_SNARE,
+              comp: [0, 3, 6], compDur: 0.2 }
 };
 
 function midiFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
