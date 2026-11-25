@@ -175,7 +175,9 @@ function RainRig(scene) {
   var head = this.uCam.add(rel);
   /* both sides: which face of a streak is towards the camera depends on
      which way it is turned, and a streak has no back to hide */
-  this.material = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide });
+  /* forceSinglePass: a transparent material drawn on both sides is otherwise
+     drawn twice, back faces then front, and the rain is meant to be one draw */
+  this.material = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide, forceSinglePass: true });
   this.material.positionNode = head.add(dir.mul(len.mul(at.y.sub(1.0)))).add(side.mul(width.mul(at.x)));
 
   /* how strongly each streak is drawn: faded in near the lens, out towards
