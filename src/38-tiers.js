@@ -287,41 +287,82 @@ var WEATHER_NAMES = ['clear', 'cloudy', 'rain'];
    Graphics button. The game's own pick is not: the default, and the tier a
    failed or slow Ultra falls back to. Nobody is told off for a tier they
    never asked for. `tierBarred` says the game has taken a heavy tier away
-   on this device and the player has not picked it again since (R6). */
-var SETTINGS_DEFAULTS = 2;
-var OLD_DEFAULTS = { quality: 'modern', trackId: 'silverstone-v1', timeOfDay: 'midday' };
+   on this device and the player has not picked it again since (R6).
+
+   AND AGAIN, 25 Nov 2026, the owner, playing on his phone: "when a new
+   player plays it defaults to sensitivity low 1 ultra mode ... Time of day /
+   weather can be set from a randomiser if not specifically selected. The
+   same as track selection." So SETTINGS_DEFAULTS went from 2 to 3, and what
+   a player who has never chosen gets moved like this:
+
+     steerSens   was 6, on every build there has been. Now 1, the lowest.
+     timeOfDay   was 'dusk'. Now RANDOM (see THE RANDOMISER below).
+     weather     was 'clear'. Now RANDOM.
+     trackId     was 'monaco-gp-v1'. Now RANDOM.
+     quality     stays 'ultra'.
+
+   THE RULE IS THE SAME ONE, KEPT FOR EVERY NUMBER: an object saved under an
+   older `defaults` holds the defaults of its day beside the choices, and a
+   value equal to what the default was when it was saved counts as never
+   chosen and takes today's default. Any other value was picked and is
+   kept. DEFAULTS_WERE is what the defaults were under each older number,
+   for the fields that have changed since; an object without the field at
+   all is from before number 2. So an object saved under 1 with Silverstone
+   and midday comes out RANDOM for both, one saved under 2 with Monaco and
+   dusk the same, and one under 2 with Silverstone keeps Silverstone,
+   because under 2 that was a pick. The move is saved, so it happens once.
+
+   STEERING. `steerChosen` says the player picked a steering mode, and
+   `throttleChosen` that they picked the throttle; while they have not, a
+   phone held sideways is given tilt and auto throttle by the game (see
+   Game.autoTilt). An older object cannot say: tilt was never the default,
+   so a saved tilt was picked, and manual throttle was not the default on a
+   phone, so a saved manual was picked. */
+var SETTINGS_DEFAULTS = 3;
+var DEFAULTS_WERE = {
+  1: { quality: 'modern', trackId: 'silverstone-v1', timeOfDay: 'midday', steerSens: 6 },
+  2: { trackId: 'monaco-gp-v1', timeOfDay: 'dusk', weather: 'clear', steerSens: 6 }
+};
 
 /* Copies what a saved object `p` holds into the settings `s`, field by
-   field. `old` is an object from before the defaults changed. */
-function settingsTake(s, p, old) {
+   field. `was` is DEFAULTS_WERE for the number it was saved under, or null
+   for an object saved under today's. */
+function settingsTake(s, p, was) {
+  var old = !!was;
+  /* a value that was the default when `p` was saved: never chosen */
+  function unchosen(field, v) { return old && was.hasOwnProperty(field) && was[field] === v; }
   /* validate each field rather than trusting the blob — a stale or hand
      edited entry must not be able to wedge the controls */
   if (typeof p.steerTilt === 'boolean') s.steerTilt = p.steerTilt;
+  s.steerChosen = typeof p.steerChosen === 'boolean' ? p.steerChosen : p.steerTilt === true;
   if (typeof p.tiltInvert === 'boolean') s.tiltInvert = p.tiltInvert;
   if (typeof p.autoThrottle === 'boolean') s.autoThrottle = p.autoThrottle;
+  s.throttleChosen = typeof p.throttleChosen === 'boolean' ? p.throttleChosen : p.autoThrottle === false;
   if (typeof p.autoFullscreen === 'boolean') s.autoFullscreen = p.autoFullscreen;
   if (typeof p.userConfigured === 'boolean') s.userConfigured = p.userConfigured;
   /* Anything that is not a tier, or not a time of day, keeps the
      default. So does a value that was the default when an object from
      before today was saved; any other value in such an object was
      picked. */
-  if (typeof p.quality === 'string' && TIERS.hasOwnProperty(p.quality) && !(old && p.quality === OLD_DEFAULTS.quality)) {
+  if (typeof p.quality === 'string' && TIERS.hasOwnProperty(p.quality) && !unchosen('quality', p.quality)) {
     s.quality = p.quality;
-    s.tierChosen = old || p.tierChosen === true;
+    /* under number 1 there was no `tierChosen`, and a tier that was not
+       the default was picked */
+    s.tierChosen = (old && was === DEFAULTS_WERE[1]) || p.tierChosen === true;
   }
   if (p.tierBarred === true) s.tierBarred = true;
-  if (TIME_OF_DAY_NAMES.indexOf(p.timeOfDay) >= 0 && !(old && p.timeOfDay === OLD_DEFAULTS.timeOfDay)) s.timeOfDay = p.timeOfDay;
-  /* anything that is not a weather keeps the default, which is clear */
-  if (WEATHER_NAMES.indexOf(p.weather) >= 0) s.weather = p.weather;
+  if ((p.timeOfDay === RANDOM || TIME_OF_DAY_NAMES.indexOf(p.timeOfDay) >= 0) && !unchosen('timeOfDay', p.timeOfDay)) s.timeOfDay = p.timeOfDay;
+  /* anything that is not a weather keeps the default */
+  if ((p.weather === RANDOM || WEATHER_NAMES.indexOf(p.weather) >= 0) && !unchosen('weather', p.weather)) s.weather = p.weather;
   /* Validated against the registry: a stale or hand-edited id must fall
      back to a real circuit rather than crashing the boot. */
-  if (typeof p.trackId === 'string' && trackById(p.trackId).id === p.trackId && !(old && p.trackId === OLD_DEFAULTS.trackId)) {
+  if (typeof p.trackId === 'string' && (p.trackId === RANDOM || trackById(p.trackId).id === p.trackId) && !unchosen('trackId', p.trackId)) {
     s.trackId = p.trackId;
   }
   /* tiltSens is the old field name — read it so anyone who already set a
-     value keeps it instead of being silently reset to 6 */
+     value keeps it instead of being silently reset to the default */
   var sv = (typeof p.steerSens === 'number') ? p.steerSens : p.tiltSens;
-  if (typeof sv === 'number' && isFinite(sv)) s.steerSens = clamp(Math.round(sv), 1, 10);
+  if (typeof sv === 'number' && isFinite(sv) && !unchosen('steerSens', Math.round(sv))) s.steerSens = clamp(Math.round(sv), 1, 10);
   /* 0 is a legitimate value here — silent — so these check isFinite
      rather than truthiness, or muting a bus would never persist. */
   if (typeof p.camMode === 'number' && CAM_LABELS[p.camMode]) s.camMode = p.camMode | 0;
@@ -355,19 +396,106 @@ function storeKeeps(store) {
 function settingsLoad(store, s, env) {
   /* `first`: nothing was saved under this build's own key, so this is its
      first load in this browser and the old key is read, this once */
-  var first = false;
+  var first = false, moved = false, raw = null;
   try {
-    var raw = store.get(SETTINGS_KEY);
+    raw = store.get(SETTINGS_KEY);
     if (!raw) { first = true; raw = store.get(SETTINGS_KEY_OLD); }
     if (raw) {
       var p = JSON.parse(raw);
-      settingsTake(s, p, first && p.defaults !== SETTINGS_DEFAULTS);
+      /* the number it was saved under: none at all is from before 2 */
+      var n = typeof p.defaults === 'number' ? p.defaults : 1;
+      moved = n !== SETTINGS_DEFAULTS;
+      settingsTake(s, p, DEFAULTS_WERE.hasOwnProperty(n) ? DEFAULTS_WERE[n] : null);
     }
   } catch (e) { /* blocked storage or corrupt JSON — defaults are fine */ }
   var t = tierLoad(s, store.get(TIER_TRIAL_KEY), { hidden: env.hidden, works: storeKeeps(store) });
   store.set(TIER_TRIAL_KEY, t.key);
-  if (first || t.save) settingsWrite(store, s);
+  if (first || moved || t.save) settingsWrite(store, s);
+  /* nothing saved under either key: the very first visit (FIRST_VISIT) */
+  t.firstVisit = first && !raw;
   return t;
+}
+
+/* --- the randomiser ------------------------------------------------------
+
+   THE RANDOMISER. Time of day, weather and circuit may each hold RANDOM,
+   which is the default for all three: the player has not chosen, and the
+   game draws one each time. The settings keep RANDOM; what was drawn is the
+   Game's (`drawn`), and is never saved.
+
+   WHEN. Whatever is on RANDOM is drawn when the page loads. The hour and the
+   weather are drawn again for every race after the first of a load, in
+   beginRace, before its countdown starts and never during it. The circuit is
+   drawn at load, and when the player asks for RANDOM at the end of a race
+   (the page reloads with the circuit it drew).
+
+   HOW. Hours with equal weight. Weather by WEATHER_WEIGHTS: clear twice as
+   likely as cloudy or rain. Circuits with equal weight, and never the
+   circuit that was on before it, so never the same circuit twice running.
+
+   These functions take their rolls from `roll`, a function answering a
+   number from 0 up to 1: Math.random in the game, a list in
+   test/tiers.test.js. Each roll is asked for only for a field that is on
+   RANDOM, so a page whose three settings are all chosen (the tools' pages,
+   see startFrom in tools/browser.js) draws nothing at all. None of this is
+   read by the simulation: what it decides is a look and which circuit is
+   built, before anything is built. */
+var RANDOM = 'random';
+var WEATHER_WEIGHTS = { clear: 2, cloudy: 1, rain: 1 };
+
+/* THE VERY FIRST VISIT, nothing saved at all, is the one thing not drawn:
+   the owner chose Monaco at dusk as the first thing a new player sees ("we
+   need to default to Ultra Dusk and Monaco as game 1", 24 Nov 2026), and the
+   title's opening shot is made for it. The settings are still saved as
+   RANDOM, so everything after that first race is drawn. To draw even the
+   first visit, make this null. */
+var FIRST_VISIT = { trackId: 'monaco-gp-v1', timeOfDay: 'dusk', weather: 'clear' };
+
+/* One of `names`, by `weights` (a weight for each name, or none for equal
+   weights), with the roll r from 0 up to 1. */
+function drawOne(names, weights, r) {
+  var total = 0, i;
+  for (i = 0; i < names.length; i++) total += weights ? weights[names[i]] : 1;
+  var at = r * total;
+  for (i = 0; i < names.length; i++) {
+    at -= weights ? weights[names[i]] : 1;
+    if (at < 0) return names[i];
+  }
+  return names[names.length - 1];
+}
+function drawHour(r) { return drawOne(TIME_OF_DAY_NAMES, null, r); }
+function drawWeather(r) { return drawOne(WEATHER_NAMES, WEATHER_WEIGHTS, r); }
+/* A circuit of `ids` other than `last` (when there is another to give). */
+function drawCircuit(ids, last, r) {
+  var from = [];
+  for (var i = 0; i < ids.length; i++) if (ids[i] !== last) from.push(ids[i]);
+  return drawOne(from.length ? from : ids, null, r);
+}
+
+/* What a load runs: the setting where it is chosen, a draw where it is
+   RANDOM. `env.firstVisit` is the very first visit (FIRST_VISIT);
+   `env.ids` the circuits; `env.last` the circuit the page had before this
+   load, if it knows; `env.next` a circuit already drawn for this load (the
+   end of a race drew it before the reload). */
+function drawLoad(s, env, roll) {
+  var first = env.firstVisit && FIRST_VISIT;
+  var out = {};
+  out.trackId = s.trackId !== RANDOM ? s.trackId
+    : (first ? first.trackId
+      : (env.next && env.ids.indexOf(env.next) >= 0 && env.next !== env.last ? env.next : drawCircuit(env.ids, env.last, roll())));
+  out.timeOfDay = s.timeOfDay !== RANDOM ? s.timeOfDay : (first ? first.timeOfDay : drawHour(roll()));
+  out.weather = s.weather !== RANDOM ? s.weather : (first ? first.weather : drawWeather(roll()));
+  return out;
+}
+
+/* The hour and the weather for another race in the same load: drawn again
+   where they are RANDOM, and as they are where they are chosen. */
+function drawRace(s, drawn, roll) {
+  return {
+    trackId: drawn.trackId,
+    timeOfDay: s.timeOfDay !== RANDOM ? s.timeOfDay : drawHour(roll()),
+    weather: s.weather !== RANDOM ? s.weather : drawWeather(roll())
+  };
 }
 
 /* --- the key, as text ---------------------------------------------------- */
