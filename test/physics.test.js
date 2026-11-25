@@ -88,7 +88,7 @@ console.log('loading circuits');
    than added. Updating this list is the deliberate act of shipping a circuit —
    and its twin in test/migrations.sh checks the database was told too, which
    is what Monaco missed. */
-const EXPECT_TRACKS = ['monaco-gp-v1', 'silverstone-v1', 'indianapolis-v1', 'brands-hatch-v1'];
+const EXPECT_TRACKS = ['monaco-gp-v1', 'las-vegas-v1', 'silverstone-v1', 'indianapolis-v1', 'brands-hatch-v1'];
 const gotTracks = (TRACKS || []).map((t) => t.id);
 assert(Array.isArray(TRACKS) && String(gotTracks) === String(EXPECT_TRACKS),
   EXPECT_TRACKS.length + ' circuits are defined', 'got ' + gotTracks);

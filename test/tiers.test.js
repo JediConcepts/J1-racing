@@ -32,7 +32,7 @@ const path = require('path');
 const REPO = path.join(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(REPO, p), 'utf8');
 
-const CIRCUITS = ['monaco-gp-v1', 'silverstone-v1', 'indianapolis-v1', 'brands-hatch-v1'];
+const CIRCUITS = ['monaco-gp-v1', 'las-vegas-v1', 'silverstone-v1', 'indianapolis-v1', 'brands-hatch-v1'];
 const NAMES = ['TIERS', 'TIER_ORDER', 'TIER_SAFE', 'TIER_TRIAL_FRAMES', 'TIER_TRIAL_MS', 'TIER_TRIAL_KEY', 'TIER_GRACE_MS', 'PACE',
   'SETTINGS_KEY', 'SETTINGS_KEY_OLD', 'settingsLoad', 'settingsWrite', 'tierFresh', 'tierFrame', 'tierPace', 'tierOut', 'tierBack',
   'tierDeviceLost', 'tierPick', 'tierTaps', 'tierTap', 'tierHint', 'tierKeyParse'];

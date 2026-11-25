@@ -223,6 +223,78 @@ var MONACO_CORNERS = [
   ['ANTHONY NOGHES', 23]
 ];
 
+/* LAS VEGAS. A stylised version of the street circuit round the Strip:
+   6.2 km, anticlockwise, flat, wide, walls close by. From the line a tight
+   complex of four corners, the long run north up Koval Lane, a sweep round
+   the sphere, west along Sands Avenue, then nearly 2 km south down the Strip
+   between the towers to the chicane at Harmon and back to the line.
+
+   The pit straight has to be the longest run of road with no curve in it,
+   because the start line, the grid and the first DRS zone are placed on the
+   longest straight (Track.findStraights). The real Strip is longer than the
+   pit straight, so here it has two gentle bends, both flat out, that break it
+   into shorter runs. The total turning comes to +2 pi, which is
+   anticlockwise.
+
+   Every corner is an open arc of 80 m or more. The speed the AI aims for is
+   worked out from a curvature smoothed over about 200 m of road at this
+   circuit's sample spacing, so a corner much tighter than that is taken too
+   fast, and the field went into the walls at the first draft's tight chicane
+   and last corner. The straight before each arc runs exactly along the arc's
+   first tangent: a spline that bends the wrong way for a few metres there
+   banks the road the wrong way too (test/physics.test.js). */
+var LAS_VEGAS_CONTROL = [
+  [ -529,  1354,   0], /* pit straight */
+  [  -50,  1354,   0],
+  [  454,  1354,   0],
+  [  542,  1351,   0],
+  [  605,  1329,   0], /* T1 */
+  [  645,  1285,   0],
+  [  662,  1222,   0],
+  [  674,  1153,   0], /* T2 */
+  [  712,  1096,   0],
+  [  756,  1046,   0], /* T3 */
+  [  771,   970,   0],
+  [  771,   882,   0], /* T4 */
+  [  771,   504,   0], /* Koval Lane */
+  [  771,   151,   0],
+  [  735,    62,   0], /* T5 */
+  [  645,    25,   0],
+  [  605,    25,   0],
+  [  542,    13,   0], /* T6 */
+  [  504,   -25,   0],
+  [  489,   -88,   0],
+  [  485,  -164,   0], /* the sphere */
+  [  466,  -252,   0],
+  [  416,  -321,   0],
+  [  340,  -359,   0],
+  [  252,  -375,   0],
+  [   76,  -384,   0], /* Sands Avenue */
+  [ -151,  -393,   0],
+  [ -378,  -422,   0],
+  [ -554,  -428,   0],
+  [ -639,  -428,   0], /* T12 */
+  [ -728,  -392,   0],
+  [ -765,  -302,   0],
+  [ -762,  -202,   0], /* the Strip */
+  [ -756,    76,   0],
+  [ -876,   403,   0],
+  [ -876,   718,   0],
+  [ -771,  1033,   0],
+  [ -761,  1084,   0], /* Harmon */
+  [ -738,  1128,   0],
+  [ -743,  1169,   0],
+  [ -762,  1216,   0],
+  [ -764,  1247,   0], /* T17 */
+  [ -747,  1300,   0],
+  [ -706,  1339,   0]
+];
+
+var LAS_VEGAS_CORNERS = [
+  ['KOVAL', 4], ['TWAIN', 14], ['THE SPHERE', 22], ['SANDS', 30],
+  ['THE STRIP', 34], ['HARMON', 38], ['PADDOCK', 42]
+];
+
 var TRACKS = [
   {
     id: 'monaco-gp-v1',
@@ -235,6 +307,21 @@ var TRACKS = [
     music: 'monaco',
     control: MONACO_CONTROL,
     corners: MONACO_CORNERS
+  },
+  {
+    id: 'las-vegas-v1',
+    geom: 'las-vegas',   /* key into TRACK_BAKED in 12-trackdata.js */
+    name: 'LAS VEGAS',
+    blurb: 'THE STRIP AT NIGHT',
+    laps: 3,
+    halfW: 7.0,          /* wide street circuit */
+    /* Concrete walls. Six metres and not less: in the headless race the
+       widest car runs 11.5 m out from the middle of the road, and the
+       barrier stops a car at 11.9. */
+    runoff: 6.0,
+    music: 'monaco',     /* Monaco's street theme, reused */
+    control: LAS_VEGAS_CONTROL,
+    corners: LAS_VEGAS_CORNERS
   },
   {
     id: 'silverstone-v1',
