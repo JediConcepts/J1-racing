@@ -291,7 +291,7 @@ var LAS_VEGAS_CONTROL = [
 ];
 
 var LAS_VEGAS_CORNERS = [
-  ['KOVAL', 4], ['TWAIN', 14], ['THE SPHERE', 22], ['SANDS', 30],
+  ['KOVAL', 4], ['TWAIN', 14], ['THE GLOBE', 22], ['SANDS', 30],
   ['THE STRIP', 34], ['HARMON', 38], ['PADDOCK', 42]
 ];
 
@@ -316,13 +316,13 @@ var TRACKS = [
     laps: 3,
     halfW: 7.0,          /* wide street circuit */
     city: true,          /* pavement and no woods: see buildLasVegasScenery */
-    /* NO LEADERBOARD YET. The database takes a time only for a circuit in
-       its track_versions table, and this one is added there by
-       supabase/migrations/0017_seed_las_vegas_track.sql, which has not been
-       applied. Until it is, the game posts no Las Vegas result and says so
-       (Game.submitRace, Game.loadBoard). Delete this line the day 0017 is
-       applied, and Las Vegas posts like every other circuit. */
-    board: false,
+    /* The database takes a time only for a circuit in its track_versions
+       table. Las Vegas was added there on 25 Nov 2026 by
+       supabase/migrations/0017_seed_las_vegas_track.sql, run by the owner,
+       and read back through the game's own client before this line went: so
+       it posts like every other circuit. A circuit added before its row
+       exists can still say `board: false` here, and the game then posts
+       nothing for it and says so (Game.submitRace, Game.loadBoard). */
     /* Concrete walls. Six metres and not less: in the headless race the
        widest car runs 11.5 m out from the middle of the road, and the
        barrier stops a car at 11.9. */
@@ -2201,7 +2201,7 @@ function buildLasVegasScenery(track, scene) {
   /* --- the sphere, placed first so the towers can keep clear of it ------- */
   var sphereAt = null, sphereR = 0;
   for (k = 0; k < track.corners.length; k++) {
-    if (track.corners[k].name !== 'THE SPHERE') continue;
+    if (track.corners[k].name !== 'THE GLOBE') continue;
     var si = track.corners[k].index;
     var inside = track.curv[si] > 0 ? 1 : -1;     /* +lat is the inside of a left hander */
     for (var R = 62; R >= 34 && !sphereAt; R -= 4) {
