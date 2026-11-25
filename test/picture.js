@@ -504,6 +504,34 @@ function tamper(o) {
       'an unknown tier or time of day falls back to the defaults',
       'quality ' + await setting('quality') + ', timeOfDay ' + await setting('timeOfDay') + ', uncaught ' + JSON.stringify(uncaught));
 
+    /* THE WEATHER (34-weather.js) is a look in Ultra only. A word it does
+       not know is clear; and a rain saved beside Retro or Modern is kept in
+       the settings and draws nothing at all: no rain built or shown, no wet
+       road, the dome's sky with no weather on it, and the shadows the tier
+       has always had. */
+    await bootWithSettings({ quality: 'ultra', weather: 'snow' });
+    check(await setting('weather') === 'clear' && uncaught.length === 0,
+      'an unknown weather falls back to clear',
+      'weather ' + await setting('weather') + ', uncaught ' + JSON.stringify(uncaught));
+    const weatherState = () => page.evaluate(() => {
+      const g = window.MCL64;
+      return {
+        saved: g.settings.weather, now: g.weatherNow(), sky: g.skyRig.weather, shadows: g.shadowRig.mode,
+        rain: g.rain ? g.rain.mesh.visible : null, wet: g.wetLook ? g.wetLook.on : null, post: !!g.rtWet,
+        row: !document.getElementById('row-weather').hidden
+      };
+    });
+    await bootWithSettings({ quality: 'retro', weather: 'rain' });
+    const retroRain = await weatherState();
+    await page.evaluate(() => window.MCL64.hookSelect(null, 'modern'));
+    const modernRain = await weatherState();
+    const ignored = (w, shadows) => w.saved === 'rain' && w.now === 'clear' && w.sky === 'clear' && w.shadows === shadows &&
+      w.rain === null && w.wet === null && !w.post && !w.row;
+    check(ignored(retroRain, 'blob') && ignored(modernRain, 'single') && consoleErrors.length === 0 && uncaught.length === 0,
+      'Retro and Modern ignore a saved rain: nothing of it is built, drawn or shown',
+      'Retro ' + JSON.stringify(retroRain) + ', Modern ' + JSON.stringify(modernRain) +
+      ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+
     /* --- what a player starts in, and who keeps what ------------------- */
 
     /* asked of the page by most of the checks from here on */
@@ -1242,6 +1270,16 @@ function tamper(o) {
       for (let i = 0; i < hours; i++) { g.setTimeOfDay(names[i % 4]); g.drawFrame(1); }
       const hoursAfter = read();
       g.setTimeOfDay('midday');
+      /* the weather, the same way: one round first, which builds the rain
+         and the wet road that are kept from then on, then thirty changes */
+      const weathers = ['cloudy', 'rain', 'clear'];
+      for (let i = 0; i < 3; i++) { g.setWeather(weathers[i]); g.drawFrame(1); }
+      const weatherBase = read();
+      for (let i = 0; i < 30; i++) { g.setWeather(weathers[i % 3]); g.drawFrame(1); }
+      const weatherAfter = read();
+      /* and back in clear, nothing of the weather is drawn */
+      const clearAgain = { weather: g.settings.weather, rain: g.rain ? g.rain.mesh.visible : null, wet: g.wetLook ? g.wetLook.on : null,
+        post: !!g.rtWet, shadows: g.shadowRig.mode, sky: g.skyRig.weather };
       go('modern');
       /* Wait for the GPU. Those were some 140 frames drawn back to back,
          and the software rasteriser the default run uses is the best part
@@ -1254,7 +1292,7 @@ function tamper(o) {
       x.drawImage(g.glCanvas, 0, 0, 8, 8);
       x.getImageData(0, 0, 1, 1);
       g.photoHold = false;
-      return { tiersBase, tiersAfter, hoursBase, hoursAfter };
+      return { tiersBase, tiersAfter, hoursBase, hoursAfter, weatherBase, weatherAfter, clearAgain };
     }, [30, 40]);
     const same = (a, b) => a.renderObjects > 0 && a.textures === b.textures && a.geometries === b.geometries &&
       a.uniformBuffers === b.uniformBuffers && a.renderObjects === b.renderObjects;
@@ -1266,6 +1304,14 @@ function tamper(o) {
       'forty changes of hour in Ultra leave the renderer holding what it held after the first four',
       'after four ' + JSON.stringify(kept.hoursBase) + ', after forty more ' + JSON.stringify(kept.hoursAfter) +
       ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+    check(same(kept.weatherBase, kept.weatherAfter) && consoleErrors.length === 0 && uncaught.length === 0,
+      'thirty changes of weather in Ultra leave the renderer holding what it held after the first three',
+      'after three ' + JSON.stringify(kept.weatherBase) + ', after thirty more ' + JSON.stringify(kept.weatherAfter) +
+      ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+    const ca = kept.clearAgain;
+    check(ca.weather === 'clear' && ca.rain === false && ca.wet === false && !ca.post && ca.shadows === 'cascades' && ca.sky === 'clear',
+      'with weather clear in Ultra the rain is not drawn, the road is dry, the post pass has no wet road and the cascades are back',
+      JSON.stringify(ca));
 
     /* The texture sweep: four circuits, each loaded in each tier and then
        switched at run time. Console errors count here, over all of it,

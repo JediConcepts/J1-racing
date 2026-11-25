@@ -322,6 +322,9 @@ function SkyRig(scene, renderer, sun, hemi, ambient) {
   this.ambient = ambient;
   this.mode = 'dome';
   this.timeOfDay = 'midday';
+  /* one of WEATHER_NAMES (38-tiers.js); the look of each is WEATHER_LOOK in
+     34-weather.js. In 'dome' it is only remembered, as the hour is. */
+  this.weather = 'clear';
   this.north = 0;
   this.circuit = '';
   this.rows = {};
@@ -362,6 +365,12 @@ function SkyRig(scene, renderer, sun, hemi, ambient) {
   this.envTarget = null;
   this.pmrem = null;
   this.gain = null;
+  /* the overcast laid over the model's sky for a weather other than clear
+     (see makeSky): a flat colour, how much of the model's own light is kept
+     under it, and how far the sky goes over to it */
+  this.over = null;
+  this.overKeep = null;
+  this.overMix = null;
   /* what SkyMesh's showSunDisc is set to for a race camera and for a long
      lens (see SUN_LONG) */
   this.discFull = 1;
@@ -384,14 +393,37 @@ SkyRig.prototype.rowFor = function (name) {
   var base = TIME_OF_DAY[name];
   if (!base) return null;
   var own = (TIME_OF_DAY_AT[this.circuit] || {})[name];
-  if (!own) return base;
+  var look = this.weather !== 'clear' ? WEATHER_LOOK[this.weather] : null;
+  if (!own && !look) return base;
   if (!this.rows[name]) {
     var row = {}, k;
     for (k in base) if (base.hasOwnProperty(k)) row[k] = base[k];
-    for (k in own) if (own.hasOwnProperty(k)) row[k] = own[k];
-    this.rows[name] = row;
+    if (own) for (k in own) if (own.hasOwnProperty(k)) row[k] = own[k];
+    /* and the weather over the circuit's hour: see weatherRow */
+    this.rows[name] = look ? weatherRow(row, look) : row;
   }
   return this.rows[name];
+};
+
+/* One of WEATHER_NAMES. Each hour's row is made again with the weather over
+   it, and under the physical sky the hour is drawn again at once. Under the
+   dome it is only remembered. */
+SkyRig.prototype.setWeather = function (name) {
+  if (!WEATHER_LOOK.hasOwnProperty(name) && name !== 'clear') throw new Error('unknown weather ' + name);
+  if (name === this.weather) return;
+  this.weather = name;
+  this.rows = {};
+  this.drawn = '';
+  if (this.mode === 'physical') this.setTimeOfDay(this.timeOfDay);
+};
+
+/* How fast the model's clouds move. Held at 0 (the clouds stand still) for
+   clear, where it always has been, and for a photo, which must give the same
+   frame every time; set by Game.applyWeather for the other weathers in play.
+   Only the sky that is drawn moves: the environment is drawn once for each
+   hour and would not follow it anyway. */
+SkyRig.prototype.setCloudSpeed = function (v) {
+  if (this.sky) this.sky.cloudSpeed.value = v;
 };
 
 /* Where "ahead" is for the azimuths in TIME_OF_DAY: the direction the cars
@@ -413,7 +445,18 @@ SkyRig.prototype.setNorth = function (x, z) {
 SkyRig.prototype.makeSky = function () {
   var T = THREE.TSL;
   var sky = new THREE.SkyMesh();
-  sky.material.colorNode = T.vec4(T.clamp(sky.material.colorNode.rgb.mul(this.gain), 0.0, SUN_DISC), 1.0);
+  var model = sky.material.colorNode.rgb.mul(this.gain);
+  sky.material.colorNode = T.vec4(T.clamp(model, 0.0, SUN_DISC), 1.0);
+  /* THE OVERCAST, for any weather but clear: the model's sky goes most of
+     the way over to one flat colour (this.over, set for each hour by
+     setTimeOfDay), and keeps a share of its own light on top of it. That
+     share is what leaves the clouds a texture and puts a pale smudge where
+     the sun is, warm at dusk. A second node and not a uniform at 0 in the
+     clear node, so that clear draws exactly the shader it always has;
+     useOvercast swaps them. */
+  sky.userData.clearNode = sky.material.colorNode;
+  sky.userData.overNode = T.vec4(T.clamp(
+    T.mix(model, this.over.add(model.mul(this.overKeep)), this.overMix), 0.0, SUN_DISC), 1.0);
   sky.cloudSpeed.value = 0;
   sky.frustumCulled = false;
   sky.renderOrder = -1;
@@ -423,6 +466,9 @@ SkyRig.prototype.makeSky = function () {
 SkyRig.prototype.buildPhysical = function () {
   var rig = this;
   this.gain = THREE.TSL.uniform(new THREE.Vector3(1, 1, 1));
+  this.over = THREE.TSL.uniform(new THREE.Vector3(0, 0, 0));
+  this.overKeep = THREE.TSL.uniform(0);
+  this.overMix = THREE.TSL.uniform(0);
 
   /* the sky that is drawn: a box round the camera, pushed to the far plane
      by its own vertex stage, so its size only has to keep the camera inside */
@@ -538,7 +584,14 @@ SkyRig.prototype.setTimeOfDay = function (name) {
     skies[i].mieCoefficient.value = row.mieCoefficient;
     skies[i].mieDirectionalG.value = row.mieDirectionalG;
     skies[i].cloudCoverage.value = row.cloud;
+    /* 0.4 is SkyMesh's own figure, which clear has always had */
+    skies[i].cloudDensity.value = row.cloudDensity || 0.4;
     skies[i].sunPosition.value.set(sx, sy, sz);
+    /* the overcast node for a weather, the model's own for clear: a swap
+       builds the material again, which happens on a change of weather and
+       never on a change of hour */
+    var want = row.overcast ? skies[i].userData.overNode : skies[i].userData.clearNode;
+    if (skies[i].material.colorNode !== want) { skies[i].material.colorNode = want; skies[i].material.needsUpdate = true; }
   }
   this.gain.value.set(row.gain * row.tint[0], row.gain * row.tint[1], row.gain * row.tint[2]);
 
@@ -549,6 +602,8 @@ SkyRig.prototype.setTimeOfDay = function (name) {
   this.discFull = SUN_DISC / Math.max(
     disc[0] * row.gain * row.tint[0], disc[1] * row.gain * row.tint[1], disc[2] * row.gain * row.tint[2]);
   this.discLong = this.discFull * SUN_DISC_LONG / SUN_DISC;
+  /* under cloud there is no disc to see, only the smudge the overcast keeps */
+  if (row.overcast) this.discFull = this.discLong = 0;
   this.sky.showSunDisc.value = this.discFull;
 
   /* The land in the environment: what the ground sends back up under this
@@ -574,6 +629,22 @@ SkyRig.prototype.setTimeOfDay = function (name) {
   this.scene.fog.far = row.haze[1];
   this.sunDir.set(sx, sy, sz);
   var turns = [0.5, 1, 1.5];
+  /* The overcast's flat colour: the brightness of the clear horizon away
+     from the sun, times the weather's own figure, in the weather's own
+     tint. Worked out with the overcast off, then put on, before anything
+     below asks the horizon for a colour. */
+  this.overMix.value = 0;
+  if (row.overcast) {
+    var mean = 0;
+    for (var t0 = 0; t0 < turns.length; t0++) {
+      var h0 = this.horizon(az + turns[t0] * Math.PI);
+      mean += (0.2126 * h0[0] + 0.7152 * h0[1] + 0.0722 * h0[2]) / turns.length;
+    }
+    var ob = mean * row.overBright;
+    this.over.value.set(ob * row.overTint[0], ob * row.overTint[1], ob * row.overTint[2]);
+    this.overKeep.value = row.overKeep;
+    this.overMix.value = row.overcast;
+  }
   this.fogBase[0] = this.fogBase[1] = this.fogBase[2] = 0;
   for (var q = 0; q < turns.length; q++) {
     var c = this.horizon(az + turns[q] * Math.PI);
@@ -588,7 +659,14 @@ SkyRig.prototype.setTimeOfDay = function (name) {
 SkyRig.prototype.horizon = function (a) {
   var row = this.row, s = this.sunDir;
   var c = skyLight(Math.sin(a), 0, -Math.cos(a), s.x, s.y, s.z, row);
-  for (var k = 0; k < 3; k++) c[k] = Math.min(c[k] * row.gain * row.tint[k], SKY_CAP);
+  /* the overcast, as the sky's node lays it on (see makeSky) */
+  var m = this.overMix ? this.overMix.value : 0, o = m ? this.over.value : null;
+  var oc = [o ? o.x : 0, o ? o.y : 0, o ? o.z : 0], keep = m ? this.overKeep.value : 0;
+  for (var k = 0; k < 3; k++) {
+    var v = c[k] * row.gain * row.tint[k];
+    if (m) v = v + (oc[k] + v * keep - v) * m;
+    c[k] = Math.min(v, SKY_CAP);
+  }
   return c;
 };
 

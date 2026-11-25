@@ -179,6 +179,9 @@ function buildPostNode(frame, uRes, uFade, retro, full) {
     var c = T.texture(frame, vUv).rgb;
 
     if (full) c = c.add(T.vec4(full.bloom).rgb).mul(full.uGain);
+    /* rain only: the lights smeared down the wet road (wetSmear in
+       34-weather.js), in light, before the tone map, as the bloom is */
+    if (full && full.wet) c = c.add(wetSmear(full.bloom.getTextureNode(), vUv).mul(full.uGain));
 
     /* Modern: ACES, with the exposure read from renderer.toneMappingExposure.
        The colour space argument is the working space, so renderOutput tone
@@ -378,9 +381,18 @@ Game.prototype.buildRenderer = function (renderer) {
 
    What the last call built is taken down first: the old target, and the
    bloom node with the eleven small targets and seven materials it owns. */
-Game.prototype.buildTarget = function (modern, full) {
+Game.prototype.buildTarget = function (modern, full, wet) {
   full = !!full;
-  if (this.rt && this.rtModern === modern && this.rtFull === full) return;
+  /* `wet`: rain, in Ultra only. It changes the post node and nothing else,
+     so the target and the bloom are kept and only the node is built again */
+  wet = full && !!wet;
+  if (this.rt && this.rtModern === modern && this.rtFull === full) {
+    if (this.rtWet === wet) return;
+    this.rtWet = wet;
+    this.buildPostNodeNow();
+    return;
+  }
+  this.rtWet = wet;
   if (this.rt) this.rt.dispose();
   if (this.bloom) { this.bloom.dispose(); this.bloom = null; }
   this.rtModern = modern;
@@ -393,7 +405,7 @@ Game.prototype.buildTarget = function (modern, full) {
     colorSpace: modern ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace,
     depthBuffer: true, stencilBuffer: false
   });
-  var extra = null;
+  this.postExtra = null;
   if (full) {
     this.bloom = THREE.bloom(THREE.TSL.texture(this.rt.texture), BLOOM.strength, BLOOM.radius, BLOOM.threshold);
     /* The node draws its targets "before" the pass that uses it, and by
@@ -406,9 +418,16 @@ Game.prototype.buildTarget = function (modern, full) {
        photo waits for the count to move before it draws (see photo). */
     this.bloom.updateBeforeType = 'render';
     this.bloom.highPassFn = bloomHighPass;
-    extra = { bloom: this.bloom, uGain: this.postU.uGain, uLift: this.postU.uLift, uSat: this.postU.uSat };
+    this.postExtra = { bloom: this.bloom, uGain: this.postU.uGain, uLift: this.postU.uLift, uSat: this.postU.uSat };
   }
-  this.postMat.fragmentNode = buildPostNode(this.rt.texture, this.postU.uRes, this.postU.uFade, !modern, extra);
+  this.buildPostNodeNow();
+};
+
+/* The post node for the target buildTarget holds, wet or not. */
+Game.prototype.buildPostNodeNow = function () {
+  var extra = this.postExtra;
+  if (extra) extra.wet = this.rtWet;
+  this.postMat.fragmentNode = buildPostNode(this.rt.texture, this.postU.uRes, this.postU.uFade, !this.rtModern, extra);
   this.postMat.needsUpdate = true;
 };
 
@@ -450,6 +469,15 @@ Game.prototype.drawFrame = function (fade) {
     }
     return;
   }
+  if (this.rain && this.rain.mesh.visible) this.placeRain();
+  /* the horizon's height in the frame, for the lights in the wet road
+     (wetSmear in 34-weather.js): from how far the camera looks up or down */
+  if (this.rtWet) {
+    var ce = this.camera.matrixWorld.elements;
+    this.camera.updateMatrixWorld();
+    var up = clamp(-ce[9], -0.99, 0.99);
+    wetHorizon().value = 0.5 + Math.tan(Math.asin(up)) / (2 * Math.tan(this.camera.fov * Math.PI / 360));
+  }
   this.renderer.setRenderTarget(this.rt);
   this.renderer.render(this.scene, this.camera);
   this.renderer.setRenderTarget(null);
@@ -461,8 +489,21 @@ Game.prototype.drawFrame = function (fade) {
     this.postU.uGain.value.set(grade.gain[0], grade.gain[1], grade.gain[2]);
     this.postU.uLift.value.set(grade.lift[0], grade.lift[1], grade.lift[2]);
     this.postU.uSat.value = grade.saturation;
+    /* and the weather's finish over the hour's (WEATHER_LOOK in 34-weather.js) */
+    var look = WEATHER_LOOK[this.weatherNow()];
+    if (look) {
+      this.postU.uGain.value.multiply(_weatherGain.set(look.grade.gain[0], look.grade.gain[1], look.grade.gain[2]));
+      this.postU.uSat.value *= look.grade.saturation;
+    }
   }
   this.postQuad.render(this.renderer);
+  this.drewOnce = true;
+  /* the wet road of a page that loaded in rain: see applyWeather */
+  if (this.wetLater != null) {
+    var wet = this.wetLater;
+    this.wetLater = null;
+    this.wetLook.set(wet);
+  }
 };
 
 /* The post pass for a tier: TIERS[...].post, 'retro' | 'grade' | 'full'.
@@ -471,7 +512,7 @@ Game.prototype.drawFrame = function (fade) {
    of the tone map and a grade for the time of day behind it. buildTarget
    takes down what the last mode built. */
 Game.prototype.applyPostMode = function (mode) {
-  this.buildTarget(mode !== 'retro', mode === 'full');
+  this.buildTarget(mode !== 'retro', mode === 'full', this.weatherNow() === 'rain');
   /* the lit start lights are brighter under the full pass: see setLights */
   if (this.gantry) this.setLights(this.lightsLit || 0);
 };
@@ -502,8 +543,10 @@ Game.prototype.applySkyMode = function (mode) {
   var t = this.track, a = t.p[t.startIndex], b = t.p[(t.startIndex + 1) % t.n];
   this.skyRig.setNorth(b.x - a.x, b.z - a.z);
   this.skyRig.setCircuit(t.id);
-  /* the hour first, so that a rig coming up from the dome draws its
-     environment once, for the right hour */
+  /* the weather and the hour first, so that a rig coming up from the dome
+     draws its environment once, for the right hour in the right weather.
+     Under the dome there is no weather (see weatherNow). */
+  this.skyRig.setWeather(mode === 'physical' ? this.settings.weather : 'clear');
   this.skyRig.setTimeOfDay(this.settings.timeOfDay);
   this.skyRig.setMode(mode);
   /* applyHaze has just written the dome's haze: see SkyRig.takeFog */
@@ -731,7 +774,8 @@ Game.prototype.buildWorld = function () {
   /* Each circuit brings its own score; absent or unknown falls back to the
      original theme, so a new circuit needs no music work to ship. */
   this.audio.setMusicTheme(this.track.def.music);
-  buildTrackMeshes(this.track, scene);
+  /* kept for the wet road (WetLook in 34-weather.js) */
+  this.trackGroup = buildTrackMeshes(this.track, scene);
   this.gantry = buildStartGantry(this.track, scene);
   this.scenery = buildScenery(this.track, scene);
   /* what the camera drags along with it: the rig's dome, and its physical sky */
@@ -1084,6 +1128,15 @@ Game.prototype.bindInput = function () {
     self.setTimeOfDay(TIME_OF_DAY_NAMES[(i + 1) % TIME_OF_DAY_NAMES.length]);
     self.applySettings();
     self.flash(self.settings.timeOfDay.toUpperCase());
+  });
+
+  var weatherSet = document.getElementById('set-weather');
+  if (weatherSet) weatherSet.addEventListener('click', function (e) {
+    e.preventDefault();
+    var i = WEATHER_NAMES.indexOf(self.settings.weather);
+    self.setWeather(WEATHER_NAMES[(i + 1) % WEATHER_NAMES.length]);
+    self.applySettings();
+    self.flash(self.settings.weather.toUpperCase());
   });
 
   var autoFsSet = document.getElementById('set-autofs');
@@ -1703,6 +1756,7 @@ Game.prototype.loadSettings = function () {
     tierBarred: false,
     timeOfDay: 'dusk',
     trackId: 'monaco-gp-v1',
+    weather: 'clear',
     defaults: SETTINGS_DEFAULTS,
     userConfigured: false
   };
@@ -1792,6 +1846,12 @@ Game.prototype.syncSettingsUi = function () {
   put('set-tod', s.timeOfDay.toUpperCase());
   var todRow = document.getElementById('row-tod');
   if (todRow) todRow.hidden = s.quality !== 'ultra';
+  /* the weather the same, and a line under it in rain saying it is a look */
+  put('set-weather', s.weather.toUpperCase());
+  var weatherRow = document.getElementById('row-weather');
+  if (weatherRow) weatherRow.hidden = s.quality !== 'ultra';
+  var weatherHint = document.getElementById('set-weather-hint');
+  if (weatherHint) weatherHint.hidden = s.quality !== 'ultra' || s.weather !== 'rain';
 
   /* No point offering an automatic fullscreen the platform will refuse. */
   var fsRow = document.getElementById('row-autofs');
@@ -3207,9 +3267,10 @@ Game.prototype.applyQuality = function () {
      and a canvas the size of the render target for 'target'. */
   this.renderer.setPixelRatio(tier.canvas === 'target' ? 1 : (window.devicePixelRatio || 1));
 
-  this.applyShadowMode(tier.shadows);   /* 'blob' | 'single' | 'cascades': the shadows */
+  this.applyShadowMode(this.shadowModeFor(tier));   /* 'blob' | 'single' | 'cascades': the shadows */
   this.applySkyMode(tier.sky);          /* 'dome' | 'physical': the sky and time of day */
   this.applyPostMode(tier.post);        /* 'retro' | 'grade' | 'full': the bloom and grading */
+  this.applyWeather();                  /* Ultra only: cloud, rain and the wet road */
 
   /* The page's scanline and glow layers. `display`, because photo hides the
      same two layers through `visibility` and the two must not undo each
@@ -3352,6 +3413,103 @@ Game.prototype.setTimeOfDay = function (name) {
   this.applyTimeOfDay();
 };
 
+/* THE WEATHER (34-weather.js). A look in Ultra and nothing else: the
+   simulation never reads it, and Retro and Modern draw exactly what they
+   drew before it existed.
+
+   The weather drawn now: settings.weather under the physical sky, which only
+   Ultra has, and clear under the dome whatever is saved. */
+Game.prototype.weatherNow = function () {
+  return this.skyRig && this.skyRig.mode === 'physical' ? this.settings.weather : 'clear';
+};
+
+/* The shadows a tier has in the weather drawn now. Rain hides the sun, and
+   with it nearly every shadow the cascades draw, which are the largest cost
+   of Ultra on a phone, so in rain the cascades give way to the blob under
+   each car that Retro has. Cloud keeps them: its shadows are faint, not
+   gone. */
+Game.prototype.shadowModeFor = function (tier) {
+  if (tier.shadows === 'cascades' && tier.sky === 'physical' && this.settings.weather === 'rain') return 'blob';
+  return tier.shadows;
+};
+
+/* Sets the weather by name (one of WEATHER_NAMES), saves it, and has the
+   picture follow. Anything else is refused. */
+Game.prototype.setWeather = function (name) {
+  if (WEATHER_NAMES.indexOf(name) < 0) throw new Error('unknown weather ' + name);
+  this.settings.weather = name;
+  this.saveSettings();
+  this.applyWeather();
+};
+
+/* Puts the weather drawn now on the screen. Called by applyQuality (last,
+   once the sky, the shadows and the post pass are the tier's) and by
+   setWeather. Whatever cloud and rain need is built the first time it is
+   asked for and kept, hidden, from then on: the rain's mesh, the wet road's
+   puddle map. A change of weather builds nothing new after that, so any
+   number of them leaves nothing behind. In clear nothing of it is built,
+   drawn or set. */
+Game.prototype.applyWeather = function () {
+  var w = this.weatherNow(), look = WEATHER_LOOK[w] || null, rain = w === 'rain';
+  /* the sky, the lights, the fog and the environment */
+  this.skyRig.setWeather(w);
+  this.skyRig.setCloudSpeed(look && !this.photoHold ? look.cloudSpeed : 0);
+  /* THE WET ROAD, once the page has drawn a frame. Put on a road material
+     that has never been built, the wet look made the engine fail to build
+     it on the WebGL 2 fallback ("getInputType is not a function", four
+     materials, on a page loaded in rain), where put on the same materials
+     after one frame it builds cleanly. The cause inside the engine was not
+     found. So a page that loads in rain draws its first frame with the road
+     dry and puts the wet look on straight after it (see drawFrame). */
+  if (rain && !this.wetLook) this.wetLook = new WetLook(this.trackGroup);
+  if (this.wetLook) {
+    if (this.drewOnce) this.wetLook.set(rain);
+    else this.wetLater = rain;
+  }
+  /* the rain in the air */
+  if (rain && !this.rain) this.rain = new RainRig(this.scene);
+  if (this.rain) this.rain.mesh.visible = rain;
+  /* the cascades go in rain and come back after it (shadowModeFor) */
+  var tier = TIERS[this.tierOn || this.settings.quality];
+  var shadows = this.shadowModeFor(tier);
+  if (this.shadowRig.mode !== shadows) {
+    this.applyShadowMode(shadows);
+    this.buildAll = true;
+  }
+  /* the lights on the wet road, in the post pass */
+  if (this.rt) this.buildTarget(this.rtModern, this.rtFull, rain);
+  /* the lit windows and the shadows follow the hour as it now is */
+  this.applyTimeOfDay();
+};
+
+/* Where the rain is drawn this frame: round the camera, falling by the time
+   the frame loop has counted (rainT, see render), in the colour of the air,
+   and none of it under Monaco's tunnel roof. */
+Game.prototype.placeRain = function () {
+  var cam = this.camera.position, amount = 1;
+  var tun = this.scenery && this.scenery.tunnel;
+  if (tun) {
+    var best = Infinity, p = this.track.p;
+    for (var i = tun[0] + 2; i <= tun[1] - 2; i++) {
+      var dx = p[i].x - cam.x, dy = p[i].y - cam.y, dz = p[i].z - cam.z;
+      var d = dx * dx + dy * dy + dz * dz;
+      if (d < best) best = d;
+    }
+    amount = clamp((Math.sqrt(best) - 7) / 10, 0, 1);
+  }
+  var f = this.scene.fog.color;
+  _rainColour.set(f.r * RAIN_LIGHT + RAIN_LIFT, f.g * RAIN_LIGHT + RAIN_LIFT, f.b * RAIN_LIGHT + RAIN_LIFT * 1.2);
+  this.rain.place(cam, this.rainT || 0, _rainColour, amount);
+};
+/* how much brighter than the fog the streaks are drawn: lit by the same sky,
+   but nearer, so with less of the air in front of them. The lift is a fixed
+   amount on top, which is what keeps them seen against a dark dusk without
+   turning them white against a bright midday. */
+var RAIN_LIGHT = 1.15;
+var RAIN_LIFT = 0.10;
+var _rainColour = new THREE.Vector3();
+var _weatherGain = new THREE.Vector3();
+
 Game.prototype.isTouch = function () {
   return document.documentElement.classList.contains('has-touch');
 };
@@ -3438,6 +3596,9 @@ Game.prototype.render = function (dt) {
 
   /* drift the clouds; nothing else in the sky moves */
   if (this.scenery && this.scenery.clouds) this.scenery.clouds.rotation.y += dt * 0.004;
+  /* the rain's own clock, which the frame loop keeps and the simulation
+     never sees */
+  if (this.rain) this.rainT = (this.rainT || 0) + dt;
 
   var fade = 1;
   if (this.state === STATE.COUNTDOWN && this.countdown < 0.6) fade = clamp(this.countdown / 0.6, 0, 1);
@@ -3615,7 +3776,7 @@ Game.prototype.photoCamMissing = function (name) {
   return '';
 };
 
-/* MCL64.photo({ circuit, tick, cam, quality, timeOfDay }) -> Promise<void>
+/* MCL64.photo({ circuit, tick, cam, quality, timeOfDay, weather }) -> Promise<void>
  *
  * Starts a real race (grid, countdown and all), drives the player with the
  * demo driver for exactly `tick` sim ticks without drawing, places camera
@@ -3624,7 +3785,8 @@ Game.prototype.photoCamMissing = function (name) {
  * so nothing draws over it before it is captured: the game is left frozen
  * afterwards, and needs a reload to be played. `timeOfDay`, when given, is
  * set and saved through setTimeOfDay before the frame is drawn; an unknown
- * name is refused before the game is touched. `tick` must be a finite whole number from 0 to PHOTO_TICK_MAX; anything
+ * name is refused before the game is touched. `weather` the same, one of
+ * WEATHER_NAMES, through setWeather. `tick` must be a finite whole number from 0 to PHOTO_TICK_MAX; anything
  * else is refused before the game is touched.
  *
  * Everything that would otherwise carry history into the frame is pinned:
@@ -3654,12 +3816,14 @@ Game.prototype.photo = function (opts) {
       throw new Error('tick must be a whole number from 0 to ' + PHOTO_TICK_MAX);
     }
     if (o.timeOfDay != null && TIME_OF_DAY_NAMES.indexOf(o.timeOfDay) < 0) throw new Error('unknown time of day ' + o.timeOfDay);
+    if (o.weather != null && WEATHER_NAMES.indexOf(o.weather) < 0) throw new Error('unknown weather ' + o.weather);
     if (!this.hookSelect(o.circuit, o.quality)) {
       return Promise.reject(new Error('MCL64.photo: reloading to load ' + o.circuit + '; call again once the page has loaded'));
     }
     var missing = this.photoCamMissing(cam);
     if (missing) return Promise.reject(new Error('MCL64.photo: ' + missing));
     if (o.timeOfDay != null) this.setTimeOfDay(o.timeOfDay);
+    if (o.weather != null) this.setWeather(o.weather);
 
     this.photoHold = true;
     held = true;
@@ -3716,6 +3880,10 @@ Game.prototype.photo = function (opts) {
     this.shadowRig.update(true);
 
     if (this.scenery && this.scenery.clouds) this.scenery.clouds.rotation.y = ticks * STEP * 0.004;
+    /* the weather's clouds stand still and its rain is where the tick count
+       puts it, so the same arguments give the same frame */
+    this.skyRig.setCloudSpeed(0);
+    this.rainT = ticks * STEP;
 
     this.syncUiState();
     /* The game picture only: the HUD and the page's own scanline and glow
@@ -3773,7 +3941,7 @@ Game.prototype.photoUndo = function () {
   try { this.resetRace(true); } catch (ignore) { /* report the first error, not this one */ }
 };
 
-/* MCL64.bench({ circuit, quality, seconds, timeOfDay }) -> Promise<{ frames, avgMs, p95Ms }>
+/* MCL64.bench({ circuit, quality, seconds, timeOfDay, weather }) -> Promise<{ frames, avgMs, p95Ms }>
  *
  * Runs the attract demo and times the gaps between animation frames, which
  * is the frame time a player actually gets. The first second is a warm up
@@ -3791,10 +3959,12 @@ Game.prototype.bench = function (opts) {
   try {
     var seconds = o.seconds > 0 ? o.seconds : 20;
     if (o.timeOfDay != null && TIME_OF_DAY_NAMES.indexOf(o.timeOfDay) < 0) throw new Error('unknown time of day ' + o.timeOfDay);
+    if (o.weather != null && WEATHER_NAMES.indexOf(o.weather) < 0) throw new Error('unknown weather ' + o.weather);
     if (!this.hookSelect(o.circuit, o.quality)) {
       return Promise.reject(new Error('MCL64.bench: reloading to load ' + o.circuit + '; call again once the page has loaded'));
     }
     if (o.timeOfDay != null) this.setTimeOfDay(o.timeOfDay);
+    if (o.weather != null) this.setWeather(o.weather);
     this.paceDone = true;
     this.photoHold = false;
     this.hudCanvas.style.visibility = '';

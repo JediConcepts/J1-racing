@@ -86,6 +86,8 @@ const SRC = [
   'src/30-cars.js',
   'src/32-sky.js',
   'src/33-shadows.js',
+  /* the weather, a look in Ultra only; the sky rig reads its table */
+  'src/34-weather.js',
   'src/35-mobile.js',
   /* Must precede 40-game.js: boot() runs at the end of that file, and
      prototype assignments do not hoist the way declarations do. */
