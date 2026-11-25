@@ -737,72 +737,191 @@ var MONACO_KICK = [1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
 var MONACO_SNARE = [0, 0, 0.45, 0, 0.45, 0, 0, 0, 0.45, 0, 0.45, 0,
                     0, 0, 0.45, 0, 0.45, 0, 0, 0, 0.45, 0, 0.45, 0];
 
-/* NEON MILE: Las Vegas, the Strip at night. The first theme here in a major
-   key, because the other four are all minor and this circuit is the one that
-   should sound pleased with itself: a long flat out run between lit towers,
-   not a fight with the road.
+/* NEON CHANT: Las Vegas, the Strip at night. A crowd chant over the simplest
+   support a pop record has. It replaced Neon Mile, which the owner asked to
+   be more catchy, with more of a pop hook.
 
-   A major, 124 bpm, eight bars rather than four. The tempo is a strut, below
-   every other 4/4 theme here: fast enough to race to, slow enough to sound
-   in control. The eight bars are for three laps of a long circuit; a four bar
-   loop heard forty times starts to nag.
+   A major, 128 bpm, eight bars, the chords A, E, F#m, D played twice. Eight
+   bars rather than four because the chant is four two bar phrases, and each
+   needs its second bar nearly empty to leave the hook room.
 
-     A - C#m - D - E - F#m - D - F - G
+   The hook is a rhythm first: X . X X . X . . | X, five hits that end on the
+   next downbeat. It sounds four times a loop:
 
-   Six bars inside the key, then F and G borrowed from A minor for the lift
-   home: a common rock cadence that lands back on A at the top of the loop.
+     call     C# C# D B  | E    bars 1 and 2, a leap up a fourth to land
+     again    C# C# D B  | F#   bars 3 and 4, the leap stretches to a fifth
+     answer   A  C# B A  | B    bars 5 and 6, no leap; it turns round home
+                                and stops on the second, which asks for more
+     higher   F# F# G# E | A    bars 7 and 8, the call a fourth up; the top
+                                A is the high point, heard once a loop
 
-   The bass pumps the octave on every eighth, which is the engine of the
-   piece. The chord is a short stab on a three, three, two count across the
-   bar (steps 0, 3 and 6), so the harmony pushes against the straight kick
-   instead of sitting on it. The lead is a single square voice: it plays in
-   every bar, more than any other theme's, and a detuned second voice on top
-   of that measured about 2 dB louder than the rest of the set.
+   The first two landings are echoed late in their bar (B to E, B to F#), so
+   the leap, the part that sticks, is heard six times a loop; the answer and
+   the high call keep their bars empty. The head turns up a step before it
+   falls (3 3 4 2) rather than running down 3 2 1, which is the nursery rhyme
+   shape every chant falls back on.
 
-   The tune was written from the chords up: every lead note that falls on a
-   chord stab is a note of that bar's chord (test/music.test.js checks this),
-   and the hook is a repeated chord tone on the off beats, a fall down the
-   chord, and a turn back up at the end of the bar. It is stated on A, D, F#m
-   and F, and the last bar climbs G to B so the loop falls a step on to the
-   top A.
+   The lead is doubled by a second voice about ten cents sharp, like more
+   than one throat singing. The bass sits on the off beats between the kicks,
+   on the upper root where a phone speaker can carry it, dropping an octave
+   on the last eighth of each bar. The chord is a short stab on two and four
+   voiced below the tune, so the only thing in the tune's register is the
+   tune.
 
-   Original, like the other four. Nothing is quoted, transposed or
-   paraphrased. Octave bass, four on the floor and I-iii-IV-V are common
-   stock and belong to nobody. */
+   Original. Nothing is quoted, transposed or paraphrased. I V vi IV, four on
+   the floor and an off beat bass are common stock and belong to nobody. */
 var VEGAS_BASS = [
-  33, 45, 33, 45, 33, 45, 33, 45,
-  37, 49, 37, 49, 37, 49, 37, 49,
-  38, 50, 38, 50, 38, 50, 38, 50,
-  40, 52, 40, 52, 40, 52, 45, 44,
-  42, 54, 42, 54, 42, 54, 42, 54,
-  38, 50, 38, 50, 38, 50, 38, 50,
-  41, 53, 41, 53, 41, 53, 41, 53,
-  43, 55, 43, 55, 43, 55, 31, 32
+  null, 45, null, 45, null, 45, null, 33,
+  null, 52, null, 52, null, 52, null, 40,
+  null, 54, null, 54, null, 54, null, 42,
+  null, 50, null, 50, null, 50, null, 38,
+  null, 45, null, 45, null, 45, null, 33,
+  null, 52, null, 52, null, 52, null, 40,
+  null, 54, null, 54, null, 54, null, 42,
+  null, 50, null, 50, null, 50, null, 38
 ];
 var VEGAS_LEAD = [
-  81, 76, null, 76, 73, null, 69, 71,
-  73, null, 71, null, 69, 71, 68, null,
-  null, 78, null, 78, 74, null, 69, 74,
-  76, null, 71, null, 68, null, null, 76,
-  null, 78, null, 78, 73, null, 69, 71,
-  74, null, 73, null, 71, null, 69, null,
-  null, 77, null, 77, 72, null, 69, 72,
-  71, null, 74, null, 79, null, 83, null
+  73, null, 73, 74, null, 71, null, null,
+  76, null, null, null, null, 71, 76, null,
+  73, null, 73, 74, null, 71, null, null,
+  78, null, null, null, null, 71, 78, null,
+  69, null, 73, 71, null, 69, null, null,
+  71, null, null, null, null, null, null, null,
+  78, null, 78, 80, null, 76, null, null,
+  81, null, null, null, null, null, null, null
 ];
-/* A, C#m, D, E, F#m, D, F, G: each voicing a step or less from the last. */
-var VEGAS_CHORDS = [[57, 61, 64], [56, 61, 64], [57, 62, 66], [56, 59, 64],
-                    [57, 61, 66], [57, 62, 66], [57, 60, 65], [59, 62, 67]];
+/* A, E, F#m, D, twice, voiced A3 to F#4 where they sound. */
+var VEGAS_CHORDS = [[45, 49, 52], [44, 47, 52], [45, 49, 54], [45, 50, 54],
+                    [45, 49, 52], [44, 47, 52], [45, 49, 54], [45, 50, 54]];
 /* Four on the floor all the way through. */
 var VEGAS_KICK = [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
                   1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
                   1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
                   1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0];
-/* Backbeat on two and four, a ghost on the and of three, and a short fill
-   in the last bar that leads back into the top. */
-var VEGAS_SNARE = [0, 0, 1, 0, 0, 0.3, 1, 0, 0, 0, 1, 0, 0, 0.3, 1, 0,
-                   0, 0, 1, 0, 0, 0.3, 1, 0, 0, 0, 1, 0, 0, 0.3, 1, 0.5,
-                   0, 0, 1, 0, 0, 0.3, 1, 0, 0, 0, 1, 0, 0, 0.3, 1, 0,
-                   0, 0, 1, 0, 0, 0.3, 1, 0, 0, 0, 1, 0, 0.5, 0.6, 1, 0.8];
+/* Backbeat on two and four, and a short pickup in the last bar back to the
+   top. */
+var VEGAS_SNARE = [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0,
+                   0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0,
+                   0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0,
+                   0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.4, 1, 0.6];
+
+/* The two themes below are the runners up for Las Vegas, kept so the owner
+   can hear them in the game with ?music=vegas2 or ?music=vegas3 (see
+   Game.buildWorld). No circuit names them. They can go once a theme is
+   chosen. */
+
+/* JACKPOT LIGHTS: Las Vegas, synth pop. A major, 128 bpm, eight bars.
+
+     A - F#m - D - E | D - E - F - G
+
+   The hook is a two bar unit heard four times: a call that lands high on the
+   downbeat and falls (three notes after it, on a clap rhythm of 1, and of 2,
+   3, 4), then an answer that sinks to a note of the chord on beat three,
+   steps down and back, and on the last off beat springs up a sixth into the
+   next call. The springs climb C# to A, C# to A, D to B, E to C, so the
+   second half lifts a step each time to the top note, C6, over the F.
+
+   Octave bass on every eighth, kick on every beat, and a short chord stab on
+   the off beats of one, two and three only. The off beat of four is left
+   empty, because that is where the leap goes. Every lead note that falls on a
+   stab is a note of that bar's chord. */
+var VEGAS2_BASS = [
+  33, 45, 33, 45, 33, 45, 33, 45,
+  30, 42, 30, 42, 30, 42, 30, 42,
+  38, 50, 38, 50, 38, 50, 38, 50,
+  40, 52, 40, 52, 40, 52, 40, 52,
+  38, 50, 38, 50, 38, 50, 38, 50,
+  40, 52, 40, 52, 40, 52, 40, 52,
+  41, 53, 41, 53, 41, 53, 41, 53,
+  43, 55, 43, 55, 43, 55, 43, 44
+];
+var VEGAS2_LEAD = [
+  81, null, null, 76, 78, null, 76, null,
+  null, null, 76, null, 73, null, 71, 73,
+  81, null, null, 78, 76, null, 78, null,
+  null, null, 76, null, 80, null, 76, 74,
+  83, null, null, 78, 81, null, 78, null,
+  null, null, 80, null, 76, null, 74, 76,
+  84, null, null, 81, 79, null, 81, null,
+  null, null, 79, null, 74, null, 71, 73
+];
+/* A, F#m, D, E, D, E, F, G, voiced low so the stabs sit under the tune. */
+var VEGAS2_CHORDS = [[52, 57, 61], [54, 57, 61], [54, 57, 62], [52, 56, 59],
+                     [54, 57, 62], [52, 56, 59], [53, 57, 60], [55, 59, 62]];
+var VEGAS2_KICK = [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+                   1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+                   1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+                   1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0];
+var VEGAS2_SNARE = [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0,
+                    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.4, 1, 0.6,
+                    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0,
+                    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.5, 1, 0.7];
+
+/* LOW NEON: Las Vegas, the Strip at night. The bass is the tune.
+
+   C# minor, 128 bpm, eight bars:  C#m, A, C#m, B, C#m, A, C#m, G#
+
+   Two bar call and answer, four times round. In the odd bars the bass plays
+   the riff and the lead is silent; in the even bars the bass drops to three
+   notes and the lead answers in the gaps it leaves. Bass and lead share
+   only one step, the C# that opens the loop, so each is heard whole on a
+   phone speaker.
+
+   The riff, one bar:  C#3 . C#3 G#3 . F#3 G#3 .   (1 . 1 5 . 4 5 .)
+   Its one leap is the fifth up on the and of two; the rest is a step down
+   and back. It is stated four times, each repeat changing one thing: an
+   F# echo on the last eighth (bar 3), a third C# on the and of one
+   (bar 5), and a fall to E instead of the return to G# (bar 7), which
+   closes the phrase before the G# bar. It sits at C#3 to G#3, the top of
+   the bass range, so a small speaker carries it.
+
+   The answer, one rhythm all four times:  . x x x . x x .
+   An x y x turn (the bass riff's G# F# G#, a step lower and two octaves
+   up), then two notes that settle on beat four: up to A, up again to B
+   (the high point of the loop, bar 4), down to C#, and in bar 8 down to
+   B#, which resolves to the C# at the top of the loop.
+
+   The chord is a short stab on beats two and four with the snare, doubling
+   the riff where it lands. Every lead and bass note under a stab is a note
+   of that chord. Voiced from B#3 to B4, below every lead note.
+
+   Original. Nothing is quoted, transposed or paraphrased; a minor vamp, four
+   on the floor and a backbeat stab are common stock and belong to nobody. */
+var VEGAS3_BASS = [
+  49, null, 49, 56, null, 54, 56, null,
+  45, null, null, null, 52, null, null, 47,
+  49, null, 49, 56, null, 54, 56, 54,
+  47, null, null, null, 54, null, null, 48,
+  49, 49, 49, 56, null, 54, 56, null,
+  45, null, null, null, 52, null, null, 47,
+  49, null, 49, 56, null, 54, 52, null,
+  44, null, null, null, 51, null, null, 48
+];
+var VEGAS3_LEAD = [
+  73, null, null, null, null, null, null, null,
+  null, 78, 76, 78, null, 80, 81, null,
+  null, null, null, null, null, null, null, null,
+  null, 80, 78, 80, null, 81, 83, null,
+  null, null, null, null, null, null, null, null,
+  null, 78, 76, 78, null, 76, 73, null,
+  null, null, null, null, null, null, null, null,
+  null, 76, 75, 76, null, 75, 72, null
+];
+/* C#m, A, C#m, B, C#m, A, C#m, G# (B# D# G#, the raised seventh for the
+   pull home). */
+var VEGAS3_CHORDS = [[49, 52, 56], [49, 52, 57], [49, 52, 56], [51, 54, 59],
+                     [49, 52, 56], [49, 52, 57], [49, 52, 56], [48, 51, 56]];
+/* Four on the floor all the way through. */
+var VEGAS3_KICK = [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+                   1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+                   1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+                   1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0];
+/* Backbeat on two and four, a ghost on the last eighth of each riff bar,
+   and a short fill into the top of the loop. */
+var VEGAS3_SNARE = [0, 0, 1, 0, 0, 0, 1, 0.3, 0, 0, 1, 0, 0, 0, 1, 0,
+                    0, 0, 1, 0, 0, 0, 1, 0.3, 0, 0, 1, 0, 0, 0, 1, 0,
+                    0, 0, 1, 0, 0, 0, 1, 0.3, 0, 0, 1, 0, 0, 0, 1, 0,
+                    0, 0, 1, 0, 0, 0, 1, 0.3, 0, 0, 1, 0, 0, 0.5, 1, 0.7];
 
 /* Chord on the downbeat: what every 4/4 theme here does, and the default. */
 var COMP_DOWNBEAT = [0];
@@ -816,8 +935,13 @@ var MUSIC_THEMES = {
      defaults to the 4/4 behaviour above when a theme omits it. */
   monaco:   { bpm: 168, bass: MONACO_BASS,   lead: MONACO_LEAD,   chords: MONACO_CHORDS,   kick: MONACO_KICK,   snare: MONACO_SNARE,
               comp: [2, 4], compDur: 0.16, detune: 1.007, leadWave: 'sawtooth' },
-  vegas:    { bpm: 124, bass: VEGAS_BASS,    lead: VEGAS_LEAD,    chords: VEGAS_CHORDS,    kick: VEGAS_KICK,    snare: VEGAS_SNARE,
-              comp: [0, 3, 6], compDur: 0.2 }
+  vegas:    { bpm: 128, bass: VEGAS_BASS,    lead: VEGAS_LEAD,    chords: VEGAS_CHORDS,    kick: VEGAS_KICK,    snare: VEGAS_SNARE,
+              comp: [2, 6], compDur: 0.2, detune: 1.006 },
+  /* Runners up, for auditioning only: no circuit names them. */
+  vegas2:   { bpm: 128, bass: VEGAS2_BASS,   lead: VEGAS2_LEAD,   chords: VEGAS2_CHORDS,   kick: VEGAS2_KICK,   snare: VEGAS2_SNARE,
+              comp: [1, 3, 5], compDur: 0.12 },
+  vegas3:   { bpm: 128, bass: VEGAS3_BASS,   lead: VEGAS3_LEAD,   chords: VEGAS3_CHORDS,   kick: VEGAS3_KICK,   snare: VEGAS3_SNARE,
+              comp: [2, 6], compDur: 0.12 }
 };
 
 function midiFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }

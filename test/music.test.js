@@ -122,9 +122,12 @@ const PINNED = {
   papaya:   'fc2518391cc19b03',
   speedway: 'fd7463be1e4eefe4',
   downland: '0449ae3997ff342d',
-  /* Added with the theme itself (Las Vegas, Nov 2026), after the checks
-     further down showed it has the shape it was written to have. */
-  vegas:    '35efd072b1d1a0a2'
+  /* Las Vegas, Nov 2026: Neon Chant, which replaced Neon Mile, and the two
+     runners up kept for auditioning. Pinned after the checks further down
+     showed vegas has the shape it was written to have. */
+  vegas:    '212812fef900df32',
+  vegas2:   '13fc968921ff8282',
+  vegas3:   '1ff66feb03b8ad1e'
 };
 
 if (process.argv.includes('--emit')) {
@@ -234,47 +237,78 @@ is('kick only on the downbeat',
 
 /* --------------------------------------------------------------------------- */
 console.log('');
-console.log('Las Vegas has a theme of its own');
+console.log('Las Vegas has a theme of its own, and it has a hook');
 const ve = render('vegas');
 const vBar = ve.n / ve.th.chords.length;
+const vL = ve.th.lead;
 is('eight bars of eight eighth notes', ve.n + '/' + vBar, '64/8');
-is('its tempo is no other theme\'s',
-  Object.keys(MUSIC_THEMES).filter((t) => t !== 'vegas' && MUSIC_THEMES[t].bpm === ve.th.bpm).length, 0);
+/* vegas2 and vegas3 are the runners up for the same circuit, kept only for
+   auditioning, so sharing a tempo with them is not sharing one with another
+   circuit. */
+const AUDITION = ['vegas2', 'vegas3'];
+is('its tempo is no other circuit\'s theme\'s',
+  Object.keys(MUSIC_THEMES).filter((t) => t !== 'vegas' && !AUDITION.includes(t) && MUSIC_THEMES[t].bpm === ve.th.bpm).length, 0);
 is('no other theme shares its lead',
-  Object.keys(MUSIC_THEMES).some((t) => t !== 'vegas' && String(MUSIC_THEMES[t].lead) === String(ve.th.lead)), false);
+  Object.keys(MUSIC_THEMES).some((t) => t !== 'vegas' && String(MUSIC_THEMES[t].lead) === String(vL)), false);
 is('four on the floor', ve.th.kick.map((v, i) => (v ? i % vBar : -1)).filter((i) => i >= 0)
   .every((s) => s % 2 === 0) && ve.th.kick.filter((v) => v).length === 32, true);
 is('backbeat on two and four of every bar',
   [...Array(8).keys()].every((b) => ve.th.snare[b * vBar + 2] === 1 && ve.th.snare[b * vBar + 6] === 1), true);
-is('bass on every eighth', ve.th.bass.every((v) => v != null), true);
+/* The bass lives between the kicks, so it never sounds on top of one. */
+is('bass only on the off beats, never with the kick',
+  ve.th.bass.every((v, i) => (v == null) === (i % 2 === 0)), true);
 
 /* Written from the chords up: wherever a chord stab sounds, the tune is on a
    note of that chord, so the melody can never fight the harmony under it. */
 const vComp = ve.th.comp;
 const clashes = [];
-ve.th.lead.forEach((v, i) => {
+vL.forEach((v, i) => {
   if (v == null || vComp.indexOf(i % vBar) < 0) return;
   const pcs = ve.th.chords[(i / vBar) | 0].map((c) => c % 12);
   if (!pcs.includes(v % 12)) clashes.push(i);
 });
 is('every lead note on a chord stab is a chord tone', clashes.join(','), '');
-is('three stabs a bar, each short', vComp.length + ' ' + (ve.th.compDur < 0.25), '3 true');
+is('two stabs a bar, on two and four, each short', String(vComp) + ' ' + (ve.th.compDur < 0.25), '2,6 true');
 const vChord = ve.events.filter((e) => e[0] === 'tone' && e[4] === ve.th.compDur);
-is('eight bars of three stabs, three notes each', vChord.length, 8 * 3 * 3);
+is('eight bars of two stabs, three notes each', vChord.length, 8 * 2 * 3);
+/* Every stab sounds below every lead note, so nothing else sits in the
+   tune's register. Chords play an octave up from their written notes. */
+is('the stabs are voiced below the tune',
+  Math.max(...ve.th.chords.flat()) + 12 < Math.min(...vL.filter((v) => v != null)), true);
+is('the lead is doubled, a few cents sharp', ve.th.detune > 1 && ve.th.detune < 1.02, true);
 
-/* A major, with F, C and G borrowed from A minor in the last two bars only. */
 const A_MAJOR = [9, 11, 1, 2, 4, 6, 8];
-const BORROWED = [5, 0, 7];
-const vOut = [];
-ve.th.lead.concat(ve.th.bass).forEach((v, j) => {
-  if (v == null) return;
-  const i = j % ve.n, pc = v % 12;
-  if (A_MAJOR.includes(pc)) return;
-  if (i >= 6 * vBar && BORROWED.includes(pc)) return;
-  vOut.push(i + ':' + v);
-});
-is('every note is in A major, or borrowed in the last two bars', vOut.join(','), '');
-is('the loop lands on A', ve.th.lead[0] % 12 + ' ' + ve.th.bass[0] % 12, '9 9');
+const vOut = vL.concat(ve.th.bass).filter((v) => v != null && !A_MAJOR.includes(v % 12));
+is('every note is in A major', vOut.join(','), '');
+
+/* THE HOOK. The rhythm X . X X . X . . | X: hits on 0, 2, 3 and 5 of a bar
+   with 1, 4, 6 and 7 empty, then a landing on the next bar's downbeat. A hook
+   is something heard again and again, so this counts where the lead pattern
+   really has that shape, rather than trusting a comment that says it does. */
+const HITS = [0, 2, 3, 5, 8], GAPS = [1, 4, 6, 7];
+const hookAt = [];
+for (let p = 0; p < ve.n; p += vBar) {
+  const at = (k) => vL[(p + k) % ve.n];
+  if (HITS.every((k) => at(k) != null) && GAPS.every((k) => at(k) == null)) hookAt.push(p);
+}
+is('the hook rhythm sounds at least four times a loop', hookAt.length >= 4, true);
+/* The calls (every statement but the answer) open on a repeated note and
+   end on a leap of at least a fourth up on to that downbeat: the part that
+   sticks. */
+const calls = hookAt.filter((p) => vL[p] === vL[p + 2] && vL[p + 8] - vL[p + 5] >= 5);
+is('three calls open on a repeated note and leap up to land', calls.length, 3);
+/* One high point, reached once a loop, by the last call. */
+const top = Math.max(...vL.filter((v) => v != null));
+is('the high point sounds once a loop, as the last landing',
+  vL.filter((v) => v === top).length + ' ' + vL.indexOf(top), '1 ' + (hookAt[hookAt.length - 1] + 8));
+is('the high point is the home note, A', top % 12, 9);
+/* Space round the hook: the lead leaves most of the loop empty. */
+is('the lead plays fewer than half the steps',
+  vL.filter((v) => v != null).length < ve.n / 2, true);
+
+/* Nothing outside this file names the runners up, and the circuit plays the
+   chosen theme: they are reachable only through the audition switch. */
+is('no circuit names an audition theme', named.some((m) => AUDITION.includes(m)), false);
 
 /* --------------------------------------------------------------------------- */
 console.log('');
