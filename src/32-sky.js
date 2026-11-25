@@ -130,6 +130,44 @@ var TIME_OF_DAY_AT = {
       windows: 1.9,
       haze: [340, 980]
     }
+  },
+  /* LAS VEGAS AT DUSK is the last light: the Strip is lit by its own signs,
+     and the sky only frames them.
+
+       elevation 0.8  the sun on the horizon. The model's sky dims fast as
+                      the sun goes down: at 0.8 degrees it is about a fifth
+                      as bright as at the table's 4.5, and at -2.3 it is
+                      black, because the model gives the sun no light from
+                      there down (skyLight's sunE). Below that the disc is
+                      nothing, and setTimeOfDay would scale nothing up to
+                      SUN_DISC, a division by zero. So the sun stays just
+                      over the horizon and must never be set under -2.
+       azimuth 155    the south west, where the sun sets in November, seen
+                      from cars leaving the line eastwards: behind the towers
+                      on the far side of the Strip.
+       rayleigh, gain, tint  a deep blue overhead going to a thin red band
+                      over the sun. The gain makes up for the dimmer model;
+                      the tint takes green out and puts blue in, because a
+                      low sun turns the model's middle sky a grey teal. Worked
+                      out with skyLight: the zenith comes to 0.06, 0.12, 0.40
+                      and the sky 5 degrees over the sun to 1.4, 0.3, 0.2.
+       sun, sunK      weak and red: it lights the faces of the towers that
+                      look west and little else.
+       sky, fill      the road is lit by these and nothing else, so they
+                      stay blue and strong enough that the road reads from
+                      the chase camera and the driver's eye.
+       windows        more of them lit than at Monaco: it is later. */
+  'las-vegas-v1': {
+    dusk: {
+      elevation: 0.8, azimuth: 155,
+      rayleigh: 4.5, mieDirectionalG: 0.88,
+      gain: 3.0, tint: [0.85, 0.70, 1.45], cloud: 0.12,
+      sun: [1.00, 0.45, 0.25], sunK: 0.60,
+      sky: [0.32, 0.40, 0.85], land: [0.30, 0.20, 0.26], skyK: 0.70,
+      fill: [0.30, 0.30, 0.55], fillK: 0.55,
+      windows: 2.6,
+      haze: [300, 980]
+    }
   }
 };
 

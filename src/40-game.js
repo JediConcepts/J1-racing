@@ -2073,6 +2073,13 @@ Game.prototype.settleField = function () {
 Game.prototype.submitRace = function () {
   var p = this.player;
   if (!p.finished || !p.finishTime) { this.boardResult = null; return; }
+  /* a circuit the database does not take times for yet (`board: false` in
+     TRACKS): nothing is posted, and the results screen says why */
+  if (this.track && this.track.def && this.track.def.board === false) {
+    this.pendingResult = null;
+    this.boardResult = { state: 'no-board' };
+    return;
+  }
   /* Held until it actually lands, so a race driven while signed out can still
      be posted the moment you sign in — without having to drive it again. */
   this.pendingResult = {
@@ -2109,10 +2116,15 @@ Game.prototype.postPending = function (force) {
   });
 };
 
+/* What the results screen and the leaderboard say for a circuit with
+   `board: false` in TRACKS. */
+var NO_BOARD_LINE = 'NO LEADERBOARD FOR THIS CIRCUIT YET';
+
 /* One line on the results screen telling them what happened to their time. */
 Game.prototype.boardResultLine = function () {
   var b = this.boardResult;
   if (!b) return null;
+  if (b.state === 'no-board') return NO_BOARD_LINE;
   if (b.state === 'sending') return 'POSTING TO LEADERBOARD...';
   if (b.state === 'signed-out') return 'SIGN IN TO POST THIS TIME';
   if (b.state === 'failed') {
@@ -2161,6 +2173,12 @@ Game.prototype.loadBoard = function () {
   var def = trackById(tv) || (this.track && this.track.def);
   var label = (def && def.name) || tv;
   var conditions = def ? (def.laps + ' laps · ' + (def.grid || GRID_SIZE) + ' cars') : 'full grid';
+  /* trackById falls back to the first circuit, so the id is checked too */
+  if (def && def.id === tv && def.board === false) {
+    rows.textContent = '';
+    if (status) status.textContent = NO_BOARD_LINE;
+    return;
+  }
 
   this.cloud.leaderboard(tv, 50).then(function (list) {
     rows.textContent = '';

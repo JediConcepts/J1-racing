@@ -5,6 +5,10 @@
       "ticks": 13682,
       "sha256": "6037856e7333ebddb95883a580929cc5c51aa3d179787cb47731204d86ed66bd"
     },
+    "las-vegas-v1": {
+      "ticks": 21791,
+      "sha256": "fa76a005cae34fac8dc66a083c91b96e3b2af5dcaea2311f2a226520acd2cc53"
+    },
     "silverstone-v1": {
       "ticks": 19749,
       "sha256": "356161746da67228c8e70720342de30813aa8d14e229316401f81e1baa00c458"

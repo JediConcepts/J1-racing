@@ -41,8 +41,8 @@ const VENDOR = 'vendor/three.bundle.js';
 const CHAIN = ['src/05-fpmath.js', 'src/10-core.js', 'src/12-trackdata.js', 'src/20-track.js', 'src/30-cars.js'];
 
 const GOLDEN = path.join(__dirname, 'golden', 'sim-2.json');
-/* Same order as TRACKS in src/20-track.js: Monaco first, then the older three. */
-const RACES = ['monaco-gp-v1', 'silverstone-v1', 'indianapolis-v1', 'brands-hatch-v1'];
+/* Same order as TRACKS in src/20-track.js: Monaco first, Las Vegas second, then the older three. */
+const RACES = ['monaco-gp-v1', 'las-vegas-v1', 'silverstone-v1', 'indianapolis-v1', 'brands-hatch-v1'];
 const TICK_CAP = 72000;
 
 global.window = global;

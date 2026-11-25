@@ -223,6 +223,78 @@ var MONACO_CORNERS = [
   ['ANTHONY NOGHES', 23]
 ];
 
+/* LAS VEGAS. A stylised version of the street circuit round the Strip:
+   6.2 km, anticlockwise, flat, wide, walls close by. From the line a tight
+   complex of four corners, the long run north up Koval Lane, a sweep round
+   the sphere, west along Sands Avenue, then nearly 2 km south down the Strip
+   between the towers to the chicane at Harmon and back to the line.
+
+   The pit straight has to be the longest run of road with no curve in it,
+   because the start line, the grid and the first DRS zone are placed on the
+   longest straight (Track.findStraights). The real Strip is longer than the
+   pit straight, so here it has two gentle bends, both flat out, that break it
+   into shorter runs. The total turning comes to +2 pi, which is
+   anticlockwise.
+
+   Every corner is an open arc of 80 m or more. The speed the AI aims for is
+   worked out from a curvature smoothed over about 200 m of road at this
+   circuit's sample spacing, so a corner much tighter than that is taken too
+   fast, and the field went into the walls at the first draft's tight chicane
+   and last corner. The straight before each arc runs exactly along the arc's
+   first tangent: a spline that bends the wrong way for a few metres there
+   banks the road the wrong way too (test/physics.test.js). */
+var LAS_VEGAS_CONTROL = [
+  [ -529,  1354,   0], /* pit straight */
+  [  -50,  1354,   0],
+  [  454,  1354,   0],
+  [  542,  1351,   0],
+  [  605,  1329,   0], /* T1 */
+  [  645,  1285,   0],
+  [  662,  1222,   0],
+  [  674,  1153,   0], /* T2 */
+  [  712,  1096,   0],
+  [  756,  1046,   0], /* T3 */
+  [  771,   970,   0],
+  [  771,   882,   0], /* T4 */
+  [  771,   504,   0], /* Koval Lane */
+  [  771,   151,   0],
+  [  735,    62,   0], /* T5 */
+  [  645,    25,   0],
+  [  605,    25,   0],
+  [  542,    13,   0], /* T6 */
+  [  504,   -25,   0],
+  [  489,   -88,   0],
+  [  485,  -164,   0], /* the sphere */
+  [  466,  -252,   0],
+  [  416,  -321,   0],
+  [  340,  -359,   0],
+  [  252,  -375,   0],
+  [   76,  -384,   0], /* Sands Avenue */
+  [ -151,  -393,   0],
+  [ -378,  -422,   0],
+  [ -554,  -428,   0],
+  [ -639,  -428,   0], /* T12 */
+  [ -728,  -392,   0],
+  [ -765,  -302,   0],
+  [ -762,  -202,   0], /* the Strip */
+  [ -756,    76,   0],
+  [ -876,   403,   0],
+  [ -876,   718,   0],
+  [ -771,  1033,   0],
+  [ -761,  1084,   0], /* Harmon */
+  [ -738,  1128,   0],
+  [ -743,  1169,   0],
+  [ -762,  1216,   0],
+  [ -764,  1247,   0], /* T17 */
+  [ -747,  1300,   0],
+  [ -706,  1339,   0]
+];
+
+var LAS_VEGAS_CORNERS = [
+  ['KOVAL', 4], ['TWAIN', 14], ['THE SPHERE', 22], ['SANDS', 30],
+  ['THE STRIP', 34], ['HARMON', 38], ['PADDOCK', 42]
+];
+
 var TRACKS = [
   {
     id: 'monaco-gp-v1',
@@ -235,6 +307,29 @@ var TRACKS = [
     music: 'monaco',
     control: MONACO_CONTROL,
     corners: MONACO_CORNERS
+  },
+  {
+    id: 'las-vegas-v1',
+    geom: 'las-vegas',   /* key into TRACK_BAKED in 12-trackdata.js */
+    name: 'LAS VEGAS',
+    blurb: 'THE STRIP AT NIGHT',
+    laps: 3,
+    halfW: 7.0,          /* wide street circuit */
+    city: true,          /* pavement and no woods: see buildLasVegasScenery */
+    /* NO LEADERBOARD YET. The database takes a time only for a circuit in
+       its track_versions table, and this one is added there by
+       supabase/migrations/0017_seed_las_vegas_track.sql, which has not been
+       applied. Until it is, the game posts no Las Vegas result and says so
+       (Game.submitRace, Game.loadBoard). Delete this line the day 0017 is
+       applied, and Las Vegas posts like every other circuit. */
+    board: false,
+    /* Concrete walls. Six metres and not less: in the headless race the
+       widest car runs 11.5 m out from the middle of the road, and the
+       barrier stops a car at 11.9. */
+    runoff: 6.0,
+    music: 'monaco',     /* Monaco's street theme, reused */
+    control: LAS_VEGAS_CONTROL,
+    corners: LAS_VEGAS_CORNERS
   },
   {
     id: 'silverstone-v1',
@@ -736,7 +831,7 @@ function buildTrackMeshes(track, scene) {
     pushStrip(runoff, track, i, i2, -WALL_HALF, -HALF_W, -0.05, v0, v1, COL.runoff);
 
     /* grass or city street pavement skirt */
-    if (track.id === 'monaco-gp-v1') {
+    if (track.id === 'monaco-gp-v1' || track.def.city) {
       var cityPavement = (i % 2 === 0) ? srgb(0xc4ab97) : srgb(0xb39c89);
       pushStrip(grass, track, i, i2, WALL_HALF, WALL_HALF + VERGE, -0.55, v0 * 0.35, v1 * 0.35, cityPavement);
       pushStrip(grass, track, i, i2, -(WALL_HALF + VERGE), -WALL_HALF, -0.55, v0 * 0.35, v1 * 0.35, cityPavement);
@@ -764,10 +859,13 @@ function buildTrackMeshes(track, scene) {
   runoffMesh.userData.wet = 'runoff';
   group.add(runoffMesh);
   
-  var grassTexCanvas = track.id === 'monaco-gp-v1' ? makeCityGroundTex() : makeGrassTex();
+  /* Monaco and any circuit marked as a city are paved to the walls; in rain
+     that paving goes wet with the road (see 34-weather.js). */
+  var cityGround = track.id === 'monaco-gp-v1' || !!track.def.city;
+  var grassTexCanvas = cityGround ? makeCityGroundTex() : makeGrassTex();
   var grassMesh = new THREE.Mesh(grass.geometry(), new THREE.MeshStandardMaterial({
     map: texFromCanvas(grassTexCanvas, 6, 1), vertexColors: true, roughness: 1.0, metalness: 0.0 }));
-  if (track.id === 'monaco-gp-v1') grassMesh.userData.wet = 'pavement';
+  if (cityGround) grassMesh.userData.wet = 'pavement';
   group.add(grassMesh);
 
   var kerbMesh = new THREE.Mesh(kerb.geometry(), new THREE.MeshStandardMaterial({
@@ -1129,8 +1227,8 @@ function buildScenery(track, scene) {
     }
   }
 
-  /* crossed-quad treeline */
-  if (true) {
+  /* crossed-quad treeline (a city circuit has its own trees, or none) */
+  if (!track.def.city) {
     var treeTex = texFromCanvas(makeTreeTex(), 1, 1, true);
     var treeMat = new THREE.MeshStandardMaterial({
       map: treeTex, transparent: false, alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0
@@ -1170,6 +1268,8 @@ function buildScenery(track, scene) {
   var town = null;
   if (track.id === 'monaco-gp-v1') {
     town = buildMonacoTunnelAndUrbanScenery(track, scene);
+  } else if (track.id === 'las-vegas-v1') {
+    town = buildLasVegasScenery(track, scene);
   }
 
   /* drifting cloud plane */
@@ -1193,6 +1293,8 @@ function buildScenery(track, scene) {
   cityGround.position.set(0, -10.0, 0); // Just below sea and track
   cityGround.receiveShadow = true;
   scene.add(cityGround);
+  /* a town may lay its own streets on it (Las Vegas) */
+  if (town && town.dressGround) town.dressGround(cityGround);
 
 
   /* `ground`, `groundTop` and `treeFeet` are for the shadows across the
@@ -1217,8 +1319,8 @@ function buildScenery(track, scene) {
     clouds: clouds, ground: cityGround, groundTop: groundTop, treeFeet: placed ? treeFeet / placed : 0,
     setHour: town ? town.setHour : null,
     /* the track samples under Monaco's tunnel roof, where no rain falls */
-    tunnel: town ? town.tunnel : null,
-    farGroundShadow: !town,
+    tunnel: town && town.tunnel ? town.tunnel : null,
+    farGroundShadow: !town || !!town.flatGround,
     sparseShadows: !!town
   };
 }
@@ -1867,6 +1969,495 @@ function makeWindowLightTex() {
     }
   }
   return cv;
+}
+
+/* LAS VEGAS UNDER THE PHYSICAL SKY. What the Strip's lights are drawn at in
+   the tier with the physical sky, at any hour; under the dome every one of
+   them is a painted surface lit by the sun like any other, and nothing in
+   the town glows.
+
+   neon       the edge strips up the towers, the crown bands and the street
+              lamps, as a multiple of their painted colour. The bloom passes
+              what a pixel has above 3.0 in its strongest channel (BLOOM in
+              40-game.js), so a strip at full colour times this glows.
+   signs      the sign boards and crowns, the same way. Their dark ground
+              stays dark and only the lettering and the border pass.
+   sphere     the sphere's pattern. Its brightest bands pass the threshold
+              and its darker ones stay under it, so it glows unevenly, as a
+              screen of lamps does.
+   windows    the colour of a lit window at its brightest, in linear light,
+              before the hour's own strength (the `windows` of a row in
+              TIME_OF_DAY_AT, 32-sky.js; an hour without one has none lit).
+   ground     the town beyond the pavement at an hour with lit windows: its
+              street lamps, as a multiple of their painted colour. */
+var VEGAS_PHYSICAL = {
+  neon: 5.0,
+  signs: 4.5,
+  sphere: 3.6,
+  windows: [1.00, 0.80, 0.52],
+  ground: 1.6
+};
+
+/* The control points (LAS_VEGAS_CONTROL) where the Strip starts and ends:
+   the tall towers stand between them. */
+var VEGAS_STRIP = [32, 37];
+
+/* Invented names, none of them a real hotel, casino or sponsor. */
+var VEGAS_NAMES = ['ZEPHYR', 'GOLD MESA', 'SILVER SAGE', 'COMET', 'DESERT STAR', 'ROYAL FLUSH',
+  'TUMBLEWEED', 'NOVA', 'JACKRABBIT', 'LUCKY SEVEN', 'COYOTE', 'HALO'];
+var VEGAS_NEON = [0xff2d95, 0x29e6ff, 0xffc81f, 0x8cff4f, 0xff7a1a, 0xb45cff];
+
+/* One wall of a tower: from (ax, az) to (bx, bz), y0 to y1, turned so that
+   it faces away from (cx, cz). quad() takes its normal from its winding, so
+   the two ends are swapped when they would face inward, and the texture
+   runs left to right as seen from outside either way. */
+function vegasWall(rb, ax, az, bx, bz, y0, y1, cx, cz, uv, col) {
+  var mx = (ax + bx) / 2 - cx, mz = (az + bz) / 2 - cz;
+  /* the normal of a->b->top is (b - a) x up, which is (-(bz - az), 0, bx - ax) */
+  if (-(bz - az) * mx + (bx - ax) * mz < 0) { var t = ax; ax = bx; bx = t; t = az; az = bz; bz = t; }
+  rb.quad(vec(ax, y0, az), vec(bx, y0, bz), vec(bx, y1, bz), vec(ax, y1, az), uv, col);
+}
+
+/* A tower as a prism over the footprint `pts` ([x, z] pairs round it), from
+   y0 to y1, with a flat roof. The facade texture is a wall TILE metres
+   square, so a window is the same size on every tower. */
+var VEGAS_TILE = 16;
+function vegasPrism(rb, pts, y0, y1, col) {
+  var cx = 0, cz = 0, k, n = pts.length, u = 0;
+  for (k = 0; k < n; k++) { cx += pts[k][0] / n; cz += pts[k][1] / n; }
+  for (k = 0; k < n; k++) {
+    var a = pts[k], b = pts[(k + 1) % n];
+    var len = Math.sqrt((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1]));
+    var u1 = u + len / VEGAS_TILE;
+    vegasWall(rb, a[0], a[1], b[0], b[1], y0, y1, cx, cz,
+      [[u, y0 / VEGAS_TILE], [u1, y0 / VEGAS_TILE], [u1, y1 / VEGAS_TILE], [u, y1 / VEGAS_TILE]], col);
+    u = u1;
+  }
+  var c = vec(cx, y1, cz);
+  for (k = 0; k < n; k++) {
+    var p = vec(pts[k][0], y1, pts[k][1]), q = vec(pts[(k + 1) % n][0], y1, pts[(k + 1) % n][1]);
+    var up = triNormal(c, p, q).y > 0;
+    if (up) rb.tri(c, p, q, vec(0, 1, 0), [0, 0], [0, 0], [0, 0], col);
+    else rb.tri(c, q, p, vec(0, 1, 0), [0, 0], [0, 0], [0, 0], col);
+  }
+}
+
+/* A footprint: a rectangle w along `f` by d along `l`, or a regular polygon
+   of `sides` round the same centre. */
+function vegasFootprint(cx, cz, f, l, w, d, sides) {
+  var pts = [], k;
+  if (sides) {
+    var r = Math.min(w, d) / 2, a0 = datan2(f.x, f.z);
+    for (k = 0; k < sides; k++) {
+      var a = a0 + (k + 0.5) * TAU / sides;
+      pts.push([cx + dsin(a) * r, cz + dcos(a) * r]);
+    }
+    return pts;
+  }
+  var s = [[1, 1], [1, -1], [-1, -1], [-1, 1]];
+  for (k = 0; k < 4; k++) {
+    pts.push([cx + f.x * s[k][0] * w / 2 + l.x * s[k][1] * d / 2, cz + f.z * s[k][0] * w / 2 + l.z * s[k][1] * d / 2]);
+  }
+  return pts;
+}
+
+/* The sign boards and crowns, all on one texture: one name to a row, in
+   the HUD's font, coloured letters and border on a dark ground. */
+function makeVegasSignAtlas() {
+  var w = 256, rowH = 64, n = VEGAS_NAMES.length, cv = makeCanvas(w, rowH * n), ctx = cv.getContext('2d');
+  for (var k = 0; k < n; k++) {
+    var y = k * rowH, c = '#' + ('00000' + VEGAS_NEON[k % VEGAS_NEON.length].toString(16)).slice(-6);
+    ctx.fillStyle = '#120b18';
+    ctx.fillRect(0, y, w, rowH);
+    ctx.fillStyle = c;
+    ctx.fillRect(0, y, w, 4); ctx.fillRect(0, y + rowH - 4, w, 4);
+    ctx.fillRect(0, y, 4, rowH); ctx.fillRect(w - 4, y, 4, rowH);
+    drawTextCenter(ctx, VEGAS_NAMES[k], w / 2, y + (rowH - GLYPH_H * 3) / 2, 3, k % 3 === 2 ? '#ffffff' : c, null, 1);
+  }
+  return cv;
+}
+
+/* The sphere's skin: broad bands of colour like a planet's, under a grid
+   of dark dots, so that close to it reads as a screen of lamps. */
+function makeSphereTex() {
+  var w = 512, h = 256, cv = makeCanvas(w, h), ctx = cv.getContext('2d'), rnd = mulberry32(777);
+  var g = ctx.createLinearGradient(0, 0, 0, h);
+  g.addColorStop(0.00, '#2b1060');
+  g.addColorStop(0.22, '#ff3d8b');
+  g.addColorStop(0.36, '#ffb13b');
+  g.addColorStop(0.50, '#ffe66b');
+  g.addColorStop(0.62, '#ff7a2f');
+  g.addColorStop(0.78, '#c22d9a');
+  g.addColorStop(1.00, '#24104f');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, w, h);
+  /* swirls: lighter and darker streaks along the bands */
+  for (var k = 0; k < 140; k++) {
+    var y = rnd() * h, x = rnd() * w, len = 40 + rnd() * 160;
+    ctx.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,0.18)' : 'rgba(40,0,60,0.22)';
+    ctx.fillRect(x, y, len, 2 + rnd() * 5);
+    if (x + len > w) ctx.fillRect(x - w, y, len, 2 + rnd() * 5);
+  }
+  ctx.fillStyle = 'rgba(8,4,16,0.55)';
+  for (var dy = 0; dy < h; dy += 4) for (var dx = 0; dx < w; dx += 4) ctx.fillRect(dx + 3, dy + 3, 1, 1);
+  return cv;
+}
+
+/* The town beyond the pavement, on the great ground plane: one block of
+   80 m to a tile, with streets along two edges so the tiles meet as a grid,
+   and roofs of different greys in between. `lights` paints the same tile as
+   what is lit at night: lamps down the streets and a few windows. */
+function makeVegasGroundTex(lights) {
+  var s = 64, cv = makeCanvas(s, s), ctx = cv.getContext('2d'), rnd = mulberry32(lights ? 515 : 616);
+  ctx.fillStyle = lights ? '#15141c' : '#57565c';
+  ctx.fillRect(0, 0, s, s);
+  for (var k = 0; k < 9; k++) {
+    var x = 8 + Math.floor(rnd() * 44), y = 8 + Math.floor(rnd() * 44), w = 6 + Math.floor(rnd() * 14), h = 6 + Math.floor(rnd() * 14);
+    if (lights) { if (rnd() < 0.5) { ctx.fillStyle = 'rgba(255,190,110,0.35)'; ctx.fillRect(x + 2, y + 2, 2, 2); } }
+    else { var g = 66 + Math.floor(rnd() * 40); ctx.fillStyle = 'rgb(' + g + ',' + g + ',' + (g + 6) + ')'; ctx.fillRect(x, y, Math.min(w, 58 - x), Math.min(h, 58 - y)); }
+  }
+  if (lights) {
+    ctx.fillStyle = '#ffd08a';
+    for (var d = 2; d < s; d += 8) { ctx.fillRect(d, 2, 2, 2); ctx.fillRect(2, d, 2, 2); }
+  } else {
+    ctx.fillStyle = '#3c3c42';
+    ctx.fillRect(0, 0, s, 6);
+    ctx.fillRect(0, 0, 6, s);
+  }
+  return cv;
+}
+
+/* A palm: a thin trunk with a slight lean and a crown of fronds, on a
+   transparent card for the crossed quads the trees use. */
+function makePalmTex() {
+  var w = 64, h = 128, cv = makeCanvas(w, h), ctx = cv.getContext('2d'), rnd = mulberry32(4242);
+  ctx.clearRect(0, 0, w, h);
+  ctx.strokeStyle = '#6b4f33';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(32, h);
+  ctx.quadraticCurveTo(28, 70, 33, 26);
+  ctx.stroke();
+  for (var k = 0; k < 9; k++) {
+    var a = -Math.PI * 0.95 + k * Math.PI * 0.95 / 8 + (rnd() - 0.5) * 0.15;
+    var len = 18 + rnd() * 10;
+    ctx.strokeStyle = k % 2 ? '#3f7a34' : '#2f6429';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(33, 26);
+    ctx.quadraticCurveTo(33 + dcos(a) * len * 0.6, 26 + dsin(a) * len * 0.6 - 6,
+      33 + dcos(a) * len, 26 + dsin(a) * len * 0.4 + 8);
+    ctx.stroke();
+  }
+  return cv;
+}
+
+/* THE STRIP. Towers of different heights and shapes down both sides of
+   the Strip and lower blocks round the rest of the lap, sign boards and
+   crowns with invented names, coloured strips up the towers' edges, street
+   lamps and palms down the Strip, and one huge sphere beside the corner
+   named for it. Flat ground, no sea, no tunnel.
+
+   Cheap on purpose. The towers of each facade are one mesh, the glowing
+   parts are one mesh, the signs are one mesh on one texture, and the lamp
+   posts and the palms are one each, so the whole town is about a dozen
+   draws however many towers it has. The posts and the palms are marked to
+   stay out of the far shadow cascades (shadowReach, 33-shadows.js); the
+   towers and the sphere are big enough to be in all four.
+
+   The glowing parts are built twice over the same geometry: once as a
+   painted surface the sun lights, for Retro and Modern, and once as a lamp,
+   for the physical sky. setHour shows one or the other, so neither tier
+   rebuilds a material on a change of hour, and under the dome the town is
+   exactly a painted town. */
+function buildLasVegasScenery(track, scene) {
+  var n = track.n, i, k;
+  var rnd = mulberry32(7007);
+
+  function nearestTo(cp) {
+    var best = 0, bestD = Infinity;
+    for (var s = 0; s < n; s++) {
+      var dx = track.p[s].x - cp[0], dz = track.p[s].z - cp[1], d = dx * dx + dz * dz;
+      if (d < bestD) { bestD = d; best = s; }
+    }
+    return best;
+  }
+  var stripA = nearestTo(track.def.control[VEGAS_STRIP[0]]);
+  var stripB = nearestTo(track.def.control[VEGAS_STRIP[1]]);
+  function onStrip(s) { return stripA <= stripB ? (s >= stripA && s <= stripB) : (s >= stripA || s <= stripB); }
+
+  /* clear of the circuit: every point at least `gap` from the centreline */
+  function clearOf(pts, gap) {
+    var g2 = gap * gap;
+    for (var a = 0; a < pts.length; a++) {
+      for (var s = 0; s < n; s += 2) {
+        var dx = pts[a][0] - track.p[s].x, dz = pts[a][1] - track.p[s].z;
+        if (dx * dx + dz * dz < g2) return false;
+      }
+    }
+    return true;
+  }
+
+  /* --- the sphere, placed first so the towers can keep clear of it ------- */
+  var sphereAt = null, sphereR = 0;
+  for (k = 0; k < track.corners.length; k++) {
+    if (track.corners[k].name !== 'THE SPHERE') continue;
+    var si = track.corners[k].index;
+    var inside = track.curv[si] > 0 ? 1 : -1;     /* +lat is the inside of a left hander */
+    for (var R = 62; R >= 34 && !sphereAt; R -= 4) {
+      var off = WALL_HALF + 26 + R;
+      var sx = track.p[si].x + track.lat[si].x * inside * off, sz = track.p[si].z + track.lat[si].z * inside * off;
+      if (clearOf([[sx, sz]], WALL_HALF + 22 + R)) { sphereAt = [sx, sz]; sphereR = R; }
+    }
+  }
+  function clearOfSphere(pts, gap) {
+    if (!sphereAt) return true;
+    for (var a = 0; a < pts.length; a++) {
+      var dx = pts[a][0] - sphereAt[0], dz = pts[a][1] - sphereAt[1];
+      if (dx * dx + dz * dz < (sphereR + gap) * (sphereR + gap)) return false;
+    }
+    return true;
+  }
+
+  /* --- towers and blocks -------------------------------------------------- */
+  var facades = [
+    makeBuildingTex('#d8cfbf', '#1c2430'),
+    makeBuildingTex('#c9a65e', '#2b1d0a'),
+    makeBuildingTex('#8ea2b8', '#142233')
+  ];
+  var facadeRb = [new RibbonBuilder(), new RibbonBuilder(), new RibbonBuilder()];
+  var neonRb = new RibbonBuilder();
+  var signRb = new RibbonBuilder();
+  var postRb = new RibbonBuilder();
+  var palmRb = new RibbonBuilder();
+  var signRows = VEGAS_NAMES.length, signNext = 0;
+  var dark = srgb(0x2a2c33);
+
+  function neonColour(m) { return srgb(VEGAS_NEON[m % VEGAS_NEON.length]); }
+
+  /* a sign on the face of something, from (ax, az) to (bx, bz), facing away
+     from (cx, cz), with the next name in the atlas */
+  function addSign(ax, az, bx, bz, y0, y1, cx, cz) {
+    var row = signNext++ % signRows;
+    var v0 = 1 - (row + 1) / signRows, v1 = 1 - row / signRows;
+    vegasWall(signRb, ax, az, bx, bz, y0, y1, cx, cz, [[0, v0], [1, v0], [1, v1], [0, v1]], WHITE_C);
+  }
+
+  /* glowing strips up the corners of a footprint, a band round its top, and
+     sometimes a second band lower down */
+  function addNeon(pts, y0, y1, colour, band2) {
+    var cx = 0, cz = 0, m, np = pts.length;
+    for (m = 0; m < np; m++) { cx += pts[m][0] / np; cz += pts[m][1] / np; }
+    var nuv = [[0, 0], [1, 0], [1, 1], [0, 1]];
+    var foot = Math.max(y0, 0) + 3;
+    for (m = 0; m < np; m++) {
+      var a = pts[m], b = pts[(m + 1) % np];
+      var ex = b[0] - a[0], ez = b[1] - a[1], el = Math.sqrt(ex * ex + ez * ez);
+      ex /= el; ez /= el;
+      /* pushed 12 cm out from the wall so it never fights it for depth */
+      var ox = (a[0] + b[0]) / 2 - cx, oz = (a[1] + b[1]) / 2 - cz, ol = Math.sqrt(ox * ox + oz * oz);
+      ox = ox / ol * 0.12; oz = oz / ol * 0.12;
+      /* the edge strip at this corner, on this face */
+      if (np <= 4 || m % 2 === 0) {
+        vegasWall(neonRb, a[0] + ox, a[1] + oz, a[0] + ex * 0.9 + ox, a[1] + ez * 0.9 + oz, foot, y1 - 0.5, cx, cz, nuv, colour);
+        vegasWall(neonRb, b[0] - ex * 0.9 + ox, b[1] - ez * 0.9 + oz, b[0] + ox, b[1] + oz, foot, y1 - 0.5, cx, cz, nuv, colour);
+      }
+      vegasWall(neonRb, a[0] + ox, a[1] + oz, b[0] + ox, b[1] + oz, y1 - 2.4, y1 - 0.6, cx, cz, nuv, colour);
+      if (band2) vegasWall(neonRb, a[0] + ox, a[1] + oz, b[0] + ox, b[1] + oz, band2, band2 + 1.2, cx, cz, nuv, colour);
+    }
+  }
+
+  var towers = 0;
+  function addTower(s, side, tall) {
+    var p = track.p[s], f = track.fwd[s], l = track.lat[s];
+    var w = tall ? 30 + rnd() * 16 : 24 + rnd() * 18;
+    var d = tall ? 26 + rnd() * 16 : 18 + rnd() * 14;
+    var h = tall ? 48 + rnd() * 125 : 14 + rnd() * 26;
+    var off = WALL_HALF + (tall ? 14 : 18) + d / 2 + rnd() * 8;
+    var cx = p.x + l.x * side * off, cz = p.z + l.z * side * off;
+    var shape = rnd(), sides = (tall && shape > 0.72) ? 8 : 0;
+    var pts = vegasFootprint(cx, cz, f, l, w, d, sides);
+    if (!clearOf(pts, WALL_HALF + 8) || !clearOfSphere(pts, 14)) return;
+    var mat = Math.floor(rnd() * 3);
+    var shade = 0.82 + rnd() * 0.18, col = new THREE.Color(shade, shade, shade);
+    var y0 = -12, colour = neonColour(Math.floor(rnd() * 97));
+    if (tall && shape < 0.32) {
+      /* a podium and a slimmer tower on it */
+      var hp = 14 + rnd() * 10;
+      vegasPrism(facadeRb[mat], pts, y0, hp, col);
+      var up = vegasFootprint(cx - l.x * side * d * 0.12, cz - l.z * side * d * 0.12, f, l, w * 0.7, d * 0.7, 0);
+      vegasPrism(facadeRb[(mat + 1) % 3], up, hp, h, col);
+      addNeon(up, hp, h, colour, 0);
+      addNeon(pts, y0, hp, neonColour(Math.floor(rnd() * 97)), 0);
+    } else {
+      vegasPrism(facadeRb[mat], pts, y0, h, col);
+      if (tall || rnd() < 0.4) addNeon(pts, y0, h, colour, tall && rnd() < 0.5 ? 12 : 0);
+    }
+    /* the crown sign on the face towards the road */
+    if (tall && rnd() < 0.75) {
+      var sw = Math.min(w * 0.82, 34), shh = sw / 4, fy = h - 4 - shh;
+      var fc = off - d / 2 - 0.3;
+      var fx0 = p.x + l.x * side * fc, fz0 = p.z + l.z * side * fc;
+      addSign(fx0 - f.x * sw / 2, fz0 - f.z * sw / 2, fx0 + f.x * sw / 2, fz0 + f.z * sw / 2, fy, fy + shh, cx, cz);
+    }
+    towers++;
+  }
+
+  /* the Strip: tall towers, close together, both sides */
+  for (i = 0; i < n; i += 7) {
+    if (!onStrip(i)) continue;
+    addTower(i, 1, true);
+    addTower((i + 3) % n, -1, true);
+  }
+  /* the rest of the lap: lower blocks, further apart, none round the grid
+     where the stands are */
+  for (i = 0; i < n; i += 12) {
+    if (onStrip(i)) continue;
+    var fromStart = Math.min(Math.abs(i - track.startIndex), n - Math.abs(i - track.startIndex));
+    if (fromStart < 40) continue;
+    addTower(i, 1, false);
+    addTower((i + 6) % n, -1, false);
+  }
+
+  /* --- sign boards on pylons, angled to meet the traffic ------------------ */
+  for (i = 0; i < n; i += 24) {
+    var side = (i / 24) % 2 ? 1 : -1;
+    var fs = Math.min(Math.abs(i - track.startIndex), n - Math.abs(i - track.startIndex));
+    if (fs < 30) continue;
+    var bp = track.p[i], bf = track.fwd[i], bl = track.lat[i];
+    var boff = WALL_HALF + 7;
+    var px = bp.x + bl.x * side * boff, pz = bp.z + bl.z * side * boff;
+    if (!clearOf([[px, pz]], WALL_HALF + 5) || !clearOfSphere([[px, pz]], 8)) continue;
+    vegasPrism(postRb, vegasFootprint(px, pz, bf, bl, 1.4, 1.4, 0), -1, 12, WHITE_C);
+    /* The board faces back down the road, turned 40 degrees towards the
+       middle of it, so a driver sees it on the approach; its back carries
+       another name for the other way. (nx, nz) is the way the front faces,
+       (ux, uz) runs along the board. */
+    var bw = 18, bh = 4.5, ca = dcos(0.70), sa = dsin(0.70);
+    var nx = -bf.x * ca - bl.x * side * sa, nz = -bf.z * ca - bl.z * side * sa;
+    var ux = -nz, uz = nx;
+    addSign(px - ux * bw / 2, pz - uz * bw / 2, px + ux * bw / 2, pz + uz * bw / 2, 12, 12 + bh,
+      px - nx * 4, pz - nz * 4);
+    addSign(px - ux * bw / 2 - nx * 0.4, pz - uz * bw / 2 - nz * 0.4, px + ux * bw / 2 - nx * 0.4, pz + uz * bw / 2 - nz * 0.4,
+      12, 12 + bh, px + nx * 4, pz + nz * 4);
+  }
+
+  /* --- street lamps and palms down the Strip ------------------------------ */
+  var warm = srgb(0xffe2b0);
+  for (i = 0; i < n; i++) {
+    if (!onStrip(i) || i % 3) continue;
+    var lp = track.p[i], lf = track.fwd[i], ll = track.lat[i];
+    for (var ls = -1; ls <= 1; ls += 2) {
+      if (i % 6 === 0) {
+        /* a lamp post: the post, an arm out over the runoff, a lamp */
+        var lo = WALL_HALF + 1.2;
+        var lx = lp.x + ll.x * ls * lo, lz = lp.z + ll.z * ls * lo;
+        vegasPrism(postRb, vegasFootprint(lx, lz, lf, ll, 0.35, 0.35, 0), -0.6, 10, WHITE_C);
+        var ax2 = lp.x + ll.x * ls * (lo - 3.2), az2 = lp.z + ll.z * ls * (lo - 3.2);
+        vegasPrism(postRb, vegasFootprint((lx + ax2) / 2, (lz + az2) / 2, ll, lf, 3.2, 0.25, 0), 9.75, 10, WHITE_C);
+        vegasPrism(neonRb, vegasFootprint(ax2, az2, lf, ll, 1.6, 0.6, 0), 9.4, 9.75, warm);
+      } else if (i % 6 === 3) {
+        /* a palm between two lamps */
+        var po = WALL_HALF + 3.5 + rnd() * 2.5;
+        var hgt = 11 + rnd() * 5;
+        pushCrossQuad(palmRb, lp.x + ll.x * ls * po, groundY(track, i, ls * po) - 0.3, lp.z + ll.z * ls * po, hgt * 0.55, hgt, rnd() * TAU);
+      }
+    }
+  }
+
+  /* --- meshes -------------------------------------------------------------- */
+  var mats = [];
+  for (k = 0; k < 3; k++) {
+    var fm = new THREE.MeshStandardMaterial({ map: texFromCanvas(facades[k], 1, 1, true), vertexColors: true, roughness: 0.62, metalness: 0.15 });
+    mats.push(fm);
+    var fmesh = new THREE.Mesh(facadeRb[k].geometry(), fm);
+    fmesh.castShadow = true; fmesh.receiveShadow = true;
+    scene.add(fmesh);
+  }
+  var windowLight = new THREE.CanvasTexture(makeWindowLightTex());
+  windowLight.wrapS = windowLight.wrapT = THREE.RepeatWrapping;
+  windowLight.repeat.set(0.25, 0.25);
+
+  var neonGeo = neonRb.geometry();
+  var neonDay = new THREE.Mesh(neonGeo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0.1 }));
+  var neonLit = new THREE.Mesh(neonGeo, new THREE.MeshBasicMaterial({ vertexColors: true }));
+  neonLit.material.color.setScalar(VEGAS_PHYSICAL.neon);
+  neonLit.visible = false;
+  scene.add(neonDay); scene.add(neonLit);
+
+  var signMat = new THREE.MeshBasicMaterial({ map: texFromCanvas(makeVegasSignAtlas(), 1, 1, true), vertexColors: true });
+  var signs = new THREE.Mesh(signRb.geometry(), signMat);
+  scene.add(signs);
+
+  var posts = new THREE.Mesh(postRb.geometry(), new THREE.MeshStandardMaterial({ color: dark, roughness: 0.6, metalness: 0.4 }));
+  posts.castShadow = true; posts.receiveShadow = true;
+  posts.userData.shadowReach = 2;
+  scene.add(posts);
+
+  var palms = new THREE.Mesh(palmRb.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makePalmTex(), 1, 1, true), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1.0, metalness: 0.0
+  }));
+  palms.castShadow = true; palms.receiveShadow = true;
+  palms.userData.shadowReach = 2;
+  scene.add(palms);
+
+  var sphereDay = null, sphereLit = null;
+  if (sphereAt) {
+    var sphereTex = texFromCanvas(makeSphereTex(), 1, 1, false);
+    var sGeo = new THREE.SphereGeometry(sphereR, 48, 32);
+    sphereDay = new THREE.Mesh(sGeo, new THREE.MeshStandardMaterial({ map: sphereTex, roughness: 0.4, metalness: 0.1 }));
+    sphereLit = new THREE.Mesh(sGeo, new THREE.MeshBasicMaterial({ map: sphereTex }));
+    sphereLit.material.color.setScalar(VEGAS_PHYSICAL.sphere);
+    var sy = sphereR * 0.75 - 2;
+    sphereDay.position.set(sphereAt[0], sy, sphereAt[1]);
+    sphereLit.position.copy(sphereDay.position);
+    sphereDay.castShadow = true;
+    sphereLit.castShadow = true;
+    sphereLit.visible = false;
+    scene.add(sphereDay); scene.add(sphereLit);
+  }
+
+  /* The ground plane beyond the pavement (buildScenery makes it): city
+     blocks by day, and under the physical sky at an hour with lit windows,
+     the lamps of the streets as far as the haze lets them be seen. */
+  var nightGround = null;
+  function dressGround(mesh) {
+    mesh.material.map = texFromCanvas(makeVegasGroundTex(false), 50, 50, false);
+    mesh.material.color.setRGB(1, 1, 1);
+    mesh.material.needsUpdate = true;
+    /* The town at night is a second plane over the first, a child of it so
+       that it goes wherever the game moves the ground (applyShadowMode
+       lifts it), drawn unlit and pulled forward in depth so that it covers
+       the plane under it. Setting an emissive map on the ground's own
+       material was tried first: on the WebGL 2 fallback it glowed evenly
+       at full strength, the map's black and all, so the far ground came out
+       white. */
+    nightGround = new THREE.Mesh(mesh.geometry, new THREE.MeshBasicMaterial({
+      map: texFromCanvas(makeVegasGroundTex(true), 50, 50, false),
+      polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1
+    }));
+    nightGround.material.color.setScalar(VEGAS_PHYSICAL.ground);
+    nightGround.visible = false;
+    mesh.add(nightGround);
+  }
+
+  /* `row` is the hour's row from the sky while the sky is the physical one,
+     and null under the dome; see Monaco's setHour, which this follows. */
+  function setHour(row) {
+    var on = !!row;
+    if (nightGround) nightGround.visible = !!(on && row.windows);
+    neonDay.visible = !on;
+    neonLit.visible = on;
+    signMat.color.setScalar(on ? VEGAS_PHYSICAL.signs : 1);
+    if (sphereDay) { sphereDay.visible = !on; sphereLit.visible = on; }
+    var lit = (on && row.windows) || 0, wc = VEGAS_PHYSICAL.windows;
+    for (var m = 0; m < mats.length; m++) {
+      var want = on ? windowLight : null;
+      if (mats[m].emissiveMap !== want) { mats[m].emissiveMap = want; mats[m].needsUpdate = true; }
+      mats[m].emissive.setRGB(wc[0] * lit, wc[1] * lit, wc[2] * lit);
+    }
+  }
+  return { setHour: setHour, dressGround: dressGround, flatGround: true, towers: towers };
 }
 
 function pushCrossQuad(rb, x, y, z, w, h, rot) {

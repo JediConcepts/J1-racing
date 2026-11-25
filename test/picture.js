@@ -1313,12 +1313,12 @@ function tamper(o) {
       'with weather clear in Ultra the rain is not drawn, the road is dry, the post pass has no wet road and the cascades are back',
       JSON.stringify(ca));
 
-    /* The texture sweep: four circuits, each loaded in each tier and then
+    /* The texture sweep: five circuits, each loaded in each tier and then
        switched at run time. Console errors count here, over all of it,
        because a node that fails to build says so there and only there. */
     await boot(WEBGPU ? '' : '?renderer=webgl');
     const circuits = await page.evaluate(() => window.MCL64.tracks.map((t) => t.id));
-    check(circuits.length === 4, 'the game lists four circuits', circuits.join(', '));
+    check(circuits.length === 5, 'the game lists five circuits', circuits.join(', '));
     const want = WEBGPU ? 'webgpu' : 'webgl2';
     let wrongBackend = 0;
     for (const circuit of circuits) {
