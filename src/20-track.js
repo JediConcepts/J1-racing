@@ -327,7 +327,7 @@ var TRACKS = [
        widest car runs 11.5 m out from the middle of the road, and the
        barrier stops a car at 11.9. */
     runoff: 6.0,
-    music: 'monaco',     /* Monaco's street theme, reused */
+    music: 'vegas',      /* its own theme, Neon Mile */
     control: LAS_VEGAS_CONTROL,
     corners: LAS_VEGAS_CORNERS
   },

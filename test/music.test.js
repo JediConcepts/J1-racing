@@ -65,7 +65,7 @@ const is  = (m, got, want) => (String(got) === String(want) ? ok(m) : bad(m, 'go
    under test is which note is asked for, when, and how loudly — not how an
    oscillator is wired, which no theme can affect.
    -------------------------------------------------------------------------- */
-function render(themeName) {
+function render(themeName, loops) {
   const th = MUSIC_THEMES[themeName];
   if (!th) throw new Error('no such theme: ' + themeName);
 
@@ -98,15 +98,15 @@ function render(themeName) {
      advance the clock in steps smaller than that and let it fill in. */
   const n = th.bass.length;
   const stepDur = 30 / th.bpm;
-  const total = n * stepDur;
+  const total = n * stepDur * (loops || 1);
   for (let c = 0; fake.ctx.currentTime < total + stepDur; c++) {
     EngineAudio.prototype.tickMusic.call(fake, 1);
     fake.ctx.currentTime = r(fake.ctx.currentTime + 0.1);
     if (c > 4000) throw new Error('scheduler did not advance for ' + themeName);
   }
 
-  /* Trim to exactly one loop so the digest does not depend on how far the
-     lookahead happened to run past the end. */
+  /* Trim to exactly one loop (or the number asked for) so the digest does not
+     depend on how far the lookahead happened to run past the end. */
   const oneLoop = events.filter((e) => e[2] < r(total));
   return { events: oneLoop, n, stepDur, th };
 }
@@ -121,7 +121,10 @@ const digest = (events) =>
 const PINNED = {
   papaya:   'fc2518391cc19b03',
   speedway: 'fd7463be1e4eefe4',
-  downland: '0449ae3997ff342d'
+  downland: '0449ae3997ff342d',
+  /* Added with the theme itself (Las Vegas, Nov 2026), after the checks
+     further down showed it has the shape it was written to have. */
+  vegas:    '35efd072b1d1a0a2'
 };
 
 if (process.argv.includes('--emit')) {
@@ -150,7 +153,43 @@ for (const name of Object.keys(MUSIC_THEMES)) {
   is(name + ' divides into whole bars', n % th.chords.length, 0);
   is(name + ' has three notes per chord',
     th.chords.every((c) => c.length === 3), true);
+  /* The ranges the voices are built for: the bass is a saw through a 620 Hz
+     lowpass, so below G0 it is felt rather than heard and above A3 it climbs
+     into the chords; the lead is filtered at 2600 Hz, so above C6 its tone
+     thins to a whistle. Every theme so far sits well inside both. */
+  const notes = (a) => a.filter((v) => v != null);
+  is(name + ' bass stays between MIDI 28 and 57',
+    notes(th.bass).every((v) => v >= 28 && v <= 57), true);
+  is(name + ' lead stays between MIDI 60 and 84',
+    notes(th.lead).every((v) => v >= 60 && v <= 84), true);
+  /* A clean loop: the second time round schedules exactly the first loop,
+     shifted by one loop length. A theme whose voices disagree on length, or a
+     scheduler that drifted, would show here as a moved or missing event. */
+  const two = render(name, 2);
+  const loopLen = two.n * two.stepDur;
+  /* Times are compared to within a millisecond: the scheduler adds one step
+     at a time, so the second loop carries a little float drift that is not a
+     moved note. Everything else must match exactly. */
+  const half = loopLen - two.stepDur / 2;
+  const first = two.events.filter((e) => e[2] < half);
+  const second = two.events.filter((e) => e[2] >= half);
+  const same = first.length === second.length && first.every((e, k) => {
+    const f = second[k];
+    return Math.abs(f[2] - loopLen - e[2]) < 0.001 &&
+      JSON.stringify(e.slice(3).concat(e[0], e[1])) === JSON.stringify(f.slice(3).concat(f[0], f[1]));
+  });
+  is(name + ' loops cleanly', same, true);
 }
+
+/* Every circuit names a theme that exists, so none falls back to papaya by a
+   typing slip, and Las Vegas plays its own. */
+const trackSrc = read('src/20-track.js');
+const named = [...trackSrc.matchAll(/music:\s*'(\w+)'/g)].map((m) => m[1]);
+is('every circuit names a theme that exists',
+  named.length > 0 && named.every((m) => MUSIC_THEMES[m]), true);
+const vegasDef = trackSrc.slice(trackSrc.indexOf("id: 'las-vegas-v1'"));
+is('Las Vegas plays the vegas theme',
+  (vegasDef.match(/music:\s*'(\w+)'/) || [])[1], 'vegas');
 
 /* --------------------------------------------------------------------------- */
 console.log('');
@@ -192,6 +231,50 @@ is('snare on two and three of every bar', snareHits.length, 8);
 is('snare is softer than a full hit', snareHits.every((v) => v < 1), true);
 is('kick only on the downbeat',
   mo.th.kick.map((v, i) => (v ? i : -1)).filter((i) => i >= 0).join(','), '0,6,12,18');
+
+/* --------------------------------------------------------------------------- */
+console.log('');
+console.log('Las Vegas has a theme of its own');
+const ve = render('vegas');
+const vBar = ve.n / ve.th.chords.length;
+is('eight bars of eight eighth notes', ve.n + '/' + vBar, '64/8');
+is('its tempo is no other theme\'s',
+  Object.keys(MUSIC_THEMES).filter((t) => t !== 'vegas' && MUSIC_THEMES[t].bpm === ve.th.bpm).length, 0);
+is('no other theme shares its lead',
+  Object.keys(MUSIC_THEMES).some((t) => t !== 'vegas' && String(MUSIC_THEMES[t].lead) === String(ve.th.lead)), false);
+is('four on the floor', ve.th.kick.map((v, i) => (v ? i % vBar : -1)).filter((i) => i >= 0)
+  .every((s) => s % 2 === 0) && ve.th.kick.filter((v) => v).length === 32, true);
+is('backbeat on two and four of every bar',
+  [...Array(8).keys()].every((b) => ve.th.snare[b * vBar + 2] === 1 && ve.th.snare[b * vBar + 6] === 1), true);
+is('bass on every eighth', ve.th.bass.every((v) => v != null), true);
+
+/* Written from the chords up: wherever a chord stab sounds, the tune is on a
+   note of that chord, so the melody can never fight the harmony under it. */
+const vComp = ve.th.comp;
+const clashes = [];
+ve.th.lead.forEach((v, i) => {
+  if (v == null || vComp.indexOf(i % vBar) < 0) return;
+  const pcs = ve.th.chords[(i / vBar) | 0].map((c) => c % 12);
+  if (!pcs.includes(v % 12)) clashes.push(i);
+});
+is('every lead note on a chord stab is a chord tone', clashes.join(','), '');
+is('three stabs a bar, each short', vComp.length + ' ' + (ve.th.compDur < 0.25), '3 true');
+const vChord = ve.events.filter((e) => e[0] === 'tone' && e[4] === ve.th.compDur);
+is('eight bars of three stabs, three notes each', vChord.length, 8 * 3 * 3);
+
+/* A major, with F, C and G borrowed from A minor in the last two bars only. */
+const A_MAJOR = [9, 11, 1, 2, 4, 6, 8];
+const BORROWED = [5, 0, 7];
+const vOut = [];
+ve.th.lead.concat(ve.th.bass).forEach((v, j) => {
+  if (v == null) return;
+  const i = j % ve.n, pc = v % 12;
+  if (A_MAJOR.includes(pc)) return;
+  if (i >= 6 * vBar && BORROWED.includes(pc)) return;
+  vOut.push(i + ':' + v);
+});
+is('every note is in A major, or borrowed in the last two bars', vOut.join(','), '');
+is('the loop lands on A', ve.th.lead[0] % 12 + ' ' + ve.th.bass[0] % 12, '9 9');
 
 /* --------------------------------------------------------------------------- */
 console.log('');
