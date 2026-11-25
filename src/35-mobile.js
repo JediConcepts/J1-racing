@@ -201,15 +201,7 @@ TiltSensor.prototype.enable = function () {
   var self = this;
   if (!this.supported) return Promise.resolve(false);
 
-  function listen() {
-    if (!self.handler) {
-      self.handler = function (e) { self.onOrientation(e); };
-      window.addEventListener('deviceorientation', self.handler, true);
-    }
-    self.granted = true;
-    self.neutral = null;
-    return true;
-  }
+  function listen() { return self.listen(); }
 
   /* iOS requires an explicit grant, requested from inside a user gesture and
      over HTTPS. Android has no such call — feature detect, never sniff. */
@@ -225,6 +217,20 @@ TiltSensor.prototype.enable = function () {
   return Promise.resolve(listen());
 };
 
+/* Listens for readings without asking for anything: enough wherever the
+   browser sends them unasked (Android, and Chromium even where it has the
+   call that asks). */
+TiltSensor.prototype.listen = function () {
+  var self = this;
+  if (!this.handler) {
+    this.handler = function (e) { self.onOrientation(e); };
+    window.addEventListener('deviceorientation', this.handler, true);
+  }
+  this.granted = true;
+  this.neutral = null;
+  return true;
+};
+
 TiltSensor.prototype.disable = function () {
   if (this.handler) {
     window.removeEventListener('deviceorientation', this.handler, true);
@@ -235,6 +241,30 @@ TiltSensor.prototype.disable = function () {
 };
 
 TiltSensor.prototype.recalibrate = function () { this.neutral = this.raw; };
+
+/* Whether a real reading arrives within `ms` of enable(): answers a promise
+   of true or false. A browser can have the event and no sensor behind it (a
+   laptop with a touch screen sends nothing, or a reading of nulls, which
+   onOrientation never takes), so a sensor counts only once it has spoken. */
+TiltSensor.prototype.whenReading = function (ms) {
+  var self = this, waited = 0;
+  return new Promise(function (resolve) {
+    (function look() {
+      if (self.neutral !== null) { resolve(true); return; }
+      if (waited >= ms) { resolve(false); return; }
+      waited += 50;
+      setTimeout(look, 50);
+    })();
+  });
+};
+
+/* Whether the screen is wider than it is tall: a phone held sideways. */
+function isLandscape() {
+  try {
+    if (window.matchMedia) return window.matchMedia('(orientation: landscape)').matches;
+    return window.innerWidth > window.innerHeight;
+  } catch (e) { return false; }
+}
 
 TiltSensor.prototype.value = function () {
   if (this.mode === 0 || this.neutral === null) return 0;

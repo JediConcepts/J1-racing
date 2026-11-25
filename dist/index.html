@@ -15,10 +15,10 @@
      being served" — a stale cached copy still returns 200 with a valid title,
      but it cannot carry the version that was just published.
      STANDALONE ONLY: the artifact fragment has no <head> to put it in. -->
-<meta name="build" content="v0.156" />
-<meta name="build-sha" content="da278f5" />
+<meta name="build" content="v0.186" />
+<meta name="build-sha" content="8c22bfb" />
 <meta name="build-channel" content="dev" />
-<meta name="build-time" content="2026-11-25 12:43Z" />
+<meta name="build-time" content="2026-11-25 13:36Z" />
 <meta name="color-scheme" content="dark light" />
 <meta name="description" content="A Formula 1 racer built the way a 1997 console would have built it: 240p, a five-bit dither, three laps of a stylised Monaco against a full grid, and three more circuits. Plays in a browser, on desktop or phone, with a global leaderboard." />
 <link rel="canonical" href="https://jediconcepts.com/mcl64/" />
@@ -842,6 +842,53 @@
   :root.fs-on .actions { margin: 0 auto; }
 
 
+  /* --- the next race, chosen at the end of one ---
+     Real buttons over the results, which the HUD draws on its canvas: RACE
+     AGAIN, a button for each circuit and RANDOM. Down the left of the stage,
+     where the results never reach (they are a column in the middle), above
+     the touch layer, and clear of the START pad (bottom middle) and the DRS
+     and CAM pads (right). Game.layoutNextRace sets --results-left, the left
+     edge of the results, so the panel stops short of it; where that leaves
+     too little room it goes under the results instead (.is-below). Every
+     button is at least 44 px high, for a thumb. */
+  .nextrace {
+    position: absolute;
+    z-index: 6;
+    left: calc(12px + env(safe-area-inset-left));
+    top: 50%;
+    transform: translateY(-50%);
+    width: min(320px, calc(var(--results-left, 300px) - 24px - env(safe-area-inset-left)));
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .nextrace[hidden] { display: none; }
+  .nextrace.is-below {
+    top: var(--results-bottom, 50%);
+    transform: none;
+    width: auto;
+    right: calc(12px + env(safe-area-inset-right));
+  }
+  .nextrace .sval {
+    min-width: 0;
+    min-height: 44px;
+    padding: 4px 6px;
+    line-height: 1.25;
+    white-space: normal;
+    background: rgba(12, 12, 16, 0.82);
+  }
+  .nextrace .sval:hover,
+  .nextrace .sval:focus-visible { background: rgba(255, 128, 0, 0.3); color: #fff2e2; }
+  .nextrace .sval[aria-current="true"] { border-color: #ffd0a0; color: #fff2e2; }
+  .nextrace .nextrace-again {
+    grid-column: 1 / -1;
+    background: var(--papaya);
+    border-color: var(--papaya);
+    color: #14120f;
+  }
+  .nextrace .nextrace-again:hover,
+  .nextrace .nextrace-again:focus-visible { background: #ffa040; color: #14120f; }
+
   /* anchored left so it never collides with the stage buttons on the right */
   .rotate-hint {
     position: absolute;
@@ -1088,6 +1135,10 @@
     </div>
 
     <div class="rotate-hint">ROTATE PHONE</div>
+
+    <div class="nextrace" id="next-race" role="group" aria-label="Next race" hidden>
+      <button type="button" class="sval nextrace-again" id="next-again">RACE AGAIN</button>
+    </div>
 
     
     <div class="settings" id="board" hidden>
@@ -2137,7 +2188,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 `);let e=await s.signMessage(new TextEncoder().encode(t),`utf8`);if(!e||!(e instanceof Uint8Array))throw Error(`@supabase/auth-js: Wallet signMessage() API returned an recognized value`);n=e}}try{let{data:r,error:i}=await J(this.fetch,`POST`,`${this.url}/token?grant_type=web3`,{headers:this.headers,body:Object.assign({chain:`solana`,message:t,signature:z(n)},e.options?.captchaToken?{gotrue_meta_security:{captcha_token:e.options?.captchaToken}}:null),xform:Y});if(i)throw i;if(!r||!r.session||!r.user){let e=new R;return this._returnResult({data:{user:null,session:null},error:e})}return r.session&&(await this._saveSession(r.session),await this._notifyAllSubscribers(`SIGNED_IN`,r.session)),this._returnResult({data:Object.assign({},r),error:i})}catch(e){if(P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async _exchangeCodeForSession(e){let[t,n]=(await H(this.storage,`${this.storageKey}-code-verifier`)??``).split(`/`);try{if(!t&&this.flowType===`pkce`)throw new Zn;let{data:r,error:i}=await J(this.fetch,`POST`,`${this.url}/token?grant_type=pkce`,{headers:this.headers,body:{auth_code:e,code_verifier:t},xform:Y});if(await U(this.storage,`${this.storageKey}-code-verifier`),i)throw i;if(!r||!r.session||!r.user){let e=new R;return this._returnResult({data:{user:null,session:null,redirectType:null},error:e})}return r.session&&(await this._saveSession(r.session),await this._notifyAllSubscribers(n===`recovery`?`PASSWORD_RECOVERY`:`SIGNED_IN`,r.session)),this._returnResult({data:Object.assign(Object.assign({},r),{redirectType:n??null}),error:i})}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:{user:null,session:null,redirectType:null},error:e});throw e}}async signInWithIdToken(e){try{let{options:t,provider:n,token:r,access_token:i,nonce:a}=e,{data:o,error:s}=await J(this.fetch,`POST`,`${this.url}/token?grant_type=id_token`,{headers:this.headers,body:{provider:n,id_token:r,access_token:i,nonce:a,gotrue_meta_security:{captcha_token:t?.captchaToken}},xform:Y});if(s)return this._returnResult({data:{user:null,session:null},error:s});if(!o||!o.session||!o.user){let e=new R;return this._returnResult({data:{user:null,session:null},error:e})}return o.session&&(await this._saveSession(o.session),await this._notifyAllSubscribers(`SIGNED_IN`,o.session)),this._returnResult({data:o,error:s})}catch(e){if(P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async signInWithOtp(e){try{if(`email`in e){let{email:t,options:n}=e,r=null,i=null;this.flowType===`pkce`&&([r,i]=await W(this.storage,this.storageKey));let{error:a}=await J(this.fetch,`POST`,`${this.url}/otp`,{headers:this.headers,body:{email:t,data:n?.data??{},create_user:n?.shouldCreateUser??!0,gotrue_meta_security:{captcha_token:n?.captchaToken},code_challenge:r,code_challenge_method:i},redirectTo:n?.emailRedirectTo});return this._returnResult({data:{user:null,session:null},error:a})}if(`phone`in e){let{phone:t,options:n}=e,{data:r,error:i}=await J(this.fetch,`POST`,`${this.url}/otp`,{headers:this.headers,body:{phone:t,data:n?.data??{},create_user:n?.shouldCreateUser??!0,gotrue_meta_security:{captcha_token:n?.captchaToken},channel:n?.channel??`sms`}});return this._returnResult({data:{user:null,session:null,messageId:r?.message_id},error:i})}throw new qn(`You must provide either an email or phone number.`)}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async verifyOtp(e){try{let t,n;`options`in e&&(t=e.options?.redirectTo,n=e.options?.captchaToken);let{data:r,error:i}=await J(this.fetch,`POST`,`${this.url}/verify`,{headers:this.headers,body:Object.assign(Object.assign({},e),{gotrue_meta_security:{captcha_token:n}}),redirectTo:t,xform:Y});if(i)throw i;if(!r)throw Error(`An error occurred on token verification.`);let a=r.session,o=r.user;return a?.access_token&&(await this._saveSession(a),await this._notifyAllSubscribers(e.type==`recovery`?`PASSWORD_RECOVERY`:`SIGNED_IN`,a)),this._returnResult({data:{user:o,session:a},error:null})}catch(e){if(P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async signInWithSSO(e){try{let t=null,n=null;this.flowType===`pkce`&&([t,n]=await W(this.storage,this.storageKey));let r=await J(this.fetch,`POST`,`${this.url}/sso`,{body:Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({},`providerId`in e?{provider_id:e.providerId}:null),`domain`in e?{domain:e.domain}:null),{redirect_to:e.options?.redirectTo??void 0}),e?.options?.captchaToken?{gotrue_meta_security:{captcha_token:e.options.captchaToken}}:null),{skip_http_redirect:!0,code_challenge:t,code_challenge_method:n}),headers:this.headers,xform:Gr});return r.data?.url&&B()&&!e.options?.skipBrowserRedirect&&window.location.assign(r.data.url),this._returnResult(r)}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:null,error:e});throw e}}async reauthenticate(){return await this.initializePromise,this.lock==null?await this._reauthenticate():await this._acquireLock(this.lockAcquireTimeout,async()=>await this._reauthenticate())}async _reauthenticate(){try{return await this._useSession(async e=>{let{data:{session:t},error:n}=e;if(n)throw n;if(!t)throw new L;let{error:r}=await J(this.fetch,`GET`,`${this.url}/reauthenticate`,{headers:this.headers,jwt:t.access_token});return this._returnResult({data:{user:null,session:null},error:r})})}catch(e){if(P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async resend(e){try{let t=`${this.url}/resend`;if(`email`in e){let{email:n,type:r,options:i}=e,a=null,o=null;this.flowType===`pkce`&&([a,o]=await W(this.storage,this.storageKey));let{error:s}=await J(this.fetch,`POST`,t,{headers:this.headers,body:{email:n,type:r,gotrue_meta_security:{captcha_token:i?.captchaToken},code_challenge:a,code_challenge_method:o},redirectTo:i?.emailRedirectTo});return s&&await U(this.storage,`${this.storageKey}-code-verifier`),this._returnResult({data:{user:null,session:null},error:s})}else if(`phone`in e){let{phone:n,type:r,options:i}=e,{data:a,error:o}=await J(this.fetch,`POST`,t,{headers:this.headers,body:{phone:n,type:r,gotrue_meta_security:{captcha_token:i?.captchaToken}}});return this._returnResult({data:{user:null,session:null,messageId:a?.message_id},error:o})}throw new qn(`You must provide either an email or phone number and a type`)}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async getSession(){return await this.initializePromise,this.lock==null?await this._useSession(async e=>e):await this._acquireLock(this.lockAcquireTimeout,async()=>this._useSession(async e=>e))}async _acquireLock(e,t){this._debug(`#_acquireLock`,`begin`,e);try{if(this.lockAcquired){let e=this.pendingInLock.length?this.pendingInLock[this.pendingInLock.length-1]:Promise.resolve(),n=(async()=>(await e,await t()))();return this.pendingInLock.push((async()=>{try{await n}catch{}})()),n}return await this.lock(`lock:${this.storageKey}`,e,async()=>{this._debug(`#_acquireLock`,`lock acquired for storage key`,this.storageKey);try{this.lockAcquired=!0;let e=t();for(this.pendingInLock.push((async()=>{try{await e}catch{}})()),await e;this.pendingInLock.length;){let e=[...this.pendingInLock];await Promise.all(e),this.pendingInLock.splice(0,e.length)}return await e}finally{this._debug(`#_acquireLock`,`lock released for storage key`,this.storageKey),this.lockAcquired=!1}})}finally{this._debug(`#_acquireLock`,`end`)}}async _useSession(e){this._debug(`#_useSession`,`begin`);try{return await e(await this.__loadSession())}finally{this._debug(`#_useSession`,`end`)}}async __loadSession(){this._debug(`#__loadSession()`,`begin`),this.lock!=null&&!this.lockAcquired&&this._debug(`#__loadSession()`,`used outside of an acquired lock!`,Error().stack);try{let e=null,t=await H(this.storage,this.storageKey);if(this._debug(`#getSession()`,`session from storage`,t),t!==null&&(this._isValidSession(t)?e=t:(this._debug(`#getSession()`,`session from storage is not valid`),await this._removeSession())),!e)return{data:{session:null},error:null};let n=e.expires_at?e.expires_at*1e3-Date.now()<zn:!1;if(this._debug(`#__loadSession()`,`session has${n?``:` not`} expired`,`expires_at`,e.expires_at),!n){if(this.userStorage){let t=await H(this.userStorage,this.storageKey+`-user`);t?.user?e.user=t.user:e.user=Lr()}if(this.storage.isServer&&e.user&&!e.user.__isUserNotAvailableProxy){let t={value:this.suppressGetSessionWarning};e.user=Rr(e.user,t),t.value&&(this.suppressGetSessionWarning=!0)}return{data:{session:e},error:null}}let{data:r,error:i}=await this._callRefreshToken(e.refresh_token);if(i){if(e.expires_at&&e.expires_at*1e3>Date.now()){let t=await H(this.storage,this.storageKey);if(t&&t.refresh_token===e.refresh_token)return this._returnResult({data:{session:e},error:null})}return this._returnResult({data:{session:null},error:i})}return this._returnResult({data:{session:r},error:null})}finally{this._debug(`#__loadSession()`,`end`)}}async getUser(e){if(e)return await this._getUser(e);await this.initializePromise;let t;return t=this.lock==null?await this._getUser():await this._acquireLock(this.lockAcquireTimeout,async()=>await this._getUser()),t.data.user&&(this.suppressGetSessionWarning=!0),t}async _getUser(e){try{return e?await J(this.fetch,`GET`,`${this.url}/user`,{headers:this.headers,jwt:e,xform:X}):await this._useSession(async e=>{let{data:t,error:n}=e;if(n)throw n;return!t.session?.access_token&&!this.hasCustomAuthorizationHeader?{data:{user:null},error:new L}:await J(this.fetch,`GET`,`${this.url}/user`,{headers:this.headers,jwt:t.session?.access_token??void 0,xform:X})})}catch(e){if(P(e))return Kn(e)&&(await this._removeSession(),await U(this.storage,`${this.storageKey}-code-verifier`)),this._returnResult({data:{user:null},error:e});throw e}}async updateUser(e,t={}){return await this.initializePromise,this.lock==null?await this._updateUser(e,t):await this._acquireLock(this.lockAcquireTimeout,async()=>await this._updateUser(e,t))}async _updateUser(e,t={}){try{return await this._useSession(async n=>{let{data:r,error:i}=n;if(i)throw i;if(!r.session)throw new L;let a=r.session,o=null,s=null;this.flowType===`pkce`&&e.email!=null&&([o,s]=await W(this.storage,this.storageKey));let{data:c,error:l}=await J(this.fetch,`PUT`,`${this.url}/user`,{headers:this.headers,redirectTo:t?.emailRedirectTo,body:Object.assign(Object.assign({},e),{code_challenge:o,code_challenge_method:s}),jwt:a.access_token,xform:X});if(l)throw l;return a.user=c.user,await this._saveSession(a),await this._notifyAllSubscribers(`USER_UPDATED`,a),this._returnResult({data:{user:a.user},error:null})})}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:{user:null},error:e});throw e}}async setSession(e){return await this.initializePromise,this.lock==null?await this._setSession(e):await this._acquireLock(this.lockAcquireTimeout,async()=>await this._setSession(e))}async _setSession(e){try{if(!e.access_token||!e.refresh_token)throw new L;let t=Date.now()/1e3,n=t,r=!0,i=null,{payload:a}=Tr(e.access_token);if(a.exp&&(n=a.exp,r=n<=t),r){let{data:t,error:n}=await this._callRefreshToken(e.refresh_token);if(n)return this._returnResult({data:{user:null,session:null},error:n});if(!t)return{data:{user:null,session:null},error:null};i=t}else{let{data:r,error:a}=await this._getUser(e.access_token);if(a)return this._returnResult({data:{user:null,session:null},error:a});i={access_token:e.access_token,refresh_token:e.refresh_token,user:r.user,token_type:`bearer`,expires_in:n-t,expires_at:n},await this._saveSession(i),await this._notifyAllSubscribers(`SIGNED_IN`,i)}return this._returnResult({data:{user:i.user,session:i},error:null})}catch(e){if(P(e))return this._returnResult({data:{session:null,user:null},error:e});throw e}}async refreshSession(e){return await this.initializePromise,this.lock==null?await this._refreshSession(e):await this._acquireLock(this.lockAcquireTimeout,async()=>await this._refreshSession(e))}async _refreshSession(e){try{return await this._useSession(async t=>{if(!e){let{data:n,error:r}=t;if(r)throw r;e=n.session??void 0}if(!e?.refresh_token)throw new L;let{data:n,error:r}=await this._callRefreshToken(e.refresh_token);return r?this._returnResult({data:{user:null,session:null},error:r}):n?this._returnResult({data:{user:n.user,session:n},error:null}):this._returnResult({data:{user:null,session:null},error:null})})}catch(e){if(P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async _getSessionFromURL(e,t){try{if(!B())throw new Jn(`No browser detected.`);if(e.error||e.error_description||e.error_code)throw new Jn(e.error_description||`Error in URL with unspecified error_description`,{error:e.error||`unspecified_error`,code:e.error_code||`unspecified_code`});switch(t){case`implicit`:if(this.flowType===`pkce`)throw new Xn(`Not a valid PKCE flow url.`);break;case`pkce`:if(this.flowType===`implicit`)throw new Jn(`Not a valid implicit grant flow url.`);break;default:}if(t===`pkce`){if(this._debug(`#_initialize()`,`begin`,`is PKCE flow`,!0),!e.code)throw new Xn(`No code detected.`);let{data:t,error:n}=await this._exchangeCodeForSession(e.code);if(n)throw n;let r=new URL(window.location.href);return r.searchParams.delete(`code`),window.history.replaceState(window.history.state,``,r.toString()),{data:{session:t.session,redirectType:t.redirectType??null},error:null}}let{provider_token:n,provider_refresh_token:r,access_token:i,refresh_token:a,expires_in:o,expires_at:s,token_type:c}=e;if(!i||!o||!a||!c)throw new Jn(`No session defined in URL`);let l=Math.round(Date.now()/1e3),u=parseInt(o),d=l+u;s&&(d=parseInt(s));let f=d-l;f*1e3<=M&&console.warn(`@supabase/gotrue-js: Session as retrieved from URL expires in ${f}s, should have been closer to ${u}s`);let p=d-u;l-p>=120?console.warn(`@supabase/gotrue-js: Session as retrieved from URL was issued over 120s ago, URL could be stale`,p,d,l):l-p<0&&console.warn(`@supabase/gotrue-js: Session as retrieved from URL was issued in the future? Check the device clock for skew`,p,d,l);let{data:m,error:h}=await this._getUser(i);if(h)throw h;let g={provider_token:n,provider_refresh_token:r,access_token:i,expires_in:u,expires_at:d,refresh_token:a,token_type:c,user:m.user};return window.location.hash=``,this._debug(`#_getSessionFromURL()`,`clearing window.location.hash`),this._returnResult({data:{session:g,redirectType:e.type},error:null})}catch(e){if(P(e))return this._returnResult({data:{session:null,redirectType:null},error:e});throw e}}_isImplicitGrantCallback(e){return typeof this.detectSessionInUrl==`function`?this.detectSessionInUrl(new URL(window.location.href),e):!!(e.access_token||e.error||e.error_description||e.error_code)}async _isPKCECallback(e){let t=await H(this.storage,`${this.storageKey}-code-verifier`);return!!(e.code&&t)}async signOut(e={scope:`global`}){return await this.initializePromise,this.lock==null?await this._signOut(e):await this._acquireLock(this.lockAcquireTimeout,async()=>await this._signOut(e))}async _signOut({scope:e}={scope:`global`}){return await this._useSession(async t=>{let n=async()=>{await this._removeSession(),await U(this.storage,`${this.storageKey}-code-verifier`)},{data:r,error:i}=t;if(i&&!Kn(i))return this._returnResult({error:i});let a=r.session?.access_token;if(a){let{error:t}=await this.admin.signOut(a,e);if(t&&!(Gn(t)&&(t.status===404||t.status===401||t.status===403)||Kn(t)))return e!==`others`&&await n(),this._returnResult({error:t})}return e!==`others`&&await n(),this._returnResult({error:null})})}onAuthStateChange(e){let t=vr(),n={id:t,callback:e,unsubscribe:()=>{this._debug(`#unsubscribe()`,`state change callback with id removed`,t),this.stateChangeEmitters.delete(t)}};return this._debug(`#onAuthStateChange()`,`registered callback with id`,t),this.stateChangeEmitters.set(t,n),(async()=>{await this.initializePromise,this.lock==null?await this._emitInitialSession(t):await this._acquireLock(this.lockAcquireTimeout,async()=>{this._emitInitialSession(t)})})(),{data:{subscription:n}}}async _emitInitialSession(e){return await this._useSession(async t=>{try{let{data:{session:n},error:r}=t;if(r)throw r;await this.stateChangeEmitters.get(e)?.callback(`INITIAL_SESSION`,n),this._debug(`INITIAL_SESSION`,`callback id`,e,`session`,n)}catch(t){await this.stateChangeEmitters.get(e)?.callback(`INITIAL_SESSION`,null),this._debug(`INITIAL_SESSION`,`callback id`,e,`error`,t),Kn(t)||er(t)||Gn(t)&&(t.code===`refresh_token_not_found`||t.code===`refresh_token_already_used`||t.code===`session_expired`)?console.warn(t):console.error(t)}})}async resetPasswordForEmail(e,t={}){let n=null,r=null;this.flowType===`pkce`&&([n,r]=await W(this.storage,this.storageKey,!0));try{return await J(this.fetch,`POST`,`${this.url}/recover`,{body:{email:e,code_challenge:n,code_challenge_method:r,gotrue_meta_security:{captcha_token:t.captchaToken}},headers:this.headers,redirectTo:t.redirectTo})}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:null,error:e});throw e}}async getUserIdentities(){try{let{data:e,error:t}=await this.getUser();if(t)throw t;return this._returnResult({data:{identities:e.user.identities??[]},error:null})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async linkIdentity(e){return`token`in e?this.linkIdentityIdToken(e):this.linkIdentityOAuth(e)}async linkIdentityOAuth(e){try{let{data:t,error:n}=await this._useSession(async t=>{let{data:n,error:r}=t;if(r)throw r;let i=await this._getUrlForProvider(`${this.url}/user/identities/authorize`,e.provider,{redirectTo:e.options?.redirectTo,scopes:e.options?.scopes,queryParams:e.options?.queryParams,skipBrowserRedirect:!0});return await J(this.fetch,`GET`,i,{headers:this.headers,jwt:n.session?.access_token??void 0})});if(n)throw n;return B()&&!e.options?.skipBrowserRedirect&&window.location.assign(t?.url),this._returnResult({data:{provider:e.provider,url:t?.url},error:null})}catch(t){if(P(t))return this._returnResult({data:{provider:e.provider,url:null},error:t});throw t}}async linkIdentityIdToken(e){return await this._useSession(async t=>{try{let{error:n,data:{session:r}}=t;if(n)throw n;let{options:i,provider:a,token:o,access_token:s,nonce:c}=e,{data:l,error:u}=await J(this.fetch,`POST`,`${this.url}/token?grant_type=id_token`,{headers:this.headers,jwt:r?.access_token??void 0,body:{provider:a,id_token:o,access_token:s,nonce:c,link_identity:!0,gotrue_meta_security:{captcha_token:i?.captchaToken}},xform:Y});return u?this._returnResult({data:{user:null,session:null},error:u}):!l||!l.session||!l.user?this._returnResult({data:{user:null,session:null},error:new R}):(l.session&&(await this._saveSession(l.session),await this._notifyAllSubscribers(`USER_UPDATED`,l.session)),this._returnResult({data:l,error:u}))}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}})}async unlinkIdentity(e){try{return await this._useSession(async t=>{let{data:n,error:r}=t;if(r)throw r;return await J(this.fetch,`DELETE`,`${this.url}/user/identities/${e.identity_id}`,{headers:this.headers,jwt:n.session?.access_token??void 0})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _refreshAccessToken(e){let t=`#_refreshAccessToken()`;this._debug(t,`begin`);try{let n=Date.now();return await Dr(async n=>(n>0&&await Er(200*2**(n-1)),this._debug(t,`refreshing attempt`,n),await J(this.fetch,`POST`,`${this.url}/token?grant_type=refresh_token`,{body:{refresh_token:e},headers:this.headers,xform:Y})),(e,t)=>{let r=200*2**e;return t&&er(t)&&Date.now()+r-n<M})}catch(e){if(this._debug(t,`error`,e),P(e))return this._returnResult({data:{session:null,user:null},error:e});throw e}finally{this._debug(t,`end`)}}_isValidSession(e){return typeof e==`object`&&!!e&&`access_token`in e&&`refresh_token`in e&&`expires_at`in e}async _handleProviderSignIn(e,t){let n=await this._getUrlForProvider(`${this.url}/authorize`,e,{redirectTo:t.redirectTo,scopes:t.scopes,queryParams:t.queryParams});return this._debug(`#_handleProviderSignIn()`,`provider`,e,`options`,t,`url`,n),B()&&!t.skipBrowserRedirect&&window.location.assign(n),{data:{provider:e,url:n},error:null}}async _recoverAndRefresh(){let e=`#_recoverAndRefresh()`;this._debug(e,`begin`);try{let t=await H(this.storage,this.storageKey);if(t&&this.userStorage){let e=await H(this.userStorage,this.storageKey+`-user`);!this.storage.isServer&&Object.is(this.storage,this.userStorage)&&!e&&(e={user:t.user},await Cr(this.userStorage,this.storageKey+`-user`,e)),t.user=e?.user??Lr()}else if(t&&!t.user&&!t.user){let e=await H(this.storage,this.storageKey+`-user`);e&&e?.user?(t.user=e.user,await U(this.storage,this.storageKey+`-user`),await Cr(this.storage,this.storageKey,t)):t.user=Lr()}if(this._debug(e,`session from storage`,t),!this._isValidSession(t)){this._debug(e,`session is not valid`),t!==null&&await this._removeSession();return}let n=(t.expires_at??1/0)*1e3-Date.now()<zn;if(this._debug(e,`session has${n?``:` not`} expired with margin of ${zn}s`),n){if(this.autoRefreshToken&&t.refresh_token){let{error:n}=await this._callRefreshToken(t.refresh_token);n&&(nr(n)?this._debug(e,`refresh discarded by commit guard`,n):this._debug(e,`refresh failed`,n))}}else if(t.user&&t.user.__isUserNotAvailableProxy===!0)try{let{data:n,error:r}=await this._getUser(t.access_token);!r&&n?.user?(t.user=n.user,await this._saveSession(t),await this._notifyAllSubscribers(`SIGNED_IN`,t)):this._debug(e,`could not get user data, skipping SIGNED_IN notification`)}catch(t){console.error(`Error getting user data:`,t),this._debug(e,`error getting user data, skipping SIGNED_IN notification`,t)}else await this._notifyAllSubscribers(`SIGNED_IN`,t)}catch(t){this._debug(e,`error`,t),er(t)?console.warn(t):console.error(t);return}finally{this._debug(e,`end`)}}async _callRefreshToken(e){var t,n;if(!e)throw new L;if(this.refreshingDeferred)return this.refreshingDeferred.promise;if(this.lastRefreshFailure&&this.lastRefreshFailure.refreshToken===e&&Date.now()<this.lastRefreshFailure.expiresAt)return this._debug(`#_callRefreshToken()`,`returning cached failure (cooldown active)`),this.lastRefreshFailure.result;let r=`#_callRefreshToken()`;this._debug(r,`begin`);try{this.refreshingDeferred=new wr;let t=await H(this.storage,this.storageKey),{data:n,error:i}=await this._refreshAccessToken(e);if(i)throw i;if(!n.session)throw new L;let a=await H(this.storage,this.storageKey);if(t!==null&&(a===null||a.refresh_token!==t.refresh_token)){this._debug(r,`commit guard: storage changed since refresh started, discarding rotated tokens`,{startedWith:`present`,nowHolds:a?`replaced`:`cleared`});let e={data:null,error:new tr};return this.refreshingDeferred.resolve(e),e}let o=this._sessionRemovalEpoch;if(await this._saveSession(n.session),this._sessionRemovalEpoch!==o){this._debug(r,`commit guard (post-save): _removeSession ran during _saveSession, undoing write`),await U(this.storage,this.storageKey),this.userStorage&&await U(this.userStorage,this.storageKey+`-user`);let e={data:null,error:new tr};return this.refreshingDeferred.resolve(e),e}await this._notifyAllSubscribers(`TOKEN_REFRESHED`,n.session);let s={data:n.session,error:null};return this.lastRefreshFailure=null,this.refreshingDeferred.resolve(s),s}catch(i){if(this._debug(r,`error`,i),P(i)){let n={data:null,error:i};if(!er(i)){let e=await H(this.storage,this.storageKey);e?.expires_at&&e.expires_at*1e3>Date.now()?this._debug(r,`proactive refresh failed, access token still valid — preserving session`):await this._removeSession()}return this.lastRefreshFailure={refreshToken:e,result:n,expiresAt:Date.now()+6e4},(t=this.refreshingDeferred)==null||t.resolve(n),n}throw(n=this.refreshingDeferred)==null||n.reject(i),i}finally{this.refreshingDeferred=null,this._debug(r,`end`)}}async _notifyAllSubscribers(e,t,n=!0){if(this._pendingInitNotifications!==null&&n){this._pendingInitNotifications.push({event:e,session:t,broadcast:n});return}let r=`#_notifyAllSubscribers(${e})`;this._debug(r,`begin`,t,`broadcast = ${n}`);try{this.broadcastChannel&&n&&this.broadcastChannel.postMessage({event:e,session:t});let r=[],i=Array.from(this.stateChangeEmitters.values()).map(async n=>{try{await n.callback(e,t)}catch(e){r.push(e)}});if(await Promise.all(i),r.length>0){for(let e=0;e<r.length;e+=1)console.error(r[e]);throw r[0]}}finally{this._debug(r,`end`)}}async _saveSession(e){this._debug(`#_saveSession()`,e),this.suppressGetSessionWarning=!0;let t=Object.assign({},e),n=t.user&&t.user.__isUserNotAvailableProxy===!0;if(this.userStorage){!n&&t.user&&await Cr(this.userStorage,this.storageKey+`-user`,{user:t.user});let e=Object.assign({},t);delete e.user;let r=zr(e);await Cr(this.storage,this.storageKey,r)}else{let e=zr(t);await Cr(this.storage,this.storageKey,e)}}async _removeSession(){this._sessionRemovalEpoch+=1,this._debug(`#_removeSession()`),this.lastRefreshFailure=null,this.suppressGetSessionWarning=!1,await U(this.storage,this.storageKey),await U(this.storage,this.storageKey+`-code-verifier`),await U(this.storage,this.storageKey+`-user`),this.userStorage&&await U(this.userStorage,this.storageKey+`-user`),await this._notifyAllSubscribers(`SIGNED_OUT`,null)}_removeVisibilityChangedCallback(){this._debug(`#_removeVisibilityChangedCallback()`);let e=this.visibilityChangedCallback;this.visibilityChangedCallback=null;try{e&&B()&&window!=null&&window.removeEventListener&&window.removeEventListener(`visibilitychange`,e)}catch(e){console.error(`removing visibilitychange callback failed`,e)}}async _startAutoRefresh(){await this._stopAutoRefresh(),this._debug(`#_startAutoRefresh()`);let e=setInterval(()=>this._autoRefreshTokenTick(),M);this.autoRefreshTicker=e,e&&typeof e==`object`&&typeof e.unref==`function`?e.unref():typeof Deno<`u`&&typeof Deno.unrefTimer==`function`&&Deno.unrefTimer(e);let t=setTimeout(async()=>{await this.initializePromise,await this._autoRefreshTokenTick()},0);this.autoRefreshTickTimeout=t,t&&typeof t==`object`&&typeof t.unref==`function`?t.unref():typeof Deno<`u`&&typeof Deno.unrefTimer==`function`&&Deno.unrefTimer(t)}async _stopAutoRefresh(){this._debug(`#_stopAutoRefresh()`);let e=this.autoRefreshTicker;this.autoRefreshTicker=null,e&&clearInterval(e);let t=this.autoRefreshTickTimeout;this.autoRefreshTickTimeout=null,t&&clearTimeout(t)}async startAutoRefresh(){this._removeVisibilityChangedCallback(),await this._startAutoRefresh()}async stopAutoRefresh(){this._removeVisibilityChangedCallback(),await this._stopAutoRefresh()}async dispose(){var e;this._removeVisibilityChangedCallback(),await this._stopAutoRefresh(),(e=this.broadcastChannel)==null||e.close(),this.broadcastChannel=null,this.stateChangeEmitters.clear()}async _autoRefreshTokenTick(){if(this._debug(`#_autoRefreshTokenTick()`,`begin`),this.lock!=null){try{await this._acquireLock(0,async()=>{try{let e=Date.now();try{return await this._useSession(async t=>{let{data:{session:n}}=t;if(!n||!n.refresh_token||!n.expires_at){this._debug(`#_autoRefreshTokenTick()`,`no session`);return}let r=Math.floor((n.expires_at*1e3-e)/M);this._debug(`#_autoRefreshTokenTick()`,`access token expires in ${r} ticks, a tick lasts ${M}ms, refresh threshold is 3 ticks`),r<=3&&await this._callRefreshToken(n.refresh_token)})}catch(e){console.error(`Auto refresh tick failed with error. This is likely a transient error.`,e)}}finally{this._debug(`#_autoRefreshTokenTick()`,`end`)}})}catch(e){if(e instanceof Qr)this._debug(`auto refresh token tick lock not available`);else throw e}return}if(this.refreshingDeferred!==null){this._debug(`#_autoRefreshTokenTick()`,`refresh already in flight, skipping`);return}try{let e=Date.now();try{await this._useSession(async t=>{let{data:{session:n}}=t;if(!n||!n.refresh_token||!n.expires_at){this._debug(`#_autoRefreshTokenTick()`,`no session`);return}let r=Math.floor((n.expires_at*1e3-e)/M);this._debug(`#_autoRefreshTokenTick()`,`access token expires in ${r} ticks, a tick lasts ${M}ms, refresh threshold is 3 ticks`),r<=3&&await this._callRefreshToken(n.refresh_token)})}catch(e){console.error(`Auto refresh tick failed with error. This is likely a transient error.`,e)}}finally{this._debug(`#_autoRefreshTokenTick()`,`end`)}}async _handleVisibilityChange(){if(this._debug(`#_handleVisibilityChange()`),!B()||!(window!=null&&window.addEventListener))return this.autoRefreshToken&&this.startAutoRefresh(),!1;try{this.visibilityChangedCallback=async()=>{try{await this._onVisibilityChanged(!1)}catch(e){this._debug(`#visibilityChangedCallback`,`error`,e)}},window==null||window.addEventListener(`visibilitychange`,this.visibilityChangedCallback),await this._onVisibilityChanged(!0)}catch(e){console.error(`_handleVisibilityChange`,e)}}async _onVisibilityChanged(e){let t=`#_onVisibilityChanged(${e})`;if(this._debug(t,`visibilityState`,document.visibilityState),document.visibilityState===`visible`){if(this.autoRefreshToken&&this._startAutoRefresh(),!e)if(await this.initializePromise,this.lock!=null)await this._acquireLock(this.lockAcquireTimeout,async()=>{if(document.visibilityState!==`visible`){this._debug(t,`acquired the lock to recover the session, but the browser visibilityState is no longer visible, aborting`);return}await this._recoverAndRefresh()});else{if(document.visibilityState!==`visible`){this._debug(t,`visibilityState is no longer visible, skipping recovery`);return}await this._recoverAndRefresh()}}else document.visibilityState===`hidden`&&this.autoRefreshToken&&this._stopAutoRefresh()}async _getUrlForProvider(e,t,n){let r=[`provider=${encodeURIComponent(t)}`];if(n?.redirectTo&&r.push(`redirect_to=${encodeURIComponent(n.redirectTo)}`),n?.scopes&&r.push(`scopes=${encodeURIComponent(n.scopes)}`),this.flowType===`pkce`){let[e,t]=await W(this.storage,this.storageKey),n=new URLSearchParams({code_challenge:`${encodeURIComponent(e)}`,code_challenge_method:`${encodeURIComponent(t)}`});r.push(n.toString())}if(n?.queryParams){let e=new URLSearchParams(n.queryParams);r.push(e.toString())}return n?.skipBrowserRedirect&&r.push(`skip_http_redirect=${n.skipBrowserRedirect}`),`${e}?${r.join(`&`)}`}async _unenroll(e){try{return await this._useSession(async t=>{let{data:n,error:r}=t;return r?this._returnResult({data:null,error:r}):await J(this.fetch,`DELETE`,`${this.url}/factors/${e.factorId}`,{headers:this.headers,jwt:n?.session?.access_token})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _enroll(e){try{return await this._useSession(async t=>{let{data:n,error:r}=t;if(r)return this._returnResult({data:null,error:r});let i=Object.assign({friendly_name:e.friendlyName,factor_type:e.factorType},e.factorType===`phone`?{phone:e.phone}:e.factorType===`totp`?{issuer:e.issuer}:{}),{data:a,error:o}=await J(this.fetch,`POST`,`${this.url}/factors`,{body:i,headers:this.headers,jwt:n?.session?.access_token});return o?this._returnResult({data:null,error:o}):(e.factorType===`totp`&&a.type===`totp`&&a?.totp?.qr_code&&(a.totp.qr_code=`data:image/svg+xml;utf-8,${a.totp.qr_code}`),this._returnResult({data:a,error:null}))})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _verify(e){let t=async()=>{try{return await this._useSession(async t=>{let{data:n,error:r}=t;if(r)return this._returnResult({data:null,error:r});let i=Object.assign({challenge_id:e.challengeId},`webauthn`in e?{webauthn:Object.assign(Object.assign({},e.webauthn),{credential_response:e.webauthn.type===`create`?hi(e.webauthn.credential_response):gi(e.webauthn.credential_response)})}:{code:e.code}),{data:a,error:o}=await J(this.fetch,`POST`,`${this.url}/factors/${e.factorId}/verify`,{body:i,headers:this.headers,jwt:n?.session?.access_token});return o?this._returnResult({data:null,error:o}):(await this._saveSession(Object.assign({expires_at:Math.round(Date.now()/1e3)+a.expires_in},a)),await this._notifyAllSubscribers(`MFA_CHALLENGE_VERIFIED`,a),this._returnResult({data:a,error:o}))})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}};return this.lock==null?t():this._acquireLock(this.lockAcquireTimeout,t)}async _challenge(e){let t=async()=>{try{return await this._useSession(async t=>{let{data:n,error:r}=t;if(r)return this._returnResult({data:null,error:r});let i=await J(this.fetch,`POST`,`${this.url}/factors/${e.factorId}/challenge`,{body:e,headers:this.headers,jwt:n?.session?.access_token});if(i.error)return i;let{data:a}=i;if(a.type!==`webauthn`)return{data:a,error:null};switch(a.webauthn.type){case`create`:return{data:Object.assign(Object.assign({},a),{webauthn:Object.assign(Object.assign({},a.webauthn),{credential_options:Object.assign(Object.assign({},a.webauthn.credential_options),{publicKey:pi(a.webauthn.credential_options.publicKey)})})}),error:null};case`request`:return{data:Object.assign(Object.assign({},a),{webauthn:Object.assign(Object.assign({},a.webauthn),{credential_options:Object.assign(Object.assign({},a.webauthn.credential_options),{publicKey:mi(a.webauthn.credential_options.publicKey)})})}),error:null}}})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}};return this.lock==null?t():this._acquireLock(this.lockAcquireTimeout,t)}async _challengeAndVerify(e){let{data:t,error:n}=await this._challenge({factorId:e.factorId});return n?this._returnResult({data:null,error:n}):await this._verify({factorId:e.factorId,challengeId:t.id,code:e.code})}async _listFactors(){let{data:{user:e},error:t}=await this.getUser();if(t)return{data:null,error:t};let n={all:[],phone:[],totp:[],webauthn:[]};for(let t of e?.factors??[])n.all.push(t),t.status===`verified`&&n[t.factor_type].push(t);return{data:n,error:null}}async _getAuthenticatorAssuranceLevel(e){if(e)try{let{payload:t}=Tr(e),n=null;t.aal&&(n=t.aal);let r=n,{data:{user:i},error:a}=await this.getUser(e);if(a)return this._returnResult({data:null,error:a});((i?.factors)?.filter(e=>e.status===`verified`)??[]).length>0&&(r=`aal2`);let o=t.amr||[];return{data:{currentLevel:n,nextLevel:r,currentAuthenticationMethods:o},error:null}}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}let{data:{session:t},error:n}=await this.getSession();if(n)return this._returnResult({data:null,error:n});if(!t)return{data:{currentLevel:null,nextLevel:null,currentAuthenticationMethods:[]},error:null};let{payload:r}=Tr(t.access_token),i=null;r.aal&&(i=r.aal);let a=i;(t.user.factors?.filter(e=>e.status===`verified`)??[]).length>0&&(a=`aal2`);let o=r.amr||[];return{data:{currentLevel:i,nextLevel:a,currentAuthenticationMethods:o},error:null}}async _getAuthorizationDetails(e){try{return await this._useSession(async t=>{let{data:{session:n},error:r}=t;return r?this._returnResult({data:null,error:r}):n?await J(this.fetch,`GET`,`${this.url}/oauth/authorizations/${e}`,{headers:this.headers,jwt:n.access_token,xform:e=>({data:e,error:null})}):this._returnResult({data:null,error:new L})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _approveAuthorization(e,t){try{return await this._useSession(async n=>{let{data:{session:r},error:i}=n;if(i)return this._returnResult({data:null,error:i});if(!r)return this._returnResult({data:null,error:new L});let a=await J(this.fetch,`POST`,`${this.url}/oauth/authorizations/${e}/consent`,{headers:this.headers,jwt:r.access_token,body:{action:`approve`},xform:e=>({data:e,error:null})});return a.data&&a.data.redirect_url&&B()&&!t?.skipBrowserRedirect&&window.location.assign(a.data.redirect_url),a})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _denyAuthorization(e,t){try{return await this._useSession(async n=>{let{data:{session:r},error:i}=n;if(i)return this._returnResult({data:null,error:i});if(!r)return this._returnResult({data:null,error:new L});let a=await J(this.fetch,`POST`,`${this.url}/oauth/authorizations/${e}/consent`,{headers:this.headers,jwt:r.access_token,body:{action:`deny`},xform:e=>({data:e,error:null})});return a.data&&a.data.redirect_url&&B()&&!t?.skipBrowserRedirect&&window.location.assign(a.data.redirect_url),a})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _listOAuthGrants(){try{return await this._useSession(async e=>{let{data:{session:t},error:n}=e;return n?this._returnResult({data:null,error:n}):t?await J(this.fetch,`GET`,`${this.url}/user/oauth/grants`,{headers:this.headers,jwt:t.access_token,xform:e=>({data:e,error:null})}):this._returnResult({data:null,error:new L})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _revokeOAuthGrant(e){try{return await this._useSession(async t=>{let{data:{session:n},error:r}=t;return r?this._returnResult({data:null,error:r}):n?(await J(this.fetch,`DELETE`,`${this.url}/user/oauth/grants`,{headers:this.headers,jwt:n.access_token,query:{client_id:e.clientId},noResolveJson:!0}),{data:{},error:null}):this._returnResult({data:null,error:new L})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async fetchJwk(e,t={keys:[]}){let n=t.keys.find(t=>t.kid===e);if(n)return n;let r=Date.now();if(n=this.jwks.keys.find(t=>t.kid===e),n&&this.jwks_cached_at+6e5>r)return n;let{data:i,error:a}=await J(this.fetch,`GET`,`${this.url}/.well-known/jwks.json`,{headers:this.headers});if(a)throw a;return!i.keys||i.keys.length===0||(this.jwks=i,this.jwks_cached_at=r,n=i.keys.find(t=>t.kid===e),!n)?null:n}async getClaims(e,t={}){try{let n=e;if(!n){let{data:e,error:t}=await this.getSession();if(t||!e.session)return this._returnResult({data:null,error:t});n=e.session.access_token}let{header:r,payload:i,signature:a,raw:{header:o,payload:s}}=Tr(n);if(!t?.allowExpired)try{Pr(i.exp)}catch(e){throw new ar(e instanceof Error?e.message:`JWT validation failed`)}let c=!r.alg||r.alg.startsWith(`HS`)||!r.kid||!(`crypto`in globalThis&&`subtle`in globalThis.crypto)?null:await this.fetchJwk(r.kid,t?.keys?{keys:t.keys}:t?.jwks);if(!c){let{error:e}=await this.getUser(n);if(e)throw e;return{data:{claims:i,header:r,signature:a},error:null}}let l=Fr(r.alg),u=await crypto.subtle.importKey(`jwk`,c,l,!0,[`verify`]);if(!await crypto.subtle.verify(l,u,a,gr(`${o}.${s}`)))throw new ar(`Invalid JWT signature`);return{data:{claims:i,header:r,signature:a},error:null}}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async signInWithPasskey(e){K(this.experimental);try{if(!vi())return this._returnResult({data:null,error:new F(`Browser does not support WebAuthn`,null)});let{data:t,error:n}=await this._startPasskeyAuthentication({options:{captchaToken:e?.options?.captchaToken}});if(n||!t)return this._returnResult({data:null,error:n});let{data:r,error:i}=await bi({publicKey:mi(t.options),signal:e?.options?.signal??fi.createNewAbortSignal()});if(i||!r)return this._returnResult({data:null,error:i??new F(`WebAuthn ceremony failed`,null)});let a=gi(r);return this._verifyPasskeyAuthentication({challengeId:t.challenge_id,credential:a})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async registerPasskey(e){K(this.experimental);try{if(!vi())return this._returnResult({data:null,error:new F(`Browser does not support WebAuthn`,null)});let{data:t,error:n}=await this._startPasskeyRegistration();if(n||!t)return this._returnResult({data:null,error:n});let{data:r,error:i}=await yi({publicKey:pi(t.options),signal:e?.options?.signal??fi.createNewAbortSignal()});if(i||!r)return this._returnResult({data:null,error:i??new F(`WebAuthn ceremony failed`,null)});let a=hi(r);return this._verifyPasskeyRegistration({challengeId:t.challenge_id,credential:a})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _startPasskeyRegistration(){K(this.experimental);try{return await this._useSession(async e=>{let{data:{session:t},error:n}=e;if(n)return this._returnResult({data:null,error:n});if(!t)return this._returnResult({data:null,error:new L});let{data:r,error:i}=await J(this.fetch,`POST`,`${this.url}/passkeys/registration/options`,{headers:this.headers,jwt:t.access_token,body:{}});return i?this._returnResult({data:null,error:i}):this._returnResult({data:r,error:null})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _verifyPasskeyRegistration(e){K(this.experimental);try{return await this._useSession(async t=>{let{data:{session:n},error:r}=t;if(r)return this._returnResult({data:null,error:r});if(!n)return this._returnResult({data:null,error:new L});let{data:i,error:a}=await J(this.fetch,`POST`,`${this.url}/passkeys/registration/verify`,{headers:this.headers,jwt:n.access_token,body:{challenge_id:e.challengeId,credential:e.credential}});return a?this._returnResult({data:null,error:a}):this._returnResult({data:i,error:null})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _startPasskeyAuthentication(e){K(this.experimental);try{let{data:t,error:n}=await J(this.fetch,`POST`,`${this.url}/passkeys/authentication/options`,{headers:this.headers,body:{gotrue_meta_security:{captcha_token:e?.options?.captchaToken}}});return n?this._returnResult({data:null,error:n}):this._returnResult({data:t,error:null})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _verifyPasskeyAuthentication(e){K(this.experimental);try{let{data:t,error:n}=await J(this.fetch,`POST`,`${this.url}/passkeys/authentication/verify`,{headers:this.headers,body:{challenge_id:e.challengeId,credential:e.credential},xform:Y});return n?this._returnResult({data:null,error:n}):(t.session&&(await this._saveSession(t.session),await this._notifyAllSubscribers(`SIGNED_IN`,t.session)),this._returnResult({data:t,error:null}))}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _listPasskeys(){K(this.experimental);try{return await this._useSession(async e=>{let{data:{session:t},error:n}=e;if(n)return this._returnResult({data:null,error:n});if(!t)return this._returnResult({data:null,error:new L});let{data:r,error:i}=await J(this.fetch,`GET`,`${this.url}/passkeys`,{headers:this.headers,jwt:t.access_token,xform:e=>({data:e,error:null})});return i?this._returnResult({data:null,error:i}):this._returnResult({data:r,error:null})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _updatePasskey(e){K(this.experimental);try{return await this._useSession(async t=>{let{data:{session:n},error:r}=t;if(r)return this._returnResult({data:null,error:r});if(!n)return this._returnResult({data:null,error:new L});let{data:i,error:a}=await J(this.fetch,`PATCH`,`${this.url}/passkeys/${e.passkeyId}`,{headers:this.headers,jwt:n.access_token,body:{friendly_name:e.friendlyName}});return a?this._returnResult({data:null,error:a}):this._returnResult({data:i,error:null})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _deletePasskey(e){K(this.experimental);try{return await this._useSession(async t=>{let{data:{session:n},error:r}=t;if(r)return this._returnResult({data:null,error:r});if(!n)return this._returnResult({data:null,error:new L});let{error:i}=await J(this.fetch,`DELETE`,`${this.url}/passkeys/${e.passkeyId}`,{headers:this.headers,jwt:n.access_token,noResolveJson:!0});return i?this._returnResult({data:null,error:i}):this._returnResult({data:null,error:null})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}};Oi.nextInstanceID={};var ki=Oi,Ai=Xr,ji=ki,Mi=class extends ji{constructor(e){super(e)}},Ni=class{constructor(e,t,n){this.supabaseUrl=e,this.supabaseKey=t;let r=Ln(e);if(!t)throw Error(`supabaseKey is required.`);jn(t),this.realtimeUrl=new URL(`realtime/v1`,r),this.realtimeUrl.protocol=this.realtimeUrl.protocol.replace(`http`,`ws`),this.authUrl=new URL(`auth/v1`,r),this.storageUrl=new URL(`storage/v1`,r),this.functionsUrl=new URL(`functions/v1`,r);let i=`sb-${r.hostname.split(`.`)[0]}-auth-token`,a={db:gn,realtime:vn,auth:{..._n,storageKey:i},global:hn,tracePropagation:yn},o=In(n??{},a);this.settings=o,this.storageKey=o.auth.storageKey??``,this.headers=o.global.headers??{},o.accessToken?(this.accessToken=o.accessToken,this.auth=new Proxy({},{get:(e,t)=>{throw Error(`@supabase/supabase-js: Supabase Client is configured with the accessToken option, accessing supabase.auth.${String(t)} is not possible`)}})):this.auth=this._initSupabaseAuthClient(o.auth??{},this.headers,o.global.fetch),this.fetch=Mn(t,e,this._getSessionToken.bind(this),o.global.fetch,o.tracePropagation),this.functionsFetch=Mn(t,e,this._getSessionToken.bind(this),o.global.fetch,o.tracePropagation,{omitApiKeyAsBearer:!0}),this.realtime=this._initRealtimeClient({headers:this.headers,accessToken:this._getAccessToken.bind(this),fetch:this.fetch,...o.realtime}),this.accessToken&&Promise.resolve(this.accessToken()).then(e=>this.realtime.setAuth(e)).catch(e=>console.warn(`Failed to set initial Realtime auth token:`,e)),this.rest=new ce(new URL(`rest/v1`,r).href,{headers:this.headers,schema:o.db.schema,fetch:this.fetch,timeout:o.db.timeout,urlLengthLimit:o.db.urlLengthLimit}),this.storage=new dn(this.storageUrl.href,this.headers,this.fetch,n?.storage),o.accessToken||this._listenForAuthEvents()}get functions(){return new l(this.functionsUrl.href,{headers:this.headers,customFetch:this.functionsFetch})}from(e){return this.rest.from(e)}schema(e){return this.rest.schema(e)}rpc(e,t={},n={head:!1,get:!1,count:void 0}){return this.rest.rpc(e,t,n)}channel(e,t={config:{}}){return this.realtime.channel(e,t)}getChannels(){return this.realtime.getChannels()}removeChannel(e){return this.realtime.removeChannel(e)}removeAllChannels(){return this.realtime.removeAllChannels()}async _getSessionToken(){if(this.accessToken)return await this.accessToken();let{data:e}=await this.auth.getSession();return e.session?.access_token??null}async _getAccessToken(){return await this._getSessionToken()??this.supabaseKey}_initSupabaseAuthClient({autoRefreshToken:e,persistSession:t,detectSessionInUrl:n,storage:r,userStorage:i,storageKey:a,flowType:o,lock:s,debug:c,throwOnError:l,experimental:u,lockAcquireTimeout:d,skipAutoInitialize:f},p,m){let h={Authorization:`Bearer ${this.supabaseKey}`,apikey:`${this.supabaseKey}`};return new Mi({url:this.authUrl.href,headers:{...h,...p},storageKey:a,autoRefreshToken:e,persistSession:t,detectSessionInUrl:n,storage:r,userStorage:i,flowType:o,lock:s,debug:c,throwOnError:l,experimental:u,fetch:m,lockAcquireTimeout:d,skipAutoInitialize:f,hasCustomAuthorizationHeader:Object.keys(this.headers).some(e=>e.toLowerCase()===`authorization`)})}_initRealtimeClient(e){return new pt(this.realtimeUrl.href,{...e,params:{apikey:this.supabaseKey,...e?.params}})}_listenForAuthEvents(){return this.auth.onAuthStateChange((e,t)=>{this._handleTokenChanged(e,`CLIENT`,t?.access_token)})}_handleTokenChanged(e,t,n){(e===`TOKEN_REFRESHED`||e===`SIGNED_IN`||e===`INITIAL_SESSION`)&&this.changedAccessToken!==n?(this.changedAccessToken=n,this.realtime.setAuth(n)):e===`SIGNED_OUT`&&(this.realtime.setAuth(),t==`STORAGE`&&this.auth.signOut(),this.changedAccessToken=void 0)}};let Pi=(e,t,n)=>new Ni(e,t,n);function Fi(){if(typeof window<`u`||globalThis.Deno!==void 0)return!1;let e=globalThis.process;if(!e)return!1;let t=e.version;if(t==null)return!1;let n=t.match(/^v(\d+)\./);return n?parseInt(n[1],10)<=20:!1}return Fi()&&console.warn(`⚠️  Node.js 20 and below are deprecated and will no longer be supported in future versions of @supabase/supabase-js. Please upgrade to Node.js 22 or later. For more information, visit: https://github.com/orgs/supabase/discussions/45715`),e.AuthAdminApi=Ai,e.AuthApiError=Wn,e.AuthClient=ji,e.AuthError=N,e.AuthImplicitGrantRedirectError=Jn,e.AuthInvalidCredentialsError=qn,e.AuthInvalidJwtError=ar,e.AuthInvalidTokenResponseError=R,e.AuthPKCECodeVerifierMissingError=Zn,e.AuthPKCEGrantCodeExchangeError=Xn,e.AuthRefreshDiscardedError=tr,e.AuthRetryableFetchError=$n,e.AuthSessionMissingError=L,e.AuthUnknownError=F,e.AuthWeakPasswordError=rr,e.CustomAuthError=I,Object.defineProperty(e,`FunctionRegion`,{enumerable:!0,get:function(){return c}}),e.FunctionsError=i,e.FunctionsFetchError=a,e.FunctionsHttpError=s,e.FunctionsRelayError=o,e.GoTrueAdminApi=Xr,e.GoTrueClient=ki,e.NavigatorLockAcquireTimeoutError=$r,e.PostgrestError=p,e.REALTIME_CHANNEL_STATES=ot,Object.defineProperty(e,`REALTIME_LISTEN_TYPES`,{enumerable:!0,get:function(){return E}}),Object.defineProperty(e,`REALTIME_POSTGRES_CHANGES_LISTEN_EVENT`,{enumerable:!0,get:function(){return at}}),Object.defineProperty(e,`REALTIME_PRESENCE_LISTEN_EVENTS`,{enumerable:!0,get:function(){return Ke}}),Object.defineProperty(e,`REALTIME_SUBSCRIBE_STATES`,{enumerable:!0,get:function(){return D}}),e.RealtimeChannel=st,e.RealtimeClient=pt,e.RealtimePostgresFilterBuilder=rt,e.RealtimePresence=qe,e.SIGN_OUT_SCOPES=Yr,e.StorageApiError=At,e.SupabaseClient=Ni,e.WebSocketFactory=le,e.createClient=Pi,e.isAuthApiError=Gn,e.isAuthError=P,e.isAuthImplicitGrantRedirectError=Yn,e.isAuthPKCECodeVerifierMissingError=Qn,e.isAuthRefreshDiscardedError=nr,e.isAuthRetryableFetchError=er,e.isAuthSessionMissingError=Kn,e.isAuthWeakPasswordError=ir,e.lockInternals=Z,e.navigatorLock=ti,e.postgresChangesFilter=it,e.processLock=ri,e})({});
 window.MCL64_CLOUD = {"url":"https://goqhiuxpinzltzxbjgug.supabase.co","key":"sb_publishable_MD1h-WEKI5xqWtLEk_OIOA_T-i77YHW"};
 </script>
-<script>window.MCL64_BUILD = {"version":"v0.156","channel":"dev","sha":"da278f5","branch":"test","at":"2026-11-25 12:43Z"};
+<script>window.MCL64_BUILD = {"version":"v0.186","channel":"dev","sha":"8c22bfb","branch":"HEAD","at":"2026-11-25 13:36Z"};
 (function(){
 "use strict";
 
@@ -8432,15 +8483,7 @@ TiltSensor.prototype.enable = function () {
   var self = this;
   if (!this.supported) return Promise.resolve(false);
 
-  function listen() {
-    if (!self.handler) {
-      self.handler = function (e) { self.onOrientation(e); };
-      window.addEventListener('deviceorientation', self.handler, true);
-    }
-    self.granted = true;
-    self.neutral = null;
-    return true;
-  }
+  function listen() { return self.listen(); }
 
   /* iOS requires an explicit grant, requested from inside a user gesture and
      over HTTPS. Android has no such call — feature detect, never sniff. */
@@ -8456,6 +8499,20 @@ TiltSensor.prototype.enable = function () {
   return Promise.resolve(listen());
 };
 
+/* Listens for readings without asking for anything: enough wherever the
+   browser sends them unasked (Android, and Chromium even where it has the
+   call that asks). */
+TiltSensor.prototype.listen = function () {
+  var self = this;
+  if (!this.handler) {
+    this.handler = function (e) { self.onOrientation(e); };
+    window.addEventListener('deviceorientation', this.handler, true);
+  }
+  this.granted = true;
+  this.neutral = null;
+  return true;
+};
+
 TiltSensor.prototype.disable = function () {
   if (this.handler) {
     window.removeEventListener('deviceorientation', this.handler, true);
@@ -8466,6 +8523,30 @@ TiltSensor.prototype.disable = function () {
 };
 
 TiltSensor.prototype.recalibrate = function () { this.neutral = this.raw; };
+
+/* Whether a real reading arrives within `ms` of enable(): answers a promise
+   of true or false. A browser can have the event and no sensor behind it (a
+   laptop with a touch screen sends nothing, or a reading of nulls, which
+   onOrientation never takes), so a sensor counts only once it has spoken. */
+TiltSensor.prototype.whenReading = function (ms) {
+  var self = this, waited = 0;
+  return new Promise(function (resolve) {
+    (function look() {
+      if (self.neutral !== null) { resolve(true); return; }
+      if (waited >= ms) { resolve(false); return; }
+      waited += 50;
+      setTimeout(look, 50);
+    })();
+  });
+};
+
+/* Whether the screen is wider than it is tall: a phone held sideways. */
+function isLandscape() {
+  try {
+    if (window.matchMedia) return window.matchMedia('(orientation: landscape)').matches;
+    return window.innerWidth > window.innerHeight;
+  } catch (e) { return false; }
+}
 
 TiltSensor.prototype.value = function () {
   if (this.mode === 0 || this.neutral === null) return 0;
@@ -9299,41 +9380,82 @@ var WEATHER_NAMES = ['clear', 'cloudy', 'rain'];
    Graphics button. The game's own pick is not: the default, and the tier a
    failed or slow Ultra falls back to. Nobody is told off for a tier they
    never asked for. `tierBarred` says the game has taken a heavy tier away
-   on this device and the player has not picked it again since (R6). */
-var SETTINGS_DEFAULTS = 2;
-var OLD_DEFAULTS = { quality: 'modern', trackId: 'silverstone-v1', timeOfDay: 'midday' };
+   on this device and the player has not picked it again since (R6).
+
+   AND AGAIN, 25 Nov 2026, the owner, playing on his phone: "when a new
+   player plays it defaults to sensitivity low 1 ultra mode ... Time of day /
+   weather can be set from a randomiser if not specifically selected. The
+   same as track selection." So SETTINGS_DEFAULTS went from 2 to 3, and what
+   a player who has never chosen gets moved like this:
+
+     steerSens   was 6, on every build there has been. Now 1, the lowest.
+     timeOfDay   was 'dusk'. Now RANDOM (see THE RANDOMISER below).
+     weather     was 'clear'. Now RANDOM.
+     trackId     was 'monaco-gp-v1'. Now RANDOM.
+     quality     stays 'ultra'.
+
+   THE RULE IS THE SAME ONE, KEPT FOR EVERY NUMBER: an object saved under an
+   older `defaults` holds the defaults of its day beside the choices, and a
+   value equal to what the default was when it was saved counts as never
+   chosen and takes today's default. Any other value was picked and is
+   kept. DEFAULTS_WERE is what the defaults were under each older number,
+   for the fields that have changed since; an object without the field at
+   all is from before number 2. So an object saved under 1 with Silverstone
+   and midday comes out RANDOM for both, one saved under 2 with Monaco and
+   dusk the same, and one under 2 with Silverstone keeps Silverstone,
+   because under 2 that was a pick. The move is saved, so it happens once.
+
+   STEERING. `steerChosen` says the player picked a steering mode, and
+   `throttleChosen` that they picked the throttle; while they have not, a
+   phone held sideways is given tilt and auto throttle by the game (see
+   Game.autoTilt). An older object cannot say: tilt was never the default,
+   so a saved tilt was picked, and manual throttle was not the default on a
+   phone, so a saved manual was picked. */
+var SETTINGS_DEFAULTS = 3;
+var DEFAULTS_WERE = {
+  1: { quality: 'modern', trackId: 'silverstone-v1', timeOfDay: 'midday', steerSens: 6 },
+  2: { trackId: 'monaco-gp-v1', timeOfDay: 'dusk', weather: 'clear', steerSens: 6 }
+};
 
 /* Copies what a saved object `p` holds into the settings `s`, field by
-   field. `old` is an object from before the defaults changed. */
-function settingsTake(s, p, old) {
+   field. `was` is DEFAULTS_WERE for the number it was saved under, or null
+   for an object saved under today's. */
+function settingsTake(s, p, was) {
+  var old = !!was;
+  /* a value that was the default when `p` was saved: never chosen */
+  function unchosen(field, v) { return old && was.hasOwnProperty(field) && was[field] === v; }
   /* validate each field rather than trusting the blob — a stale or hand
      edited entry must not be able to wedge the controls */
   if (typeof p.steerTilt === 'boolean') s.steerTilt = p.steerTilt;
+  s.steerChosen = typeof p.steerChosen === 'boolean' ? p.steerChosen : p.steerTilt === true;
   if (typeof p.tiltInvert === 'boolean') s.tiltInvert = p.tiltInvert;
   if (typeof p.autoThrottle === 'boolean') s.autoThrottle = p.autoThrottle;
+  s.throttleChosen = typeof p.throttleChosen === 'boolean' ? p.throttleChosen : p.autoThrottle === false;
   if (typeof p.autoFullscreen === 'boolean') s.autoFullscreen = p.autoFullscreen;
   if (typeof p.userConfigured === 'boolean') s.userConfigured = p.userConfigured;
   /* Anything that is not a tier, or not a time of day, keeps the
      default. So does a value that was the default when an object from
      before today was saved; any other value in such an object was
      picked. */
-  if (typeof p.quality === 'string' && TIERS.hasOwnProperty(p.quality) && !(old && p.quality === OLD_DEFAULTS.quality)) {
+  if (typeof p.quality === 'string' && TIERS.hasOwnProperty(p.quality) && !unchosen('quality', p.quality)) {
     s.quality = p.quality;
-    s.tierChosen = old || p.tierChosen === true;
+    /* under number 1 there was no `tierChosen`, and a tier that was not
+       the default was picked */
+    s.tierChosen = (old && was === DEFAULTS_WERE[1]) || p.tierChosen === true;
   }
   if (p.tierBarred === true) s.tierBarred = true;
-  if (TIME_OF_DAY_NAMES.indexOf(p.timeOfDay) >= 0 && !(old && p.timeOfDay === OLD_DEFAULTS.timeOfDay)) s.timeOfDay = p.timeOfDay;
-  /* anything that is not a weather keeps the default, which is clear */
-  if (WEATHER_NAMES.indexOf(p.weather) >= 0) s.weather = p.weather;
+  if ((p.timeOfDay === RANDOM || TIME_OF_DAY_NAMES.indexOf(p.timeOfDay) >= 0) && !unchosen('timeOfDay', p.timeOfDay)) s.timeOfDay = p.timeOfDay;
+  /* anything that is not a weather keeps the default */
+  if ((p.weather === RANDOM || WEATHER_NAMES.indexOf(p.weather) >= 0) && !unchosen('weather', p.weather)) s.weather = p.weather;
   /* Validated against the registry: a stale or hand-edited id must fall
      back to a real circuit rather than crashing the boot. */
-  if (typeof p.trackId === 'string' && trackById(p.trackId).id === p.trackId && !(old && p.trackId === OLD_DEFAULTS.trackId)) {
+  if (typeof p.trackId === 'string' && (p.trackId === RANDOM || trackById(p.trackId).id === p.trackId) && !unchosen('trackId', p.trackId)) {
     s.trackId = p.trackId;
   }
   /* tiltSens is the old field name — read it so anyone who already set a
-     value keeps it instead of being silently reset to 6 */
+     value keeps it instead of being silently reset to the default */
   var sv = (typeof p.steerSens === 'number') ? p.steerSens : p.tiltSens;
-  if (typeof sv === 'number' && isFinite(sv)) s.steerSens = clamp(Math.round(sv), 1, 10);
+  if (typeof sv === 'number' && isFinite(sv) && !unchosen('steerSens', Math.round(sv))) s.steerSens = clamp(Math.round(sv), 1, 10);
   /* 0 is a legitimate value here — silent — so these check isFinite
      rather than truthiness, or muting a bus would never persist. */
   if (typeof p.camMode === 'number' && CAM_LABELS[p.camMode]) s.camMode = p.camMode | 0;
@@ -9367,19 +9489,106 @@ function storeKeeps(store) {
 function settingsLoad(store, s, env) {
   /* `first`: nothing was saved under this build's own key, so this is its
      first load in this browser and the old key is read, this once */
-  var first = false;
+  var first = false, moved = false, raw = null;
   try {
-    var raw = store.get(SETTINGS_KEY);
+    raw = store.get(SETTINGS_KEY);
     if (!raw) { first = true; raw = store.get(SETTINGS_KEY_OLD); }
     if (raw) {
       var p = JSON.parse(raw);
-      settingsTake(s, p, first && p.defaults !== SETTINGS_DEFAULTS);
+      /* the number it was saved under: none at all is from before 2 */
+      var n = typeof p.defaults === 'number' ? p.defaults : 1;
+      moved = n !== SETTINGS_DEFAULTS;
+      settingsTake(s, p, DEFAULTS_WERE.hasOwnProperty(n) ? DEFAULTS_WERE[n] : null);
     }
   } catch (e) { /* blocked storage or corrupt JSON — defaults are fine */ }
   var t = tierLoad(s, store.get(TIER_TRIAL_KEY), { hidden: env.hidden, works: storeKeeps(store) });
   store.set(TIER_TRIAL_KEY, t.key);
-  if (first || t.save) settingsWrite(store, s);
+  if (first || moved || t.save) settingsWrite(store, s);
+  /* nothing saved under either key: the very first visit (FIRST_VISIT) */
+  t.firstVisit = first && !raw;
   return t;
+}
+
+/* --- the randomiser ------------------------------------------------------
+
+   THE RANDOMISER. Time of day, weather and circuit may each hold RANDOM,
+   which is the default for all three: the player has not chosen, and the
+   game draws one each time. The settings keep RANDOM; what was drawn is the
+   Game's (`drawn`), and is never saved.
+
+   WHEN. Whatever is on RANDOM is drawn when the page loads. The hour and the
+   weather are drawn again for every race after the first of a load, in
+   beginRace, before its countdown starts and never during it. The circuit is
+   drawn at load, and when the player asks for RANDOM at the end of a race
+   (the page reloads with the circuit it drew).
+
+   HOW. Hours with equal weight. Weather by WEATHER_WEIGHTS: clear twice as
+   likely as cloudy or rain. Circuits with equal weight, and never the
+   circuit that was on before it, so never the same circuit twice running.
+
+   These functions take their rolls from `roll`, a function answering a
+   number from 0 up to 1: Math.random in the game, a list in
+   test/tiers.test.js. Each roll is asked for only for a field that is on
+   RANDOM, so a page whose three settings are all chosen (the tools' pages,
+   see startFrom in tools/browser.js) draws nothing at all. None of this is
+   read by the simulation: what it decides is a look and which circuit is
+   built, before anything is built. */
+var RANDOM = 'random';
+var WEATHER_WEIGHTS = { clear: 2, cloudy: 1, rain: 1 };
+
+/* THE VERY FIRST VISIT, nothing saved at all, is the one thing not drawn:
+   the owner chose Monaco at dusk as the first thing a new player sees ("we
+   need to default to Ultra Dusk and Monaco as game 1", 24 Nov 2026), and the
+   title's opening shot is made for it. The settings are still saved as
+   RANDOM, so everything after that first race is drawn. To draw even the
+   first visit, make this null. */
+var FIRST_VISIT = { trackId: 'monaco-gp-v1', timeOfDay: 'dusk', weather: 'clear' };
+
+/* One of `names`, by `weights` (a weight for each name, or none for equal
+   weights), with the roll r from 0 up to 1. */
+function drawOne(names, weights, r) {
+  var total = 0, i;
+  for (i = 0; i < names.length; i++) total += weights ? weights[names[i]] : 1;
+  var at = r * total;
+  for (i = 0; i < names.length; i++) {
+    at -= weights ? weights[names[i]] : 1;
+    if (at < 0) return names[i];
+  }
+  return names[names.length - 1];
+}
+function drawHour(r) { return drawOne(TIME_OF_DAY_NAMES, null, r); }
+function drawWeather(r) { return drawOne(WEATHER_NAMES, WEATHER_WEIGHTS, r); }
+/* A circuit of `ids` other than `last` (when there is another to give). */
+function drawCircuit(ids, last, r) {
+  var from = [];
+  for (var i = 0; i < ids.length; i++) if (ids[i] !== last) from.push(ids[i]);
+  return drawOne(from.length ? from : ids, null, r);
+}
+
+/* What a load runs: the setting where it is chosen, a draw where it is
+   RANDOM. `env.firstVisit` is the very first visit (FIRST_VISIT);
+   `env.ids` the circuits; `env.last` the circuit the page had before this
+   load, if it knows; `env.next` a circuit already drawn for this load (the
+   end of a race drew it before the reload). */
+function drawLoad(s, env, roll) {
+  var first = env.firstVisit && FIRST_VISIT;
+  var out = {};
+  out.trackId = s.trackId !== RANDOM ? s.trackId
+    : (first ? first.trackId
+      : (env.next && env.ids.indexOf(env.next) >= 0 && env.next !== env.last ? env.next : drawCircuit(env.ids, env.last, roll())));
+  out.timeOfDay = s.timeOfDay !== RANDOM ? s.timeOfDay : (first ? first.timeOfDay : drawHour(roll()));
+  out.weather = s.weather !== RANDOM ? s.weather : (first ? first.weather : drawWeather(roll()));
+  return out;
+}
+
+/* The hour and the weather for another race in the same load: drawn again
+   where they are RANDOM, and as they are where they are chosen. */
+function drawRace(s, drawn, roll) {
+  return {
+    trackId: drawn.trackId,
+    timeOfDay: s.timeOfDay !== RANDOM ? s.timeOfDay : drawHour(roll()),
+    weather: s.weather !== RANDOM ? s.weather : drawWeather(roll())
+  };
 }
 
 /* --- the key, as text ---------------------------------------------------- */
@@ -9708,6 +9917,17 @@ var STATE = { TITLE: 0, COUNTDOWN: 1, RACING: 2, FINISHED: 3 };
    belongs to the sky. */
 var TIME_OF_DAY_NAMES = ['morning', 'midday', 'golden', 'dusk'];
 
+/* The order the TIME OF DAY and WEATHER buttons step through: RANDOM first
+   (THE RANDOMISER in 38-tiers.js), then each name. */
+var TOD_CYCLE = [RANDOM].concat(TIME_OF_DAY_NAMES);
+var WEATHER_CYCLE = [RANDOM].concat(WEATHER_NAMES);
+
+/* What a row says: the name chosen, or on RANDOM what it drew this time,
+   as RANDOM: DUSK. */
+function drawnLabel(setting, drawn) {
+  return setting === RANDOM ? 'RANDOM: ' + String(drawn).toUpperCase() : String(setting).toUpperCase();
+}
+
 /* --- the full post pass: bloom and a grade for each time of day ---------- */
 
 /* Bloom is for what is truly bright: the sun's disc, a glint on paint, a lit
@@ -9973,6 +10193,10 @@ function Game(host, renderer) {
   this.stick = null;                 /* on-screen analog thumbstick */
   this.tilt = new TiltSensor();      /* accelerometer steering */
   this.settings = this.loadSettings();
+  /* What this load runs where a setting is RANDOM: drawn here, before
+     anything is built (THE RANDOMISER in 38-tiers.js). Never saved. */
+  this.drawn = this.drawAtLoad();
+  this.racesBegun = 0;
   this.camMode = this.settings.camMode;
   this.settingsResume = false;
 
@@ -10174,7 +10398,7 @@ Game.prototype.drawFrame = function (fade) {
   if (this.rtFull) {
     /* The grade follows settings.timeOfDay here, on every frame, so nothing
        has to tell the post pass when the time of day is changed. */
-    var grade = GRADES[this.settings.timeOfDay] || GRADES.midday;
+    var grade = GRADES[this.drawn.timeOfDay] || GRADES.midday;
     this.postU.uGain.value.set(grade.gain[0], grade.gain[1], grade.gain[2]);
     this.postU.uLift.value.set(grade.lift[0], grade.lift[1], grade.lift[2]);
     this.postU.uSat.value = grade.saturation;
@@ -10235,8 +10459,8 @@ Game.prototype.applySkyMode = function (mode) {
   /* the weather and the hour first, so that a rig coming up from the dome
      draws its environment once, for the right hour in the right weather.
      Under the dome there is no weather (see weatherNow). */
-  this.skyRig.setWeather(mode === 'physical' ? this.settings.weather : 'clear');
-  this.skyRig.setTimeOfDay(this.settings.timeOfDay);
+  this.skyRig.setWeather(mode === 'physical' ? this.drawn.weather : 'clear');
+  this.skyRig.setTimeOfDay(this.drawn.timeOfDay);
   this.skyRig.setMode(mode);
   /* applyHaze has just written the dome's haze: see SkyRig.takeFog */
   this.skyRig.takeFog();
@@ -10244,12 +10468,13 @@ Game.prototype.applySkyMode = function (mode) {
   this.applyTimeOfDay();
 };
 
-/* The sky reads this.settings.timeOfDay here (one of TIME_OF_DAY_NAMES).
+/* The sky reads this.drawn.timeOfDay here (one of TIME_OF_DAY_NAMES: the
+   hour chosen, or drawn where the setting is RANDOM).
    Called by setTimeOfDay whenever the setting changes, and by applySkyMode.
    Under the dome the rig only remembers the name: Retro and Modern have one
    hour. The shadows are told last, because the sun has just moved. */
 Game.prototype.applyTimeOfDay = function () {
-  this.skyRig.setTimeOfDay(this.settings.timeOfDay);
+  this.skyRig.setTimeOfDay(this.drawn.timeOfDay);
   /* scenery with a look of its own under the physical sky (Monaco's sea and
      tunnel: setHour in 20-track.js) is told the hour, or told there is none */
   if (this.scenery && this.scenery.setHour) {
@@ -10459,7 +10684,7 @@ Game.prototype.buildWorld = function () {
 
   this.buildEnvironment(scene);
 
-  this.track = new Track(trackById(this.settings.trackId));
+  this.track = new Track(trackById(this.drawn.trackId));
   /* Each circuit brings its own score; absent or unknown falls back to the
      original theme, so a new circuit needs no music work to ship. */
   /* AUDITION ONLY: ?music=<theme> plays that theme instead, so the owner can
@@ -10673,6 +10898,15 @@ Game.prototype.bindInput = function () {
 
   function onKey(e, down) {
     var code = e.code || '';
+    /* THE END OF A RACE: the arrow keys walk the next race buttons, and
+       Enter on one of them is that button's (the browser clicks it). Enter
+       anywhere else still races again, as R does. */
+    if (self.nextRaceShown() && /^Arrow/.test(code)) {
+      if (down) self.nextRaceStep(code);
+      e.preventDefault();
+      return;
+    }
+    if ((code === 'Enter' || code === 'NumpadEnter') && self.inNextRace(e.target)) return;
     var slot = KEYS[code];
     if (slot) {
       self.input[slot] = down;
@@ -10707,6 +10941,7 @@ Game.prototype.bindInput = function () {
 
   window.addEventListener('keydown', function (e) {
     if (isTextEntry(e)) return;                /* they are typing, not driving */
+    self.keyUsed();
     onKey(e, true);
   }, { passive: false });
   /* keyup is NOT guarded: it only ever clears a key, and skipping it would
@@ -10810,6 +11045,7 @@ Game.prototype.bindInput = function () {
   });
 
   this.buildTrackList();
+  this.buildNextRace();
 
   var qualitySet = document.getElementById('set-quality');
   if (qualitySet) qualitySet.addEventListener('click', function (e) {
@@ -10820,19 +11056,19 @@ Game.prototype.bindInput = function () {
   var todSet = document.getElementById('set-tod');
   if (todSet) todSet.addEventListener('click', function (e) {
     e.preventDefault();
-    var i = TIME_OF_DAY_NAMES.indexOf(self.settings.timeOfDay);
-    self.setTimeOfDay(TIME_OF_DAY_NAMES[(i + 1) % TIME_OF_DAY_NAMES.length]);
+    var i = TOD_CYCLE.indexOf(self.settings.timeOfDay);
+    self.setTimeOfDay(TOD_CYCLE[(i + 1) % TOD_CYCLE.length]);
     self.applySettings();
-    self.flash(self.settings.timeOfDay.toUpperCase());
+    self.flash(drawnLabel(self.settings.timeOfDay, self.drawn.timeOfDay));
   });
 
   var weatherSet = document.getElementById('set-weather');
   if (weatherSet) weatherSet.addEventListener('click', function (e) {
     e.preventDefault();
-    var i = WEATHER_NAMES.indexOf(self.settings.weather);
-    self.setWeather(WEATHER_NAMES[(i + 1) % WEATHER_NAMES.length]);
+    var i = WEATHER_CYCLE.indexOf(self.settings.weather);
+    self.setWeather(WEATHER_CYCLE[(i + 1) % WEATHER_CYCLE.length]);
     self.applySettings();
-    self.flash(self.settings.weather.toUpperCase());
+    self.flash(drawnLabel(self.settings.weather, self.drawn.weather));
   });
 
   var autoFsSet = document.getElementById('set-autofs');
@@ -11103,6 +11339,7 @@ Game.prototype.bindInput = function () {
   if (throttleSet) throttleSet.addEventListener('click', function (e) {
     e.preventDefault();
     self.settings.autoThrottle = !self.settings.autoThrottle;
+    self.settings.throttleChosen = true;
     self.applySettings();
     self.saveSettings();
   });
@@ -11125,6 +11362,19 @@ Game.prototype.bindInput = function () {
       if (el && el.hidden) self.openSettings(); else self.closeSettings();
     }
   });
+
+  /* A PHONE HELD SIDEWAYS is given tilt and auto throttle (autoTilt): at
+     the first tap on START, or when it is turned sideways later. */
+  var turned = function () { if (self.state !== STATE.RACING) self.autoTilt(false); };
+  window.addEventListener('orientationchange', turned);
+  window.addEventListener('resize', turned);
+  /* where the browser asks first (iPhones), only from inside a tap, and
+     the end of a touch is the part of it Safari counts */
+  document.addEventListener('touchend', function () {
+    if (!self.tiltAskOnUp) return;
+    self.tiltAskOnUp = false;
+    if (self.state === STATE.COUNTDOWN) self.autoTilt(true);
+  }, true);
 
   /* A saved tilt preference cannot be restored silently — iOS only hands out
      the sensor inside a user gesture, so wait for the first one. */
@@ -11256,11 +11506,101 @@ Game.prototype.drawNotice = function () {
 Game.prototype.beginRace = function () {
   this.audio.wake();
   this.maybeEnterFullscreen();
+  /* the first race of a load runs under the load's draw, which the title
+     has been showing; every race after it draws the hour and the weather
+     again where they are RANDOM, here, before its countdown */
+  if (this.racesBegun++ > 0) this.drawForRace();
   this.resetRace(false);
   this.startTrace();
   this.state = STATE.COUNTDOWN;
   this.countdown = 0;
   this.paused = false;
+  /* where the phone asks before it gives the sensor, ask at the end of
+     this tap (the touchend listener in bindInput); elsewhere, now */
+  if (this.tiltAsks()) this.tiltAskOnUp = this.autoTiltWanted();
+  else this.autoTilt(false);
+};
+
+/* --- tilt for a phone held sideways ---------------------------------------
+   The owner, 25 Nov 2026: "we ideally need to detect when on a mobile device
+   in landscape mode to turn on tilt and auto speed control".
+
+   WHO. A touch screen, held in landscape, with a motion sensor that really
+   sends readings, on which no key has been pressed, whose player has not
+   picked a steering mode (`steerChosen`). A laptop with a touch screen has
+   no sensor that speaks (whenReading), or has a keyboard that has been used.
+
+   WHEN. At the first tap on START, which is also where a phone that asks
+   for permission (an iPhone) asks: never before. Or, on a phone that does
+   not ask, as soon as it is turned sideways, when no race is running.
+
+   WHAT. Tilt steering, and auto throttle unless the player picked the
+   throttle (`throttleChosen`). Neither is saved as the player's: the next
+   load gives them again at its first START.
+
+   NO SENSOR, OR NO. The finger joystick stays, with no line on the screen
+   and no second question: not again in this tab (TILT_NO_KEY), and only ever
+   again if the player picks TILT by hand.
+
+   ONLY AN iPHONE (or an iPad) IS ASKED. Chromium has the same call that
+   asks, but sends the readings without it; asking there would put a
+   question on a touch laptop that has no sensor at all. So everywhere else
+   the game only listens, and a sensor that speaks is enough. */
+var TILT_PROBE_MS = 1500;
+var TILT_NO_KEY = 'mcl64.tiltNo';
+
+Game.prototype.tiltAsks = function () {
+  return this.tilt.needsPermission && isIosWebKit();
+};
+
+Game.prototype.autoTiltWanted = function () {
+  var s = this.settings;
+  return !s.steerChosen && !s.steerTilt && !this.keyboardUsed && !this.autoTiltDone &&
+    this.tilt.supported && this.isTouch() && isLandscape() && SESSION.get(TILT_NO_KEY) !== '1';
+};
+
+/* `inTap`: called from inside the player's tap, where a phone may ask. */
+Game.prototype.autoTilt = function (inTap) {
+  if (!this.autoTiltWanted()) return;
+  var asks = this.tiltAsks();
+  if (asks && !inTap) return;
+  this.autoTiltDone = true;
+  var self = this, s = this.settings;
+  /* the countdown waits while the phone asks the player */
+  var hold = asks && this.state === STATE.COUNTDOWN && !this.paused;
+  if (hold) this.paused = true;
+  (asks ? this.tilt.enable() : Promise.resolve(this.tilt.listen())).then(function (ok) {
+    return ok ? self.tilt.whenReading(TILT_PROBE_MS) : false;
+  }).then(function (ok) {
+    if (hold) self.paused = false;
+    /* the player may have picked a mode, or used a key, while it asked */
+    if (!ok || s.steerChosen || self.keyboardUsed) {
+      if (!s.steerTilt) self.tilt.disable();
+      if (!ok) SESSION.set(TILT_NO_KEY, '1');
+      self.applySettings();
+      return;
+    }
+    s.steerTilt = true;
+    if (!s.throttleChosen) s.autoThrottle = true;
+    self.applySettings();
+    self.flash('TILT STEERING');
+  }, function () {
+    if (hold) self.paused = false;
+  });
+};
+
+/* A key was pressed: this is not a phone in the hand. Tilt the game gave
+   goes, and the joystick and the keys steer. */
+Game.prototype.keyUsed = function () {
+  if (this.keyboardUsed) return;
+  this.keyboardUsed = true;
+  this.tiltAskOnUp = false;
+  var s = this.settings;
+  if (s.steerTilt && !s.steerChosen) {
+    s.steerTilt = false;
+    this.tilt.disable();
+    this.applySettings();
+  }
 };
 
 /* --- sizing ------------------------------------------------------------- */
@@ -11325,11 +11665,13 @@ Game.prototype.resize = function () {
   /* Virtual HUD units stay device-independent so the overlay is the same
      physical size everywhere; the backing store is what gets denser. */
   this.us = uiCss * dpr;
+  this.uiCss = uiCss;
   this.vw = Math.floor(this.hudCanvas.width / this.us);
   this.vh = Math.floor(this.hudCanvas.height / this.us);
 
   this.camera.aspect = cw / ch;
   this.camera.updateProjectionMatrix();
+  if (this.uiEnding) this.layoutNextRace();
 };
 
 /* --- simulation --------------------------------------------------------- */
@@ -11447,8 +11789,14 @@ Game.prototype.loadSettings = function () {
      so these defaults never overwrite a returning player's choices. */
   var s = {
     steerTilt: false,
+    /* whether the player picked the steering mode, and the throttle: while
+       they have not, a phone held sideways is given tilt and auto throttle
+       (see autoTilt) */
+    steerChosen: false,
+    throttleChosen: false,
     tiltInvert: false,
-    steerSens: 6,
+    /* the gentlest: see the defaults of 25 Nov 2026 in 38-tiers.js */
+    steerSens: 1,
     engineVol: 10,
     musicVol: 10,
     /* The on/off state of each bus, kept here rather than only on the audio
@@ -11463,9 +11811,9 @@ Game.prototype.loadSettings = function () {
     quality: 'ultra',
     tierChosen: false,
     tierBarred: false,
-    timeOfDay: 'dusk',
-    trackId: 'monaco-gp-v1',
-    weather: 'clear',
+    timeOfDay: RANDOM,
+    trackId: RANDOM,
+    weather: RANDOM,
     defaults: SETTINGS_DEFAULTS,
     userConfigured: false
   };
@@ -11474,6 +11822,10 @@ Game.prototype.loadSettings = function () {
      out of view, in a background tab. */
   var t = settingsLoad(STORE, s, { hidden: document.hidden === true });
   for (var field in t) if (t.hasOwnProperty(field) && field !== 'key' && field !== 'save') this[field] = t[field];
+  /* Tilt the game gave a phone (autoTilt) is given again each load, at the
+     first tap on START, and not restored at the first touch of anything as
+     a tilt the player picked is (see bindInput). */
+  if (!s.steerChosen) s.steerTilt = false;
   return s;
 };
 
@@ -11552,15 +11904,15 @@ Game.prototype.syncSettingsUi = function () {
   put('set-quality-hint', TIER_UI[s.quality].hint + (barred ? ' ' + TIER_BARRED_HINT[barred] : ''));
   /* the time of day means something in Ultra only, so its row is shown there
      and nowhere else */
-  put('set-tod', s.timeOfDay.toUpperCase());
+  put('set-tod', drawnLabel(s.timeOfDay, this.drawn.timeOfDay));
   var todRow = document.getElementById('row-tod');
   if (todRow) todRow.hidden = s.quality !== 'ultra';
   /* the weather the same, and a line under it in rain saying it is a look */
-  put('set-weather', s.weather.toUpperCase());
+  put('set-weather', drawnLabel(s.weather, this.drawn.weather));
   var weatherRow = document.getElementById('row-weather');
   if (weatherRow) weatherRow.hidden = s.quality !== 'ultra';
   var weatherHint = document.getElementById('set-weather-hint');
-  if (weatherHint) weatherHint.hidden = s.quality !== 'ultra' || s.weather !== 'rain';
+  if (weatherHint) weatherHint.hidden = s.quality !== 'ultra' || this.drawn.weather !== 'rain';
 
   /* No point offering an automatic fullscreen the platform will refuse. */
   var fsRow = document.getElementById('row-autofs');
@@ -11629,6 +11981,9 @@ Game.prototype.syncSettingsUi = function () {
    grants the sensor per gesture. Every caller must be inside a real click. */
 Game.prototype.setSteerTilt = function (on, quiet) {
   var self = this, s = this.settings;
+  /* every caller is the player picking a mode, or putting back one they
+     picked: from here the game does not choose for them (autoTilt) */
+  s.steerChosen = true;
   if (!on) {
     s.steerTilt = false;
     this.applySettings();
@@ -12879,7 +13234,7 @@ Game.prototype.buildTrackList = function () {
   /* Two rails, same widget, different consequence: picking in SETTINGS loads
      that circuit, picking in the LEADERBOARD only changes which board you are
      reading. Nobody should have to load Indianapolis to see its times. */
-  this.buildTrackRail('set-track-list', function (id) { self.selectTrack(id); });
+  this.buildTrackRail('set-track-list', function (id) { self.selectTrack(id); }, true);
   this.buildTrackRail('board-track-list', function (id) {
     self.boardTrackId = id;
     self.syncTrackRail('board-track-list', id);
@@ -12888,12 +13243,15 @@ Game.prototype.buildTrackList = function () {
   this.syncTrackList();
 };
 
-Game.prototype.buildTrackRail = function (hostId, onPick) {
+/* `withRandom` puts a RANDOM card first (THE RANDOMISER in 38-tiers.js): the
+   circuit setting's rail has it, the leaderboard's does not. */
+Game.prototype.buildTrackRail = function (hostId, onPick, withRandom) {
   var host = document.getElementById(hostId);
   if (!host) return;
   host.innerHTML = '';
 
-  for (var i = 0; i < TRACKS.length; i++) {
+  var defs = withRandom ? [{ id: RANDOM, name: 'RANDOM', random: true }].concat(TRACKS) : TRACKS;
+  for (var i = 0; i < defs.length; i++) {
     (function (def) {
       var b = document.createElement('button');
       b.type = 'button';
@@ -12907,7 +13265,9 @@ Game.prototype.buildTrackRail = function (hostId, onPick) {
 
       var meta = document.createElement('span');
       meta.className = 'tracko-meta';
-      meta.textContent = def.laps + ' laps · ' + (def.blurb || 'full grid');
+      meta.textContent = def.random ? 'A NEW CIRCUIT EACH TIME'
+        : def.laps + ' laps · ' + (def.blurb || 'full grid');
+      if (def.random) meta.dataset.random = '1';
 
       b.appendChild(name);
       b.appendChild(meta);
@@ -12917,7 +13277,7 @@ Game.prototype.buildTrackRail = function (hostId, onPick) {
         onPick(def.id);
       });
       host.appendChild(b);
-    })(TRACKS[i]);
+    })(defs[i]);
   }
 };
 
@@ -12925,6 +13285,11 @@ Game.prototype.buildTrackRail = function (hostId, onPick) {
    right whenever the panel opens rather than only when it is first built. */
 Game.prototype.syncTrackList = function () {
   this.syncTrackRail('set-track-list', this.settings.trackId || (this.track && this.track.def.id));
+  /* on RANDOM, the card says what it drew this time */
+  var meta = document.querySelector('#set-track-list [data-random]');
+  if (meta && this.track) {
+    meta.textContent = this.settings.trackId === RANDOM ? 'RANDOM: ' + this.track.def.name : 'A NEW CIRCUIT EACH TIME';
+  }
   this.syncTrackRail('board-track-list', this.boardTrackId || this.trackVersion());
 };
 
@@ -12958,16 +13323,40 @@ Game.prototype.syncTrackRail = function (hostId, current) {
   }
 };
 
-Game.prototype.selectTrack = function (id) {
-  if (id === this.settings.trackId) return;          /* already on it */
+/* The circuit RANDOM gives at the end of a race: any but `last` (the one
+   just raced, unless another is named), with equal weight. */
+Game.prototype.drawNextCircuit = function (last) {
+  return drawCircuit(trackIds(), last || this.track.def.id, Math.random());
+};
+
+/* The player's pick of circuit, from the settings panel or the end of a
+   race: saved as a choice, and loaded. RANDOM is saved as RANDOM; from the
+   panel the circuit on now stands as this time's draw, and from the end of a
+   race (`now`) a new one is drawn, never the one just raced, and loaded. A
+   circuit that is already built is not loaded again: the panel leaves it as
+   it is, and the end of a race goes to its title. */
+Game.prototype.selectTrack = function (id, now) {
   var def = null;
   for (var i = 0; i < TRACKS.length; i++) if (TRACKS[i].id === id) def = TRACKS[i];
-  if (!def) return;
+  if (!def && id !== RANDOM) return;
+  if (id === this.settings.trackId && !now) return;  /* already on it */
 
   this.settings.trackId = id;
   this.saveSettings();
   this.syncTrackList();
+  var load = id;
+  if (id === RANDOM) {
+    if (!now) return;
+    load = this.drawNextCircuit();
+    def = trackById(load);
+    SESSION.set(NEXT_TRACK_KEY, load);
+  }
+  if (load === this.track.def.id) {
+    if (now) this.resetRace(true);
+    return;
+  }
   this.flash('LOADING ' + def.name);
+  this.loadingTrack = def.name;
   /* let the flash paint before the navigation stalls the frame */
   var self = this;
   setTimeout(function () { self.carryTier(); location.reload(); }, 220);
@@ -13131,12 +13520,22 @@ Game.prototype.carryTier = function () {
   this.tierAct(tierOut(this));
 };
 
-/* Sets the time of day by name (one of TIME_OF_DAY_NAMES), saves it, and has
-   the picture follow. Anything else is refused. */
+/* The player's pick of the hour (one of TIME_OF_DAY_NAMES, or RANDOM),
+   saved, with the picture following. RANDOM keeps the hour that is on the
+   screen as this time's draw: the next is drawn for the next race, never in
+   the middle of anything. Anything else is refused. */
 Game.prototype.setTimeOfDay = function (name) {
-  if (TIME_OF_DAY_NAMES.indexOf(name) < 0) throw new Error('unknown time of day ' + name);
+  if (name !== RANDOM && TIME_OF_DAY_NAMES.indexOf(name) < 0) throw new Error('unknown time of day ' + name);
   this.settings.timeOfDay = name;
   this.saveSettings();
+  if (name !== RANDOM) this.showTimeOfDay(name);
+};
+
+/* Puts an hour on the screen without saving it: for a pick, a draw, and the
+   photo and bench hooks, whose hour is not a player's choice. */
+Game.prototype.showTimeOfDay = function (name) {
+  if (TIME_OF_DAY_NAMES.indexOf(name) < 0) throw new Error('unknown time of day ' + name);
+  this.drawn.timeOfDay = name;
   this.applyTimeOfDay();
 };
 
@@ -13144,10 +13543,10 @@ Game.prototype.setTimeOfDay = function (name) {
    simulation never reads it, and Retro and Modern draw exactly what they
    drew before it existed.
 
-   The weather drawn now: settings.weather under the physical sky, which only
+   The weather drawn now: this.drawn.weather under the physical sky, which only
    Ultra has, and clear under the dome whatever is saved. */
 Game.prototype.weatherNow = function () {
-  return this.skyRig && this.skyRig.mode === 'physical' ? this.settings.weather : 'clear';
+  return this.skyRig && this.skyRig.mode === 'physical' ? this.drawn.weather : 'clear';
 };
 
 /* The shadows a tier has in the weather drawn now. Rain hides the sun, and
@@ -13156,17 +13555,70 @@ Game.prototype.weatherNow = function () {
    each car that Retro has. Cloud keeps them: its shadows are faint, not
    gone. */
 Game.prototype.shadowModeFor = function (tier) {
-  if (tier.shadows === 'cascades' && tier.sky === 'physical' && this.settings.weather === 'rain') return 'blob';
+  if (tier.shadows === 'cascades' && tier.sky === 'physical' && this.drawn.weather === 'rain') return 'blob';
   return tier.shadows;
 };
 
-/* Sets the weather by name (one of WEATHER_NAMES), saves it, and has the
-   picture follow. Anything else is refused. */
+/* The player's pick of the weather (one of WEATHER_NAMES, or RANDOM), as
+   setTimeOfDay does it for the hour. Anything else is refused. */
 Game.prototype.setWeather = function (name) {
-  if (WEATHER_NAMES.indexOf(name) < 0) throw new Error('unknown weather ' + name);
+  if (name !== RANDOM && WEATHER_NAMES.indexOf(name) < 0) throw new Error('unknown weather ' + name);
   this.settings.weather = name;
   this.saveSettings();
+  if (name !== RANDOM) this.showWeather(name);
+};
+
+/* Puts a weather on the screen without saving it (see showTimeOfDay). */
+Game.prototype.showWeather = function (name) {
+  if (WEATHER_NAMES.indexOf(name) < 0) throw new Error('unknown weather ' + name);
+  this.drawn.weather = name;
   this.applyWeather();
+};
+
+/* THE DRAW AT LOAD (THE RANDOMISER in 38-tiers.js). The circuit the page had
+   before, and one already drawn for this load at the end of a race, are
+   kept for the tab in sessionStorage: a reload is how a circuit changes. */
+var LAST_TRACK_KEY = 'mcl64.lastTrack';
+var NEXT_TRACK_KEY = 'mcl64.nextTrack';
+var SESSION = {
+  get: function (key) {
+    try { return window.sessionStorage ? sessionStorage.getItem(key) : null; } catch (e) { return null; }
+  },
+  set: function (key, value) {
+    try { if (value == null) sessionStorage.removeItem(key); else sessionStorage.setItem(key, value); } catch (e) { /* kept for nothing */ }
+  }
+};
+function trackIds() {
+  var ids = [];
+  for (var i = 0; i < TRACKS.length; i++) ids.push(TRACKS[i].id);
+  return ids;
+}
+Game.prototype.drawAtLoad = function () {
+  var next = SESSION.get(NEXT_TRACK_KEY);
+  SESSION.set(NEXT_TRACK_KEY, null);
+  var d = drawLoad(this.settings, {
+    firstVisit: this.firstVisit === true, ids: trackIds(), last: SESSION.get(LAST_TRACK_KEY), next: next
+  }, Math.random);
+  SESSION.set(LAST_TRACK_KEY, d.trackId);
+  return d;
+};
+
+/* THE DRAW BETWEEN RACES: the hour and the weather, where they are RANDOM,
+   for every race after the first of a load. Called by beginRace, before the
+   countdown. Under the dome (Retro and Modern) the drawn values are only
+   kept: nothing there draws them, and applySkyMode reads them when Ultra
+   comes back. */
+Game.prototype.drawForRace = function () {
+  var d = drawRace(this.settings, this.drawn, Math.random);
+  var physical = this.skyRig && this.skyRig.mode === 'physical';
+  if (d.weather !== this.drawn.weather) {
+    this.drawn.weather = d.weather;
+    if (physical) this.applyWeather();
+  }
+  if (d.timeOfDay !== this.drawn.timeOfDay) {
+    this.drawn.timeOfDay = d.timeOfDay;
+    if (physical) this.applyTimeOfDay();
+  }
 };
 
 /* Puts the weather drawn now on the screen. Called by applyQuality (last,
@@ -13245,9 +13697,117 @@ Game.prototype.isTouch = function () {
    actually driving. Only touches the DOM when the state changes. */
 Game.prototype.syncUiState = function () {
   var racing = this.state === STATE.RACING || this.state === STATE.COUNTDOWN;
-  if (this.uiRacing === racing) return;
-  this.uiRacing = racing;
-  document.documentElement.classList.toggle('racing', racing);
+  if (this.uiRacing !== racing) {
+    this.uiRacing = racing;
+    document.documentElement.classList.toggle('racing', racing);
+  }
+  /* the next race buttons, on the results and nowhere else */
+  var ending = this.state === STATE.FINISHED && !this.photoHold;
+  if (this.uiEnding !== ending) {
+    this.uiEnding = ending;
+    this.showNextRace(ending);
+  }
+};
+
+/* --- the next race, chosen at the end of one ------------------------------
+   RACE AGAIN, then one button for each circuit in TRACKS (whatever its
+   `board`), then RANDOM: page buttons over the results (.nextrace in the
+   template), so a thumb, a keyboard and a screen reader can all use them.
+   A circuit is the player's pick and is saved as one, RANDOM puts the
+   setting back to RANDOM (selectTrack). */
+Game.prototype.buildNextRace = function () {
+  var self = this, host = document.getElementById('next-race');
+  if (!host) return;
+  var again = document.getElementById('next-again');
+  if (again) again.addEventListener('click', function (e) {
+    e.preventDefault();
+    self.audio.wake();
+    if (self.state === STATE.FINISHED) self.beginRace();
+  });
+  var picks = TRACKS.map(function (d) { return { id: d.id, name: d.name }; }).concat([{ id: RANDOM, name: 'RANDOM' }]);
+  picks.forEach(function (d) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'sval';
+    b.dataset.trackId = d.id;
+    b.textContent = d.name;
+    b.addEventListener('click', function (e) {
+      e.preventDefault();
+      self.audio.wake();
+      if (self.state === STATE.FINISHED) self.selectTrack(d.id, true);
+    });
+    host.appendChild(b);
+  });
+};
+
+Game.prototype.nextRaceButtons = function () {
+  var host = document.getElementById('next-race');
+  return host ? host.querySelectorAll('button') : [];
+};
+Game.prototype.nextRaceShown = function () {
+  var host = document.getElementById('next-race');
+  return !!host && !host.hidden;
+};
+Game.prototype.inNextRace = function (el) {
+  var host = document.getElementById('next-race');
+  return !!host && !!el && host.contains(el);
+};
+
+Game.prototype.showNextRace = function (on) {
+  var host = document.getElementById('next-race');
+  if (!host) return;
+  if (on) {
+    this.layoutNextRace();
+    var bs = this.nextRaceButtons(), here = this.track.def.id;
+    for (var i = 0; i < bs.length; i++) {
+      bs[i].setAttribute('aria-current', bs[i].dataset.trackId === here ? 'true' : 'false');
+    }
+  } else if (host.contains(document.activeElement)) {
+    /* the keys go back to the car */
+    this.host.focus();
+  }
+  host.hidden = !on;
+};
+
+/* Lays the panel out against the results: it stops short of their left
+   edge, or goes under them where that leaves too little room for two
+   columns of names. */
+Game.prototype.layoutNextRace = function () {
+  var host = document.getElementById('next-race');
+  if (!host || !this.vw) return;
+  var b = this.resultsBox(), u = this.uiCss || 1;
+  var left = b.x * u;
+  host.style.setProperty('--results-left', left + 'px');
+  host.style.setProperty('--results-bottom', Math.round((b.y + b.h) * u + 8) + 'px');
+  host.classList.toggle('is-below', left - 24 < 200);
+};
+
+/* An arrow key at the end of a race. The buttons are RACE AGAIN across the
+   top and two columns under it, in TRACKS order and then RANDOM. The first
+   press only puts the focus on RACE AGAIN. */
+Game.prototype.nextRaceStep = function (code) {
+  var bs = this.nextRaceButtons(), n = bs.length;
+  if (!n) return;
+  var at = -1;
+  for (var i = 0; i < n; i++) if (bs[i] === document.activeElement) at = i;
+  var to = 0;
+  if (at >= 0) {
+    if (code === 'ArrowLeft') to = Math.max(0, at - 1);
+    else if (code === 'ArrowRight') to = Math.min(n - 1, at + 1);
+    else if (code === 'ArrowUp') to = at <= 2 ? 0 : at - 2;
+    else if (code === 'ArrowDown') to = at === 0 ? 1 : Math.min(n - 1, at + 2);
+    else to = at;
+  }
+  bs[to].focus();
+};
+
+/* Where drawResults puts the results, in HUD units: the column in the
+   middle, from its title bar to its best lap line. The next race panel is
+   laid out against it (layoutNextRace). */
+Game.prototype.resultsBox = function () {
+  var W = this.vw, pw = Math.min(W - 16, 220);
+  var n = (this.order || this.cars || []).length;
+  return { x: Math.round((W - pw) / 2), y: 12, w: pw, h: 18 + n * 11 + 9 + GLYPH_H };
 };
 
 Game.prototype.drawResults = function () {
@@ -13255,9 +13815,10 @@ Game.prototype.drawResults = function () {
   g.fillStyle = 'rgba(10,10,14,0.80)';
   g.fillRect(0, 0, W, H);
 
-  var pw = Math.min(W - 16, 220);
-  var px = Math.round((W - pw) / 2);
-  var py = 12;
+  var box = this.resultsBox();
+  var pw = box.w;
+  var px = box.x;
+  var py = box.y;
 
   g.fillStyle = C_PAPAYA;
   g.fillRect(px, py, pw, 12);
@@ -13511,9 +14072,10 @@ Game.prototype.photoCamMissing = function (name) {
  * the engine has counted (the promise settles then). The frame loop is held
  * so nothing draws over it before it is captured: the game is left frozen
  * afterwards, and needs a reload to be played. `timeOfDay`, when given, is
- * set and saved through setTimeOfDay before the frame is drawn; an unknown
- * name is refused before the game is touched. `weather` the same, one of
- * WEATHER_NAMES, through setWeather. `tick` must be a finite whole number from 0 to PHOTO_TICK_MAX; anything
+ * put on the screen through showTimeOfDay before the frame is drawn, and not
+ * saved: a hook's hour is not a player's choice. An unknown name is refused
+ * before the game is touched. `weather` the same, one of WEATHER_NAMES,
+ * through showWeather. `tick` must be a finite whole number from 0 to PHOTO_TICK_MAX; anything
  * else is refused before the game is touched.
  *
  * Everything that would otherwise carry history into the frame is pinned:
@@ -13549,8 +14111,8 @@ Game.prototype.photo = function (opts) {
     }
     var missing = this.photoCamMissing(cam);
     if (missing) return Promise.reject(new Error('MCL64.photo: ' + missing));
-    if (o.timeOfDay != null) this.setTimeOfDay(o.timeOfDay);
-    if (o.weather != null) this.setWeather(o.weather);
+    if (o.timeOfDay != null) this.showTimeOfDay(o.timeOfDay);
+    if (o.weather != null) this.showWeather(o.weather);
 
     this.photoHold = true;
     held = true;
@@ -13674,7 +14236,7 @@ Game.prototype.photoUndo = function () {
  * is the frame time a player actually gets. The first second is a warm up
  * (shaders compile on the first frames after a tier change) and is not
  * counted. Releases a hold left by photo. `timeOfDay` is as photo takes it:
- * one of TIME_OF_DAY_NAMES, set and saved before the run, and anything else
+ * one of TIME_OF_DAY_NAMES, put on the screen (not saved) before the run, and anything else
  * is refused. It changes the picture in Ultra only.
  *
  * The step down guard (watchPace) is switched off for the rest of the load.
@@ -13690,8 +14252,8 @@ Game.prototype.bench = function (opts) {
     if (!this.hookSelect(o.circuit, o.quality)) {
       return Promise.reject(new Error('MCL64.bench: reloading to load ' + o.circuit + '; call again once the page has loaded'));
     }
-    if (o.timeOfDay != null) this.setTimeOfDay(o.timeOfDay);
-    if (o.weather != null) this.setWeather(o.weather);
+    if (o.timeOfDay != null) this.showTimeOfDay(o.timeOfDay);
+    if (o.weather != null) this.showWeather(o.weather);
     this.paceDone = true;
     this.photoHold = false;
     this.hudCanvas.style.visibility = '';

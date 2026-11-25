@@ -187,13 +187,19 @@ async function pinRandom(context) {
    it always started from, so nothing a tool measured before has moved.
    Every hook still names its own circuit, tier and hour.
 
+   Since 25 Nov 2026 a player who has not chosen has the circuit, the hour
+   and the weather drawn at random (THE RANDOMISER in src/38-tiers.js). So
+   all three are named here outright, the weather clear as it always was,
+   and never RANDOM: a tool's page draws nothing, and the same arguments
+   still give the same frame.
+
    Saved once for the context, and not again on a reload: a hook changes
    circuit by saving its choice and reloading the page, and has to find what
    it saved. The key is the one this build keeps its settings under
    (SETTINGS_KEY in src/38-tiers.js), and `defaults` and `tierChosen` are
    what it writes for settings saved since the defaults changed and a tier
    the player picked. */
-const TOOL_START = { quality: 'modern', tierChosen: true, timeOfDay: 'midday', trackId: 'silverstone-v1', defaults: 2 };
+const TOOL_START = { quality: 'modern', tierChosen: true, timeOfDay: 'midday', weather: 'clear', trackId: 'silverstone-v1', defaults: 3 };
 async function startFrom(context) {
   await context.addInitScript((saved) => {
     if (sessionStorage.getItem('tool.started')) return;

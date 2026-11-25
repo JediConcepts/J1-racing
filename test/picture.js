@@ -70,7 +70,7 @@
  * a wide range of brightness. A canvas nothing drew to has one colour. */
 'use strict';
 
-const { CHROMIUM_ARGS, requirePlaywright, serveDist, localOnly } = require('../tools/browser');
+const { CHROMIUM_ARGS, requirePlaywright, serveDist, localOnly, TOOL_START } = require('../tools/browser');
 
 const WEBGPU = process.argv.includes('--webgpu');
 const VIEWPORT = { width: 1280, height: 720 };
@@ -87,12 +87,17 @@ const TRIAL_KEY = 'mcl64.tierTrial.v1';
 const SETTINGS_KEY = 'mcl64.settings.v2';
 const OLD_KEY = 'mcl64.settings.v1';
 
-/* See WHERE A CHECK STARTS in the header. `defaults: 2` marks the settings
-   as saved since the defaults changed (SETTINGS_DEFAULTS in src/38-tiers.js),
-   so the game reads them as they stand, and `tierChosen` says the player
-   picked the tier on the Graphics button. */
-const PLAIN_REST = { trackId: 'silverstone-v1', timeOfDay: 'midday', tierChosen: true, defaults: 2 };
+/* See WHERE A CHECK STARTS in the header. `defaults: 3` marks the settings
+   as saved since the defaults last changed (SETTINGS_DEFAULTS in
+   src/38-tiers.js), so the game reads them as they stand, and `tierChosen`
+   says the player picked the tier on the Graphics button. The weather is
+   named, so nothing in a check is drawn at random (THE RANDOMISER). */
+const PLAIN_REST = { trackId: 'silverstone-v1', timeOfDay: 'midday', weather: 'clear', tierChosen: true, defaults: 3 };
 const PLAIN = Object.assign({ quality: 'modern' }, PLAIN_REST);
+
+/* An iPhone's browser, for the checks of the question only an iPhone is
+   asked (Game.tiltAsks). */
+const IPHONE_UA = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 
 let pass = 0, fail = 0;
 function check(ok, name, detail) {
@@ -167,6 +172,29 @@ function tamper(o) {
       }
     });
   }
+  if (o.sensor) {
+    /* A PHONE'S MOTION SENSOR (Game.autoTilt). 'granted' and 'denied' are
+       a phone that asks first, as an iPhone does (the boot gives the page an
+       iPhone's user agent), and the answer the player gives; 'android' a
+       phone that does not ask; all three send readings. 'none' is a laptop
+       with a touch screen: the event exists and nothing ever sends it.
+       'laptop' is the same in a Chromium that has the call that asks, which
+       it must never be asked. window.__asked counts the questions. */
+    window.__asked = 0;
+    if (o.sensor !== 'none' && o.sensor !== 'laptop') {
+      setInterval(() => {
+        window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', { alpha: 0, beta: 3, gamma: 2 }));
+      }, 50);
+    }
+    /* Chromium has the call itself now (and headless, it says no), so it
+       is replaced either way: with the answer, or with nothing at all */
+    Object.defineProperty(DeviceOrientationEvent, 'requestPermission', {
+      configurable: true, writable: true,
+      value: o.sensor === 'granted' || o.sensor === 'denied' || o.sensor === 'laptop'
+        ? () => { window.__asked++; return Promise.resolve(o.sensor === 'denied' ? 'denied' : 'granted'); }
+        : undefined
+    });
+  }
   if (o.failInit) {
     /* The bundle is `var THREE = ...` in a classic script, so it lands on a
        property of window that is already there, through this setter. That
@@ -206,9 +234,11 @@ function tamper(o) {
     if (saved === undefined) saved = PLAIN;
     if (context) await context.close();
     context = await browser.newContext({
-      viewport: VIEWPORT, deviceScaleFactor: scale || 1, reducedMotion: 'no-preference', hasTouch: !!(more && more.touch)
+      viewport: (more && more.viewport) || VIEWPORT, deviceScaleFactor: scale || 1, reducedMotion: 'no-preference', hasTouch: !!(more && more.touch),
+      userAgent: more && (more.sensor === 'granted' || more.sensor === 'denied') ? IPHONE_UA : undefined
     });
-    await context.addInitScript(tamper, Object.assign({}, opts, more && more.holdAfter ? { holdAfter: more.holdAfter } : null));
+    await context.addInitScript(tamper, Object.assign({}, opts, more && more.holdAfter ? { holdAfter: more.holdAfter } : null,
+      more && more.sensor ? { sensor: more.sensor } : null));
     /* `saved` is what a player's browser would hold from an earlier visit:
        it is in storage before the page's first script reads it. It is put
        there once, on the first load of the context, so that a reload later
@@ -500,7 +530,7 @@ function tamper(o) {
 
     /* Review Focus 3: what storage holds is checked, field by field */
     await bootWithSettings({ quality: 'hyper', timeOfDay: 'midnight' });
-    check(await setting('quality') === 'ultra' && await setting('timeOfDay') === 'dusk' && uncaught.length === 0,
+    check(await setting('quality') === 'ultra' && await setting('timeOfDay') === 'random' && uncaught.length === 0,
       'an unknown tier or time of day falls back to the defaults',
       'quality ' + await setting('quality') + ', timeOfDay ' + await setting('timeOfDay') + ', uncaught ' + JSON.stringify(uncaught));
 
@@ -510,8 +540,8 @@ function tamper(o) {
        road, the dome's sky with no weather on it, and the shadows the tier
        has always had. */
     await bootWithSettings({ quality: 'ultra', weather: 'snow' });
-    check(await setting('weather') === 'clear' && uncaught.length === 0,
-      'an unknown weather falls back to clear',
+    check(await setting('weather') === 'random' && uncaught.length === 0,
+      'an unknown weather falls back to the default, RANDOM',
       'weather ' + await setting('weather') + ', uncaught ' + JSON.stringify(uncaught));
     const weatherState = () => page.evaluate(() => {
       const g = window.MCL64;
@@ -541,7 +571,7 @@ function tamper(o) {
       const g = window.MCL64, sun = g.sun, rig = g.shadowRig;
       const up = (v) => Math.round(Math.asin(v.y / v.length()) * 180 / Math.PI * 10) / 10;
       return {
-        quality: g.settings.quality, saved: g.settings.timeOfDay, sky: g.skyRig.mode, drew: g.skyRig.drawn,
+        quality: g.settings.quality, saved: g.settings.timeOfDay, hour: g.drawn.timeOfDay, weather: g.drawn.weather, sky: g.skyRig.mode, drew: g.skyRig.drawn,
         sunUp: up(sun.position.clone().sub(sun.target.position)), shadowsUp: up(rig.offset), shadows: rig.mode
       };
     });
@@ -550,7 +580,7 @@ function tamper(o) {
       let stored = null;
       try { stored = JSON.parse(localStorage.getItem('mcl64.settings.v2')).quality; } catch (e) {}
       return {
-        quality: g.settings.quality, on: g.tierOn, shadows: g.shadowRig.mode, built: g.__built || null,
+        quality: g.settings.quality, on: g.tierOn, shadows: g.shadowRig.mode, weather: g.drawn.weather, built: g.__built || null,
         label: document.getElementById('set-quality').textContent, stored, trial: localStorage.getItem(key), notice: g.notice
       };
     }, TRIAL_KEY);
@@ -574,16 +604,18 @@ function tamper(o) {
     const firstWrites = (await writes()).filter((w) => !w.game);
     const keyEarly = firstWrites.some((w) => w.key === TRIAL_KEY && w.value === 'ultra');
     const savedEarly = firstWrites.filter((w) => w.key === SETTINGS_KEY).map((w) => JSON.parse(w.value))
-      .some((v) => v.quality === 'ultra' && v.defaults === 2 && v.tierChosen === false && v.userConfigured === false);
-    check(firstTrack === 'monaco-gp-v1' && first.quality === 'ultra' && first.saved === 'dusk' && first.sky === 'physical' &&
+      .some((v) => v.quality === 'ultra' && v.defaults === 3 && v.tierChosen === false && v.userConfigured === false &&
+        v.trackId === 'random' && v.timeOfDay === 'random' && v.weather === 'random' && v.steerSens === 1);
+    check(firstTrack === 'monaco-gp-v1' && first.quality === 'ultra' && first.saved === 'random' && first.hour === 'dusk' &&
+      first.weather === 'clear' && first.sky === 'physical' &&
       first.drew === 'dusk' && first.sunUp === 7.5 && first.shadowsUp === 7.5 && first.shadows === 'cascades' &&
       firstTier.on === 'ultra' && firstTier.label === 'ULTRA' && !firstTier.notice && notBlank(firstLook) &&
       !(await isVisible('#fallback')) && consoleErrors.length === 0 && uncaught.length === 0,
-      'a browser with nothing saved comes up at Monaco, in Ultra, at dusk, and draws with no errors',
+      'a browser with nothing saved comes up at Monaco, in Ultra, at dusk, clear (FIRST_VISIT), and draws with no errors',
       'circuit ' + firstTrack + ', ' + JSON.stringify(first) + ', ' + JSON.stringify(firstTier) + ', ' + lookText(firstLook) +
       ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
     check(keyEarly && savedEarly,
-      'and its Ultra is on trial: the key and the settings are written before the world is built',
+      'and its Ultra is on trial: the key and the settings (RANDOM for the three, sensitivity 1) are written before the world is built',
       'written before the game existed: ' + JSON.stringify(firstWrites));
 
     /* THE FIRST LOAD DIED before it had drawn its frames: a browser with the
@@ -595,7 +627,7 @@ function tamper(o) {
     await bootWithSettings({ quality: 'ultra', tierChosen: false, trackId: 'monaco-gp-v1', timeOfDay: 'dusk' }, 1, { trial: 'ultra' });
     const died2 = await tierState(), died2Saved = await storedSettings();
     check(died.quality === 'modern' && died.on === 'modern' && died.shadows === 'single' && died.trial === null && !died.notice &&
-      diedSaved && diedSaved.quality === 'modern' && diedSaved.tierChosen === false && diedSaved.defaults === 2 &&
+      diedSaved && diedSaved.quality === 'modern' && diedSaved.tierChosen === false && diedSaved.defaults === 3 &&
       died2.quality === 'modern' && died2.on === 'modern' && died2.trial === null && !died2.notice &&
       died2Saved && died2Saved.quality === 'modern' && consoleErrors.length === 0 && uncaught.length === 0,
       'a first load that died in the default Ultra is followed by one in Modern, saved, with nothing said',
@@ -628,7 +660,7 @@ function tamper(o) {
     await page.waitForFunction(() => window.MCL64.photoHold, null, { timeout: LOAD_MS });
     const cameBack = await tierState(), cameBackLeft = await trialLeft(), cameBackSaved = await storedSettings();
     check(early.on === 'ultra' && early.trial === 'ultra' && earlyLeft === 57 && cameBack.quality === 'ultra' && cameBack.on === 'ultra' &&
-      cameBack.shadows === 'cascades' && cameBack.trial === 'ultra' && cameBackLeft === 57 && !cameBack.notice &&
+      cameBack.shadows === (cameBack.weather === 'rain' ? 'blob' : 'cascades') && cameBack.trial === 'ultra' && cameBackLeft === 57 && !cameBack.notice &&
       cameBackSaved.quality === 'ultra' && cameBackSaved.tierChosen === false && consoleErrors.length === 0 && uncaught.length === 0,
       'a new player\'s page left 3 frames into its trial is not an Ultra that failed: the next load is in Ultra again, on trial',
       'left with ' + earlyLeft + ' frames to draw, ' + JSON.stringify(early) + '; the load after, with ' + cameBackLeft + ' to draw, ' +
@@ -660,7 +692,7 @@ function tamper(o) {
     const keptTier = await tierState(), keptSaved = await storedSettings();
     const keptTrack = await page.evaluate(() => window.MCL64.track.def.id);
     check(keptTier.quality === 'retro' && keptTier.on === 'retro' && keptTier.shadows === 'blob' && keptTier.trial === null &&
-      keptTrack === 'brands-hatch-v1' && keptSaved.quality === 'retro' && keptSaved.tierChosen === true && keptSaved.defaults === 2 &&
+      keptTrack === 'brands-hatch-v1' && keptSaved.quality === 'retro' && keptSaved.tierChosen === true && keptSaved.defaults === 3 &&
       keptSaved.trackId === 'brands-hatch-v1' && keptSaved.musicVol === 4 && uncaught.length === 0,
       'a Retro and a circuit saved before the defaults changed are the player\'s own, and stay',
       JSON.stringify(keptTier) + ', circuit ' + keptTrack + ', storage ' + JSON.stringify(keptSaved) + ', uncaught ' + JSON.stringify(uncaught));
@@ -676,6 +708,8 @@ function tamper(o) {
     const movedTrack = await page.evaluate(() => window.MCL64.track.def.id);
     const movedKey = (await writes()).some((w) => !w.game && w.key === TRIAL_KEY && w.value === 'ultra');
     const movedSaid = [await clickGraphics()];
+    /* the circuit was drawn; the pick has to be another, so that it loads */
+    const pickNext = movedTrack === 'silverstone-v1' ? 'brands-hatch-v1' : 'silverstone-v1';
     await page.waitForFunction(() => window.MCL64.tierOn === 'modern', null, { timeout: LOAD_MS });
     /* THE LIVE GAME SAVES BETWEEN THE TWO LOADS: its whole object, in its
        own shape, under the key the two builds share. Nothing here may
@@ -685,21 +719,21 @@ function tamper(o) {
     await page.evaluate(([key, value]) => { window.__setItem.call(localStorage, key, value); }, [OLD_KEY, LIVE]);
     await Promise.all([
       page.waitForEvent('load', { timeout: LOAD_MS }),
-      page.evaluate(() => window.MCL64.selectTrack('silverstone-v1'))
+      page.evaluate((id) => window.MCL64.selectTrack(id), pickNext)
     ]);
-    await settled('silverstone-v1');
+    await settled(pickNext);
     const second = await tierState(), secondSaved = await storedSettings();
     const secondTrack = await page.evaluate(() => window.MCL64.track.def.id);
     const oldNow = await page.evaluate((key) => localStorage.getItem(key), OLD_KEY);
     const oldWritesAfter = (await writes()).filter((w) => w.key === OLD_KEY).length;
-    check(moved.quality === 'ultra' && moved.saved === 'dusk' && moved.drew === 'dusk' && moved.shadows === 'cascades' &&
-      movedTrack === 'monaco-gp-v1' && notBlank(movedLook) && movedKey && movedSaved.quality === 'ultra' && movedSaved.tierChosen === false &&
-      movedSaved.defaults === 2 && movedSaved.trackId === 'monaco-gp-v1' && movedSaved.timeOfDay === 'dusk' && movedSaved.musicVol === 4 &&
-      movedSaid.join() === 'MODERN' && second.quality === 'modern' && second.on === 'modern' && secondTrack === 'silverstone-v1' &&
-      secondSaved.quality === 'modern' && secondSaved.tierChosen === true && secondSaved.trackId === 'silverstone-v1' &&
+    check(moved.quality === 'ultra' && moved.saved === 'random' && moved.drew === moved.hour && moved.shadows === (moved.weather === 'rain' ? 'blob' : 'cascades') &&
+      movedTrack !== undefined && notBlank(movedLook) && movedKey && movedSaved.quality === 'ultra' && movedSaved.tierChosen === false &&
+      movedSaved.defaults === 3 && movedSaved.trackId === 'random' && movedSaved.timeOfDay === 'random' && movedSaved.musicVol === 4 &&
+      movedSaid.join() === 'MODERN' && second.quality === 'modern' && second.on === 'modern' && secondTrack === pickNext &&
+      secondSaved.quality === 'modern' && secondSaved.tierChosen === true && secondSaved.trackId === pickNext &&
       secondSaved.musicVol === 4 && oldNow === LIVE && oldWrites === 0 && oldWritesAfter === 0 &&
       consoleErrors.length === 0 && uncaught.length === 0,
-      'the old default tier and circuit under the old key become Ultra at Monaco at dusk, once: Modern and Silverstone picked afterwards are kept, a save by the live game changes nothing, and the old key is never written',
+      'the old default tier, circuit and hour under the old key become Ultra and RANDOM, once: Modern and a circuit picked afterwards are kept, a save by the live game changes nothing, and the old key is never written',
       'first load ' + JSON.stringify(moved) + ', circuit ' + movedTrack + ', key written before the world ' + movedKey + ', storage ' +
       JSON.stringify(movedSaved) + '; the button said ' + movedSaid.join(', ') + '; the load after ' + JSON.stringify(second) + ', circuit ' +
       secondTrack + ', storage ' + JSON.stringify(secondSaved) + ', the old key holds ' + oldNow + ', writes to it ' + (oldWrites + oldWritesAfter) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
@@ -1193,15 +1227,15 @@ function tamper(o) {
     check(quietly.title && quietly.start === 'ultra' && quietly.chosen === false && quietly.healthy === 'ultra' && quietly.justUnder === 'ultra' &&
       quietly.over === 'modern' && quietly.settings === 'modern' && quietly.shadows === 'single' && quietly.label === 'MODERN' &&
       quietly.notice === '' && !/SLOW|OFF|FAIL|LOST/.test(quietly.message) && quietly.trial === null &&
-      quietSaved.quality === 'modern' && quietSaved.tierChosen === false && quietSaved.userConfigured === false && quietSaved.defaults === 2 &&
-      stayed.quality === 'modern' && stayed.on === 'modern' && !stayed.notice && stayedTrack === 'monaco-gp-v1' &&
+      quietSaved.quality === 'modern' && quietSaved.tierChosen === false && quietSaved.userConfigured === false && quietSaved.defaults === 3 &&
+      stayed.quality === 'modern' && stayed.on === 'modern' && !stayed.notice && stayedTrack !== 'monaco-gp-v1' &&
       consoleErrors.length === 0 && uncaught.length === 0,
       'slow frames on the title screen step a default Ultra down to Modern without a word, saved, and the next load stays there',
       JSON.stringify(quietly) + ', storage ' + JSON.stringify(quietSaved) + '; the load after ' + JSON.stringify(stayed) + ' at ' + stayedTrack +
       ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
     check(round.said.join() === 'RETRO 240p,MODERN,RETRO 240p,ULTRA' && /all the way round once/.test(round.hints[0]) && /all the way round once/.test(round.hints[1]) &&
       /offered again, after Retro/.test(round.hints[2]) && /offered again, after Retro/.test(round.hints[3]) && !/turned off/.test(round.hints[4]) &&
-      byHand.built.join() === 'ultra' && byHand.on === 'ultra' && byHand.shadows === 'cascades' && byHandSaved.quality === 'ultra' &&
+      byHand.built.join() === 'ultra' && byHand.on === 'ultra' && byHand.shadows === (byHand.weather === 'rain' ? 'blob' : 'cascades') && byHandSaved.quality === 'ultra' &&
       byHandSaved.tierChosen === true && byHandSaved.tierBarred === false && loudly.on === 'modern' && /TOO SLOW/.test(loudly.notice) &&
       loudly.taps === 'modern,retro' && /all the way round once/.test(loudly.hint) &&
       loudSaved.quality === 'modern' && loudSaved.tierChosen === false && loudSaved.tierBarred === true && consoleErrors.length === 0 && uncaught.length === 0,
@@ -1230,6 +1264,183 @@ function tamper(o) {
       'touch points ' + touchPoints + ', loaded ' + JSON.stringify(touchLoad) + ', the button said ' + touchSaid.join(', ') +
       ', after the clicks ' + JSON.stringify(touchAfter) + ', with nothing saved ' + JSON.stringify(touchFresh) +
       ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+
+    /* --- 25 Nov 2026: tilt on a phone held sideways, the next race, and
+       the randomiser on the tools' page ------------------------------- */
+
+    /* A PHONE HELD SIDEWAYS (Game.autoTilt). 844 x 390 is a phone in
+       landscape. Nothing chosen (PLAIN names no steering): the first tap on
+       START asks for the sensor, and on a yes the game is on tilt with auto
+       throttle. On a no, or with no sensor at all, it stays on the finger
+       joystick with no error, nothing said and no second question. A player
+       who picked JOYSTICK keeps it and is never asked; a key pressed first
+       says this is no phone in the hand. */
+    const PHONE = { width: 844, height: 390 };
+    const steering = () => page.evaluate(() => {
+      const g = window.MCL64;
+      return {
+        tilt: g.settings.steerTilt, mode: g.tilt.mode, auto: g.settings.autoThrottle, chosen: g.settings.steerChosen,
+        locked: !!(g.stick && g.stick.lockX), asked: window.__asked, paused: g.paused, state: g.state, message: g.message
+      };
+    });
+    const tapStart = async (wait) => {
+      await page.tap('.pad-start');
+      await page.waitForTimeout(wait || 2200);
+    };
+    await bootWithSettings({ quality: 'modern' }, 1, { touch: true, viewport: PHONE, sensor: 'granted' });
+    const beforeTap = await steering();
+    await tapStart();
+    const granted = await steering();
+    check(beforeTap.asked === 0 && beforeTap.tilt === false && granted.asked === 1 && granted.tilt === true && granted.mode === 1 &&
+      granted.auto === true && granted.locked === true && granted.chosen === false && granted.paused === false &&
+      consoleErrors.length === 0 && uncaught.length === 0,
+      'a phone held sideways with nothing chosen: asked at the first tap on START and not before, then tilt with auto throttle',
+      'before ' + JSON.stringify(beforeTap) + ', after ' + JSON.stringify(granted) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+    await bootWithSettings({ quality: 'modern' }, 1, { touch: true, viewport: PHONE, sensor: 'denied' });
+    await tapStart();
+    const denied = await steering();
+    await page.evaluate(() => { window.MCL64.state = 3; });
+    await page.tap('.pad-start');
+    await page.waitForTimeout(400);
+    const deniedAgain = await steering();
+    check(denied.asked === 1 && denied.tilt === false && denied.mode === 0 && denied.locked === false && denied.paused === false &&
+      !denied.message && deniedAgain.asked === 1 && deniedAgain.state === 1 && consoleErrors.length === 0 && uncaught.length === 0,
+      'refused: the finger joystick, no error, nothing said, and not asked again at the next START',
+      JSON.stringify(denied) + ', next race ' + JSON.stringify(deniedAgain) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+    await bootWithSettings({ quality: 'modern' }, 1, { touch: true, viewport: PHONE, sensor: 'none' });
+    await tapStart(2400);
+    const noSensor = await steering();
+    await bootWithSettings({ quality: 'modern' }, 1, { touch: true, viewport: PHONE, sensor: 'laptop' });
+    await tapStart(2400);
+    const laptop = await steering();
+    await bootWithSettings({ quality: 'modern' }, 1, { touch: true, viewport: PHONE, sensor: 'android' });
+    await tapStart();
+    const android = await steering();
+    check(noSensor.tilt === false && noSensor.mode === 0 && noSensor.locked === false && laptop.tilt === false && laptop.asked === 0 &&
+      laptop.locked === false && android.tilt === true && android.auto === true && android.asked === 0 && consoleErrors.length === 0 && uncaught.length === 0,
+      'a touch screen whose sensor never speaks (a laptop) stays on the joystick and is never asked; a phone that does not ask is on tilt without a question',
+      'no sensor ' + JSON.stringify(noSensor) + ', a laptop in a Chromium that could ask ' + JSON.stringify(laptop) + ', a phone that does not ask ' + JSON.stringify(android));
+    await bootWithSettings({ quality: 'modern', steerChosen: true, steerTilt: false }, 1, { touch: true, viewport: PHONE, sensor: 'granted' });
+    await tapStart();
+    const picked = await steering();
+    await bootWithSettings({ quality: 'modern' }, 1, { touch: true, viewport: PHONE, sensor: 'granted' });
+    await page.keyboard.press('KeyC');
+    await tapStart();
+    const keyed = await steering();
+    check(picked.tilt === false && picked.asked === 0 && picked.chosen === true && keyed.tilt === false && keyed.asked === 0 &&
+      consoleErrors.length === 0 && uncaught.length === 0,
+      'a player who picked JOYSTICK keeps it and is not asked; nor is a phone on which a key has been pressed',
+      'picked ' + JSON.stringify(picked) + ', a key first ' + JSON.stringify(keyed));
+
+    /* THE NEXT RACE, chosen at the end of one. Laid out by numbers, not
+       pictures: on a phone held sideways and at 1280 x 720, every button is
+       on the stage, at least 44 points high, and overlaps no other button,
+       no touch pad and none of the results. */
+    const toResults = () => page.evaluate(() => {
+      const g = window.MCL64;
+      g.resetRace(false);
+      g.state = 3;                                    /* Game's STATE.FINISHED */
+      return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    });
+    const nextLayout = () => page.evaluate(() => {
+      const g = window.MCL64, box = (e) => { const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; };
+      const shown = (e) => e && getComputedStyle(e).display !== 'none' && e.getBoundingClientRect().width > 0;
+      const stage = box(document.getElementById('screen')), hud = box(g.hudCanvas);
+      const rb = g.resultsBox(), u = g.uiCss;
+      const results = { x: hud.x + rb.x * u, y: hud.y + rb.y * u, w: rb.w * u, h: rb.h * u };
+      const buttons = Array.from(document.querySelectorAll('#next-race button')).map((b) => Object.assign(box(b), { t: b.textContent }));
+      const pads = Array.from(document.querySelectorAll('.pad')).filter(shown).map((p) => Object.assign(box(p), { t: p.textContent }));
+      return { shown: !document.getElementById('next-race').hidden, stage, results, buttons, pads };
+    });
+    const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+    const layoutFaults = (L, minH) => {
+      const f = [];
+      if (!L.shown) f.push('not shown');
+      if (L.buttons.length !== 7) f.push(L.buttons.length + ' buttons');
+      L.buttons.forEach((b, i) => {
+        if (b.x < L.stage.x || b.y < L.stage.y || b.x + b.w > L.stage.x + L.stage.w || b.y + b.h > L.stage.y + L.stage.h) f.push(b.t + ' off the stage');
+        if (b.h < minH) f.push(b.t + ' is ' + b.h + ' high');
+        if (overlap(b, L.results)) f.push(b.t + ' over the results');
+        L.pads.forEach((p) => { if (overlap(b, p)) f.push(b.t + ' over the ' + p.t + ' pad'); });
+        L.buttons.forEach((c, j) => { if (j > i && overlap(b, c)) f.push(b.t + ' over ' + c.t); });
+      });
+      return f;
+    };
+    await bootWithSettings({ quality: 'modern' }, 1, { touch: true, viewport: PHONE });
+    const beforeEnd = await page.evaluate(() => document.getElementById('next-race').hidden);
+    await toResults();
+    const phoneLayout = await nextLayout(), phoneFaults = layoutFaults(phoneLayout, 44);
+    check(beforeEnd === true && phoneFaults.length === 0 && phoneLayout.pads.length >= 3 && consoleErrors.length === 0 && uncaught.length === 0,
+      'the next race buttons at 844 x 390 with touch: hidden until the race ends, then RACE AGAIN, five circuits and RANDOM, 44 high, on the stage, clear of each other, the pads and the results',
+      phoneFaults.join('; ') + ' | ' + JSON.stringify(phoneLayout));
+    await bootWithSettings({ quality: 'modern' });
+    await toResults();
+    const deskLayout = await nextLayout(), deskFaults = layoutFaults(deskLayout, 44);
+    check(deskFaults.length === 0 && consoleErrors.length === 0 && uncaught.length === 0,
+      'and at 1280 x 720 the same',
+      deskFaults.join('; ') + ' | ' + JSON.stringify(deskLayout));
+
+    /* the keyboard: an arrow puts the focus on RACE AGAIN, the arrows walk
+       the buttons, Enter on RACE AGAIN races again on the same circuit, and
+       Enter with no button focused still does */
+    await page.keyboard.press('ArrowDown');
+    const k1 = await page.evaluate(() => document.activeElement.textContent);
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowRight');
+    const k2 = await page.evaluate(() => document.activeElement.dataset.trackId);
+    await page.keyboard.press('ArrowUp');
+    await page.keyboard.press('ArrowUp');
+    const k3 = await page.evaluate(() => document.activeElement.textContent);
+    await page.keyboard.press('Enter');
+    const k4 = await page.evaluate(() => ({ state: window.MCL64.state, track: window.MCL64.track.def.id, hidden: document.getElementById('next-race').hidden }));
+    await toResults();
+    await page.evaluate(() => document.getElementById('screen').focus());
+    await page.keyboard.press('Enter');
+    const k5 = await page.evaluate(() => window.MCL64.state);
+    check(k1 === 'RACE AGAIN' && k2 === 'las-vegas-v1' && k3 === 'RACE AGAIN' && k4.state === 1 && k4.track === 'silverstone-v1' &&
+      k4.hidden === true && k5 === 1 && uncaught.length === 0,
+      'the keyboard: the arrows walk the buttons, Enter on RACE AGAIN races again, and Enter alone still does',
+      JSON.stringify([k1, k2, k3, k4, k5]));
+
+    /* A circuit chosen there: its title, ready to start, saved as a choice.
+       RANDOM: another circuit than the one just raced, and the setting back
+       to RANDOM. And twenty draws of it one after another never give the
+       same circuit twice running. */
+    await toResults();
+    await Promise.all([
+      page.waitForEvent('load', { timeout: LOAD_MS }),
+      page.click('#next-race button[data-track-id="brands-hatch-v1"]')
+    ]);
+    await settled('brands-hatch-v1');
+    const chose = await page.evaluate(() => ({ state: window.MCL64.state, saved: window.MCL64.settings.trackId,
+      stored: JSON.parse(localStorage.getItem('mcl64.settings.v2')).trackId }));
+    await page.evaluate(() => { window.MCL64.paceDone = true; });
+    await toResults();
+    await Promise.all([
+      page.waitForEvent('load', { timeout: LOAD_MS }),
+      page.click('#next-race button[data-track-id="random"]')
+    ]);
+    await settled();
+    const drew = await page.evaluate(() => {
+      const g = window.MCL64;
+      let prev = g.track.def.id, twice = 0;
+      const seen = [prev];
+      for (let i = 0; i < 20; i++) { const n = g.drawNextCircuit(prev); if (n === prev) twice++; seen.push(n); prev = n; }
+      return { track: g.track.def.id, state: g.state, saved: g.settings.trackId, twice, seen };
+    });
+    check(chose.state === 0 && chose.saved === 'brands-hatch-v1' && chose.stored === 'brands-hatch-v1' &&
+      drew.track !== 'brands-hatch-v1' && drew.state === 0 && drew.saved === 'random' && drew.twice === 0 &&
+      consoleErrors.length === 0 && uncaught.length === 0,
+      'a circuit chosen at the end of a race is its title, saved as a choice; RANDOM is another circuit, saved as RANDOM; twenty draws never repeat one running',
+      'chose ' + JSON.stringify(chose) + ', random ' + JSON.stringify(drew) + ', console errors ' + JSON.stringify(consoleErrors));
+
+    /* THE TOOLS' PAGE draws nothing at random: what startFrom saves names
+       all three, so what the page runs is what it saved. */
+    await bootWith({}, QUERY, TOOL_START);
+    const toolPage = await page.evaluate(() => ({ drawn: window.MCL64.drawn, saved: JSON.parse(localStorage.getItem('mcl64.settings.v2')) }));
+    check(toolPage.drawn.trackId === TOOL_START.trackId && toolPage.drawn.timeOfDay === TOOL_START.timeOfDay &&
+      toolPage.drawn.weather === TOOL_START.weather && ['trackId', 'timeOfDay', 'weather'].every((f) => toolPage.saved[f] === TOOL_START[f]),
+      'the tools\' start page (TOOL_START in tools/browser.js) draws nothing at random', JSON.stringify(toolPage));
 
     /* NOTHING IS LEFT BEHIND by a change of tier or of hour. The renderer is
        asked what it holds: its textures and geometries, its uniform buffers,

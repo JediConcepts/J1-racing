@@ -19,6 +19,17 @@ var STATE = { TITLE: 0, COUNTDOWN: 1, RACING: 2, FINISHED: 3 };
    belongs to the sky. */
 var TIME_OF_DAY_NAMES = ['morning', 'midday', 'golden', 'dusk'];
 
+/* The order the TIME OF DAY and WEATHER buttons step through: RANDOM first
+   (THE RANDOMISER in 38-tiers.js), then each name. */
+var TOD_CYCLE = [RANDOM].concat(TIME_OF_DAY_NAMES);
+var WEATHER_CYCLE = [RANDOM].concat(WEATHER_NAMES);
+
+/* What a row says: the name chosen, or on RANDOM what it drew this time,
+   as RANDOM: DUSK. */
+function drawnLabel(setting, drawn) {
+  return setting === RANDOM ? 'RANDOM: ' + String(drawn).toUpperCase() : String(setting).toUpperCase();
+}
+
 /* --- the full post pass: bloom and a grade for each time of day ---------- */
 
 /* Bloom is for what is truly bright: the sun's disc, a glint on paint, a lit
@@ -284,6 +295,10 @@ function Game(host, renderer) {
   this.stick = null;                 /* on-screen analog thumbstick */
   this.tilt = new TiltSensor();      /* accelerometer steering */
   this.settings = this.loadSettings();
+  /* What this load runs where a setting is RANDOM: drawn here, before
+     anything is built (THE RANDOMISER in 38-tiers.js). Never saved. */
+  this.drawn = this.drawAtLoad();
+  this.racesBegun = 0;
   this.camMode = this.settings.camMode;
   this.settingsResume = false;
 
@@ -485,7 +500,7 @@ Game.prototype.drawFrame = function (fade) {
   if (this.rtFull) {
     /* The grade follows settings.timeOfDay here, on every frame, so nothing
        has to tell the post pass when the time of day is changed. */
-    var grade = GRADES[this.settings.timeOfDay] || GRADES.midday;
+    var grade = GRADES[this.drawn.timeOfDay] || GRADES.midday;
     this.postU.uGain.value.set(grade.gain[0], grade.gain[1], grade.gain[2]);
     this.postU.uLift.value.set(grade.lift[0], grade.lift[1], grade.lift[2]);
     this.postU.uSat.value = grade.saturation;
@@ -546,8 +561,8 @@ Game.prototype.applySkyMode = function (mode) {
   /* the weather and the hour first, so that a rig coming up from the dome
      draws its environment once, for the right hour in the right weather.
      Under the dome there is no weather (see weatherNow). */
-  this.skyRig.setWeather(mode === 'physical' ? this.settings.weather : 'clear');
-  this.skyRig.setTimeOfDay(this.settings.timeOfDay);
+  this.skyRig.setWeather(mode === 'physical' ? this.drawn.weather : 'clear');
+  this.skyRig.setTimeOfDay(this.drawn.timeOfDay);
   this.skyRig.setMode(mode);
   /* applyHaze has just written the dome's haze: see SkyRig.takeFog */
   this.skyRig.takeFog();
@@ -555,12 +570,13 @@ Game.prototype.applySkyMode = function (mode) {
   this.applyTimeOfDay();
 };
 
-/* The sky reads this.settings.timeOfDay here (one of TIME_OF_DAY_NAMES).
+/* The sky reads this.drawn.timeOfDay here (one of TIME_OF_DAY_NAMES: the
+   hour chosen, or drawn where the setting is RANDOM).
    Called by setTimeOfDay whenever the setting changes, and by applySkyMode.
    Under the dome the rig only remembers the name: Retro and Modern have one
    hour. The shadows are told last, because the sun has just moved. */
 Game.prototype.applyTimeOfDay = function () {
-  this.skyRig.setTimeOfDay(this.settings.timeOfDay);
+  this.skyRig.setTimeOfDay(this.drawn.timeOfDay);
   /* scenery with a look of its own under the physical sky (Monaco's sea and
      tunnel: setHour in 20-track.js) is told the hour, or told there is none */
   if (this.scenery && this.scenery.setHour) {
@@ -770,7 +786,7 @@ Game.prototype.buildWorld = function () {
 
   this.buildEnvironment(scene);
 
-  this.track = new Track(trackById(this.settings.trackId));
+  this.track = new Track(trackById(this.drawn.trackId));
   /* Each circuit brings its own score; absent or unknown falls back to the
      original theme, so a new circuit needs no music work to ship. */
   /* AUDITION ONLY: ?music=<theme> plays that theme instead, so the owner can
@@ -984,6 +1000,15 @@ Game.prototype.bindInput = function () {
 
   function onKey(e, down) {
     var code = e.code || '';
+    /* THE END OF A RACE: the arrow keys walk the next race buttons, and
+       Enter on one of them is that button's (the browser clicks it). Enter
+       anywhere else still races again, as R does. */
+    if (self.nextRaceShown() && /^Arrow/.test(code)) {
+      if (down) self.nextRaceStep(code);
+      e.preventDefault();
+      return;
+    }
+    if ((code === 'Enter' || code === 'NumpadEnter') && self.inNextRace(e.target)) return;
     var slot = KEYS[code];
     if (slot) {
       self.input[slot] = down;
@@ -1018,6 +1043,7 @@ Game.prototype.bindInput = function () {
 
   window.addEventListener('keydown', function (e) {
     if (isTextEntry(e)) return;                /* they are typing, not driving */
+    self.keyUsed();
     onKey(e, true);
   }, { passive: false });
   /* keyup is NOT guarded: it only ever clears a key, and skipping it would
@@ -1121,6 +1147,7 @@ Game.prototype.bindInput = function () {
   });
 
   this.buildTrackList();
+  this.buildNextRace();
 
   var qualitySet = document.getElementById('set-quality');
   if (qualitySet) qualitySet.addEventListener('click', function (e) {
@@ -1131,19 +1158,19 @@ Game.prototype.bindInput = function () {
   var todSet = document.getElementById('set-tod');
   if (todSet) todSet.addEventListener('click', function (e) {
     e.preventDefault();
-    var i = TIME_OF_DAY_NAMES.indexOf(self.settings.timeOfDay);
-    self.setTimeOfDay(TIME_OF_DAY_NAMES[(i + 1) % TIME_OF_DAY_NAMES.length]);
+    var i = TOD_CYCLE.indexOf(self.settings.timeOfDay);
+    self.setTimeOfDay(TOD_CYCLE[(i + 1) % TOD_CYCLE.length]);
     self.applySettings();
-    self.flash(self.settings.timeOfDay.toUpperCase());
+    self.flash(drawnLabel(self.settings.timeOfDay, self.drawn.timeOfDay));
   });
 
   var weatherSet = document.getElementById('set-weather');
   if (weatherSet) weatherSet.addEventListener('click', function (e) {
     e.preventDefault();
-    var i = WEATHER_NAMES.indexOf(self.settings.weather);
-    self.setWeather(WEATHER_NAMES[(i + 1) % WEATHER_NAMES.length]);
+    var i = WEATHER_CYCLE.indexOf(self.settings.weather);
+    self.setWeather(WEATHER_CYCLE[(i + 1) % WEATHER_CYCLE.length]);
     self.applySettings();
-    self.flash(self.settings.weather.toUpperCase());
+    self.flash(drawnLabel(self.settings.weather, self.drawn.weather));
   });
 
   var autoFsSet = document.getElementById('set-autofs');
@@ -1414,6 +1441,7 @@ Game.prototype.bindInput = function () {
   if (throttleSet) throttleSet.addEventListener('click', function (e) {
     e.preventDefault();
     self.settings.autoThrottle = !self.settings.autoThrottle;
+    self.settings.throttleChosen = true;
     self.applySettings();
     self.saveSettings();
   });
@@ -1436,6 +1464,19 @@ Game.prototype.bindInput = function () {
       if (el && el.hidden) self.openSettings(); else self.closeSettings();
     }
   });
+
+  /* A PHONE HELD SIDEWAYS is given tilt and auto throttle (autoTilt): at
+     the first tap on START, or when it is turned sideways later. */
+  var turned = function () { if (self.state !== STATE.RACING) self.autoTilt(false); };
+  window.addEventListener('orientationchange', turned);
+  window.addEventListener('resize', turned);
+  /* where the browser asks first (iPhones), only from inside a tap, and
+     the end of a touch is the part of it Safari counts */
+  document.addEventListener('touchend', function () {
+    if (!self.tiltAskOnUp) return;
+    self.tiltAskOnUp = false;
+    if (self.state === STATE.COUNTDOWN) self.autoTilt(true);
+  }, true);
 
   /* A saved tilt preference cannot be restored silently — iOS only hands out
      the sensor inside a user gesture, so wait for the first one. */
@@ -1567,11 +1608,101 @@ Game.prototype.drawNotice = function () {
 Game.prototype.beginRace = function () {
   this.audio.wake();
   this.maybeEnterFullscreen();
+  /* the first race of a load runs under the load's draw, which the title
+     has been showing; every race after it draws the hour and the weather
+     again where they are RANDOM, here, before its countdown */
+  if (this.racesBegun++ > 0) this.drawForRace();
   this.resetRace(false);
   this.startTrace();
   this.state = STATE.COUNTDOWN;
   this.countdown = 0;
   this.paused = false;
+  /* where the phone asks before it gives the sensor, ask at the end of
+     this tap (the touchend listener in bindInput); elsewhere, now */
+  if (this.tiltAsks()) this.tiltAskOnUp = this.autoTiltWanted();
+  else this.autoTilt(false);
+};
+
+/* --- tilt for a phone held sideways ---------------------------------------
+   The owner, 25 Nov 2026: "we ideally need to detect when on a mobile device
+   in landscape mode to turn on tilt and auto speed control".
+
+   WHO. A touch screen, held in landscape, with a motion sensor that really
+   sends readings, on which no key has been pressed, whose player has not
+   picked a steering mode (`steerChosen`). A laptop with a touch screen has
+   no sensor that speaks (whenReading), or has a keyboard that has been used.
+
+   WHEN. At the first tap on START, which is also where a phone that asks
+   for permission (an iPhone) asks: never before. Or, on a phone that does
+   not ask, as soon as it is turned sideways, when no race is running.
+
+   WHAT. Tilt steering, and auto throttle unless the player picked the
+   throttle (`throttleChosen`). Neither is saved as the player's: the next
+   load gives them again at its first START.
+
+   NO SENSOR, OR NO. The finger joystick stays, with no line on the screen
+   and no second question: not again in this tab (TILT_NO_KEY), and only ever
+   again if the player picks TILT by hand.
+
+   ONLY AN iPHONE (or an iPad) IS ASKED. Chromium has the same call that
+   asks, but sends the readings without it; asking there would put a
+   question on a touch laptop that has no sensor at all. So everywhere else
+   the game only listens, and a sensor that speaks is enough. */
+var TILT_PROBE_MS = 1500;
+var TILT_NO_KEY = 'mcl64.tiltNo';
+
+Game.prototype.tiltAsks = function () {
+  return this.tilt.needsPermission && isIosWebKit();
+};
+
+Game.prototype.autoTiltWanted = function () {
+  var s = this.settings;
+  return !s.steerChosen && !s.steerTilt && !this.keyboardUsed && !this.autoTiltDone &&
+    this.tilt.supported && this.isTouch() && isLandscape() && SESSION.get(TILT_NO_KEY) !== '1';
+};
+
+/* `inTap`: called from inside the player's tap, where a phone may ask. */
+Game.prototype.autoTilt = function (inTap) {
+  if (!this.autoTiltWanted()) return;
+  var asks = this.tiltAsks();
+  if (asks && !inTap) return;
+  this.autoTiltDone = true;
+  var self = this, s = this.settings;
+  /* the countdown waits while the phone asks the player */
+  var hold = asks && this.state === STATE.COUNTDOWN && !this.paused;
+  if (hold) this.paused = true;
+  (asks ? this.tilt.enable() : Promise.resolve(this.tilt.listen())).then(function (ok) {
+    return ok ? self.tilt.whenReading(TILT_PROBE_MS) : false;
+  }).then(function (ok) {
+    if (hold) self.paused = false;
+    /* the player may have picked a mode, or used a key, while it asked */
+    if (!ok || s.steerChosen || self.keyboardUsed) {
+      if (!s.steerTilt) self.tilt.disable();
+      if (!ok) SESSION.set(TILT_NO_KEY, '1');
+      self.applySettings();
+      return;
+    }
+    s.steerTilt = true;
+    if (!s.throttleChosen) s.autoThrottle = true;
+    self.applySettings();
+    self.flash('TILT STEERING');
+  }, function () {
+    if (hold) self.paused = false;
+  });
+};
+
+/* A key was pressed: this is not a phone in the hand. Tilt the game gave
+   goes, and the joystick and the keys steer. */
+Game.prototype.keyUsed = function () {
+  if (this.keyboardUsed) return;
+  this.keyboardUsed = true;
+  this.tiltAskOnUp = false;
+  var s = this.settings;
+  if (s.steerTilt && !s.steerChosen) {
+    s.steerTilt = false;
+    this.tilt.disable();
+    this.applySettings();
+  }
 };
 
 /* --- sizing ------------------------------------------------------------- */
@@ -1636,11 +1767,13 @@ Game.prototype.resize = function () {
   /* Virtual HUD units stay device-independent so the overlay is the same
      physical size everywhere; the backing store is what gets denser. */
   this.us = uiCss * dpr;
+  this.uiCss = uiCss;
   this.vw = Math.floor(this.hudCanvas.width / this.us);
   this.vh = Math.floor(this.hudCanvas.height / this.us);
 
   this.camera.aspect = cw / ch;
   this.camera.updateProjectionMatrix();
+  if (this.uiEnding) this.layoutNextRace();
 };
 
 /* --- simulation --------------------------------------------------------- */
@@ -1758,8 +1891,14 @@ Game.prototype.loadSettings = function () {
      so these defaults never overwrite a returning player's choices. */
   var s = {
     steerTilt: false,
+    /* whether the player picked the steering mode, and the throttle: while
+       they have not, a phone held sideways is given tilt and auto throttle
+       (see autoTilt) */
+    steerChosen: false,
+    throttleChosen: false,
     tiltInvert: false,
-    steerSens: 6,
+    /* the gentlest: see the defaults of 25 Nov 2026 in 38-tiers.js */
+    steerSens: 1,
     engineVol: 10,
     musicVol: 10,
     /* The on/off state of each bus, kept here rather than only on the audio
@@ -1774,9 +1913,9 @@ Game.prototype.loadSettings = function () {
     quality: 'ultra',
     tierChosen: false,
     tierBarred: false,
-    timeOfDay: 'dusk',
-    trackId: 'monaco-gp-v1',
-    weather: 'clear',
+    timeOfDay: RANDOM,
+    trackId: RANDOM,
+    weather: RANDOM,
     defaults: SETTINGS_DEFAULTS,
     userConfigured: false
   };
@@ -1785,6 +1924,10 @@ Game.prototype.loadSettings = function () {
      out of view, in a background tab. */
   var t = settingsLoad(STORE, s, { hidden: document.hidden === true });
   for (var field in t) if (t.hasOwnProperty(field) && field !== 'key' && field !== 'save') this[field] = t[field];
+  /* Tilt the game gave a phone (autoTilt) is given again each load, at the
+     first tap on START, and not restored at the first touch of anything as
+     a tilt the player picked is (see bindInput). */
+  if (!s.steerChosen) s.steerTilt = false;
   return s;
 };
 
@@ -1863,15 +2006,15 @@ Game.prototype.syncSettingsUi = function () {
   put('set-quality-hint', TIER_UI[s.quality].hint + (barred ? ' ' + TIER_BARRED_HINT[barred] : ''));
   /* the time of day means something in Ultra only, so its row is shown there
      and nowhere else */
-  put('set-tod', s.timeOfDay.toUpperCase());
+  put('set-tod', drawnLabel(s.timeOfDay, this.drawn.timeOfDay));
   var todRow = document.getElementById('row-tod');
   if (todRow) todRow.hidden = s.quality !== 'ultra';
   /* the weather the same, and a line under it in rain saying it is a look */
-  put('set-weather', s.weather.toUpperCase());
+  put('set-weather', drawnLabel(s.weather, this.drawn.weather));
   var weatherRow = document.getElementById('row-weather');
   if (weatherRow) weatherRow.hidden = s.quality !== 'ultra';
   var weatherHint = document.getElementById('set-weather-hint');
-  if (weatherHint) weatherHint.hidden = s.quality !== 'ultra' || s.weather !== 'rain';
+  if (weatherHint) weatherHint.hidden = s.quality !== 'ultra' || this.drawn.weather !== 'rain';
 
   /* No point offering an automatic fullscreen the platform will refuse. */
   var fsRow = document.getElementById('row-autofs');
@@ -1940,6 +2083,9 @@ Game.prototype.syncSettingsUi = function () {
    grants the sensor per gesture. Every caller must be inside a real click. */
 Game.prototype.setSteerTilt = function (on, quiet) {
   var self = this, s = this.settings;
+  /* every caller is the player picking a mode, or putting back one they
+     picked: from here the game does not choose for them (autoTilt) */
+  s.steerChosen = true;
   if (!on) {
     s.steerTilt = false;
     this.applySettings();
@@ -3190,7 +3336,7 @@ Game.prototype.buildTrackList = function () {
   /* Two rails, same widget, different consequence: picking in SETTINGS loads
      that circuit, picking in the LEADERBOARD only changes which board you are
      reading. Nobody should have to load Indianapolis to see its times. */
-  this.buildTrackRail('set-track-list', function (id) { self.selectTrack(id); });
+  this.buildTrackRail('set-track-list', function (id) { self.selectTrack(id); }, true);
   this.buildTrackRail('board-track-list', function (id) {
     self.boardTrackId = id;
     self.syncTrackRail('board-track-list', id);
@@ -3199,12 +3345,15 @@ Game.prototype.buildTrackList = function () {
   this.syncTrackList();
 };
 
-Game.prototype.buildTrackRail = function (hostId, onPick) {
+/* `withRandom` puts a RANDOM card first (THE RANDOMISER in 38-tiers.js): the
+   circuit setting's rail has it, the leaderboard's does not. */
+Game.prototype.buildTrackRail = function (hostId, onPick, withRandom) {
   var host = document.getElementById(hostId);
   if (!host) return;
   host.innerHTML = '';
 
-  for (var i = 0; i < TRACKS.length; i++) {
+  var defs = withRandom ? [{ id: RANDOM, name: 'RANDOM', random: true }].concat(TRACKS) : TRACKS;
+  for (var i = 0; i < defs.length; i++) {
     (function (def) {
       var b = document.createElement('button');
       b.type = 'button';
@@ -3218,7 +3367,9 @@ Game.prototype.buildTrackRail = function (hostId, onPick) {
 
       var meta = document.createElement('span');
       meta.className = 'tracko-meta';
-      meta.textContent = def.laps + ' laps · ' + (def.blurb || 'full grid');
+      meta.textContent = def.random ? 'A NEW CIRCUIT EACH TIME'
+        : def.laps + ' laps · ' + (def.blurb || 'full grid');
+      if (def.random) meta.dataset.random = '1';
 
       b.appendChild(name);
       b.appendChild(meta);
@@ -3228,7 +3379,7 @@ Game.prototype.buildTrackRail = function (hostId, onPick) {
         onPick(def.id);
       });
       host.appendChild(b);
-    })(TRACKS[i]);
+    })(defs[i]);
   }
 };
 
@@ -3236,6 +3387,11 @@ Game.prototype.buildTrackRail = function (hostId, onPick) {
    right whenever the panel opens rather than only when it is first built. */
 Game.prototype.syncTrackList = function () {
   this.syncTrackRail('set-track-list', this.settings.trackId || (this.track && this.track.def.id));
+  /* on RANDOM, the card says what it drew this time */
+  var meta = document.querySelector('#set-track-list [data-random]');
+  if (meta && this.track) {
+    meta.textContent = this.settings.trackId === RANDOM ? 'RANDOM: ' + this.track.def.name : 'A NEW CIRCUIT EACH TIME';
+  }
   this.syncTrackRail('board-track-list', this.boardTrackId || this.trackVersion());
 };
 
@@ -3269,16 +3425,40 @@ Game.prototype.syncTrackRail = function (hostId, current) {
   }
 };
 
-Game.prototype.selectTrack = function (id) {
-  if (id === this.settings.trackId) return;          /* already on it */
+/* The circuit RANDOM gives at the end of a race: any but `last` (the one
+   just raced, unless another is named), with equal weight. */
+Game.prototype.drawNextCircuit = function (last) {
+  return drawCircuit(trackIds(), last || this.track.def.id, Math.random());
+};
+
+/* The player's pick of circuit, from the settings panel or the end of a
+   race: saved as a choice, and loaded. RANDOM is saved as RANDOM; from the
+   panel the circuit on now stands as this time's draw, and from the end of a
+   race (`now`) a new one is drawn, never the one just raced, and loaded. A
+   circuit that is already built is not loaded again: the panel leaves it as
+   it is, and the end of a race goes to its title. */
+Game.prototype.selectTrack = function (id, now) {
   var def = null;
   for (var i = 0; i < TRACKS.length; i++) if (TRACKS[i].id === id) def = TRACKS[i];
-  if (!def) return;
+  if (!def && id !== RANDOM) return;
+  if (id === this.settings.trackId && !now) return;  /* already on it */
 
   this.settings.trackId = id;
   this.saveSettings();
   this.syncTrackList();
+  var load = id;
+  if (id === RANDOM) {
+    if (!now) return;
+    load = this.drawNextCircuit();
+    def = trackById(load);
+    SESSION.set(NEXT_TRACK_KEY, load);
+  }
+  if (load === this.track.def.id) {
+    if (now) this.resetRace(true);
+    return;
+  }
   this.flash('LOADING ' + def.name);
+  this.loadingTrack = def.name;
   /* let the flash paint before the navigation stalls the frame */
   var self = this;
   setTimeout(function () { self.carryTier(); location.reload(); }, 220);
@@ -3442,12 +3622,22 @@ Game.prototype.carryTier = function () {
   this.tierAct(tierOut(this));
 };
 
-/* Sets the time of day by name (one of TIME_OF_DAY_NAMES), saves it, and has
-   the picture follow. Anything else is refused. */
+/* The player's pick of the hour (one of TIME_OF_DAY_NAMES, or RANDOM),
+   saved, with the picture following. RANDOM keeps the hour that is on the
+   screen as this time's draw: the next is drawn for the next race, never in
+   the middle of anything. Anything else is refused. */
 Game.prototype.setTimeOfDay = function (name) {
-  if (TIME_OF_DAY_NAMES.indexOf(name) < 0) throw new Error('unknown time of day ' + name);
+  if (name !== RANDOM && TIME_OF_DAY_NAMES.indexOf(name) < 0) throw new Error('unknown time of day ' + name);
   this.settings.timeOfDay = name;
   this.saveSettings();
+  if (name !== RANDOM) this.showTimeOfDay(name);
+};
+
+/* Puts an hour on the screen without saving it: for a pick, a draw, and the
+   photo and bench hooks, whose hour is not a player's choice. */
+Game.prototype.showTimeOfDay = function (name) {
+  if (TIME_OF_DAY_NAMES.indexOf(name) < 0) throw new Error('unknown time of day ' + name);
+  this.drawn.timeOfDay = name;
   this.applyTimeOfDay();
 };
 
@@ -3455,10 +3645,10 @@ Game.prototype.setTimeOfDay = function (name) {
    simulation never reads it, and Retro and Modern draw exactly what they
    drew before it existed.
 
-   The weather drawn now: settings.weather under the physical sky, which only
+   The weather drawn now: this.drawn.weather under the physical sky, which only
    Ultra has, and clear under the dome whatever is saved. */
 Game.prototype.weatherNow = function () {
-  return this.skyRig && this.skyRig.mode === 'physical' ? this.settings.weather : 'clear';
+  return this.skyRig && this.skyRig.mode === 'physical' ? this.drawn.weather : 'clear';
 };
 
 /* The shadows a tier has in the weather drawn now. Rain hides the sun, and
@@ -3467,17 +3657,70 @@ Game.prototype.weatherNow = function () {
    each car that Retro has. Cloud keeps them: its shadows are faint, not
    gone. */
 Game.prototype.shadowModeFor = function (tier) {
-  if (tier.shadows === 'cascades' && tier.sky === 'physical' && this.settings.weather === 'rain') return 'blob';
+  if (tier.shadows === 'cascades' && tier.sky === 'physical' && this.drawn.weather === 'rain') return 'blob';
   return tier.shadows;
 };
 
-/* Sets the weather by name (one of WEATHER_NAMES), saves it, and has the
-   picture follow. Anything else is refused. */
+/* The player's pick of the weather (one of WEATHER_NAMES, or RANDOM), as
+   setTimeOfDay does it for the hour. Anything else is refused. */
 Game.prototype.setWeather = function (name) {
-  if (WEATHER_NAMES.indexOf(name) < 0) throw new Error('unknown weather ' + name);
+  if (name !== RANDOM && WEATHER_NAMES.indexOf(name) < 0) throw new Error('unknown weather ' + name);
   this.settings.weather = name;
   this.saveSettings();
+  if (name !== RANDOM) this.showWeather(name);
+};
+
+/* Puts a weather on the screen without saving it (see showTimeOfDay). */
+Game.prototype.showWeather = function (name) {
+  if (WEATHER_NAMES.indexOf(name) < 0) throw new Error('unknown weather ' + name);
+  this.drawn.weather = name;
   this.applyWeather();
+};
+
+/* THE DRAW AT LOAD (THE RANDOMISER in 38-tiers.js). The circuit the page had
+   before, and one already drawn for this load at the end of a race, are
+   kept for the tab in sessionStorage: a reload is how a circuit changes. */
+var LAST_TRACK_KEY = 'mcl64.lastTrack';
+var NEXT_TRACK_KEY = 'mcl64.nextTrack';
+var SESSION = {
+  get: function (key) {
+    try { return window.sessionStorage ? sessionStorage.getItem(key) : null; } catch (e) { return null; }
+  },
+  set: function (key, value) {
+    try { if (value == null) sessionStorage.removeItem(key); else sessionStorage.setItem(key, value); } catch (e) { /* kept for nothing */ }
+  }
+};
+function trackIds() {
+  var ids = [];
+  for (var i = 0; i < TRACKS.length; i++) ids.push(TRACKS[i].id);
+  return ids;
+}
+Game.prototype.drawAtLoad = function () {
+  var next = SESSION.get(NEXT_TRACK_KEY);
+  SESSION.set(NEXT_TRACK_KEY, null);
+  var d = drawLoad(this.settings, {
+    firstVisit: this.firstVisit === true, ids: trackIds(), last: SESSION.get(LAST_TRACK_KEY), next: next
+  }, Math.random);
+  SESSION.set(LAST_TRACK_KEY, d.trackId);
+  return d;
+};
+
+/* THE DRAW BETWEEN RACES: the hour and the weather, where they are RANDOM,
+   for every race after the first of a load. Called by beginRace, before the
+   countdown. Under the dome (Retro and Modern) the drawn values are only
+   kept: nothing there draws them, and applySkyMode reads them when Ultra
+   comes back. */
+Game.prototype.drawForRace = function () {
+  var d = drawRace(this.settings, this.drawn, Math.random);
+  var physical = this.skyRig && this.skyRig.mode === 'physical';
+  if (d.weather !== this.drawn.weather) {
+    this.drawn.weather = d.weather;
+    if (physical) this.applyWeather();
+  }
+  if (d.timeOfDay !== this.drawn.timeOfDay) {
+    this.drawn.timeOfDay = d.timeOfDay;
+    if (physical) this.applyTimeOfDay();
+  }
 };
 
 /* Puts the weather drawn now on the screen. Called by applyQuality (last,
@@ -3556,9 +3799,117 @@ Game.prototype.isTouch = function () {
    actually driving. Only touches the DOM when the state changes. */
 Game.prototype.syncUiState = function () {
   var racing = this.state === STATE.RACING || this.state === STATE.COUNTDOWN;
-  if (this.uiRacing === racing) return;
-  this.uiRacing = racing;
-  document.documentElement.classList.toggle('racing', racing);
+  if (this.uiRacing !== racing) {
+    this.uiRacing = racing;
+    document.documentElement.classList.toggle('racing', racing);
+  }
+  /* the next race buttons, on the results and nowhere else */
+  var ending = this.state === STATE.FINISHED && !this.photoHold;
+  if (this.uiEnding !== ending) {
+    this.uiEnding = ending;
+    this.showNextRace(ending);
+  }
+};
+
+/* --- the next race, chosen at the end of one ------------------------------
+   RACE AGAIN, then one button for each circuit in TRACKS (whatever its
+   `board`), then RANDOM: page buttons over the results (.nextrace in the
+   template), so a thumb, a keyboard and a screen reader can all use them.
+   A circuit is the player's pick and is saved as one, RANDOM puts the
+   setting back to RANDOM (selectTrack). */
+Game.prototype.buildNextRace = function () {
+  var self = this, host = document.getElementById('next-race');
+  if (!host) return;
+  var again = document.getElementById('next-again');
+  if (again) again.addEventListener('click', function (e) {
+    e.preventDefault();
+    self.audio.wake();
+    if (self.state === STATE.FINISHED) self.beginRace();
+  });
+  var picks = TRACKS.map(function (d) { return { id: d.id, name: d.name }; }).concat([{ id: RANDOM, name: 'RANDOM' }]);
+  picks.forEach(function (d) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'sval';
+    b.dataset.trackId = d.id;
+    b.textContent = d.name;
+    b.addEventListener('click', function (e) {
+      e.preventDefault();
+      self.audio.wake();
+      if (self.state === STATE.FINISHED) self.selectTrack(d.id, true);
+    });
+    host.appendChild(b);
+  });
+};
+
+Game.prototype.nextRaceButtons = function () {
+  var host = document.getElementById('next-race');
+  return host ? host.querySelectorAll('button') : [];
+};
+Game.prototype.nextRaceShown = function () {
+  var host = document.getElementById('next-race');
+  return !!host && !host.hidden;
+};
+Game.prototype.inNextRace = function (el) {
+  var host = document.getElementById('next-race');
+  return !!host && !!el && host.contains(el);
+};
+
+Game.prototype.showNextRace = function (on) {
+  var host = document.getElementById('next-race');
+  if (!host) return;
+  if (on) {
+    this.layoutNextRace();
+    var bs = this.nextRaceButtons(), here = this.track.def.id;
+    for (var i = 0; i < bs.length; i++) {
+      bs[i].setAttribute('aria-current', bs[i].dataset.trackId === here ? 'true' : 'false');
+    }
+  } else if (host.contains(document.activeElement)) {
+    /* the keys go back to the car */
+    this.host.focus();
+  }
+  host.hidden = !on;
+};
+
+/* Lays the panel out against the results: it stops short of their left
+   edge, or goes under them where that leaves too little room for two
+   columns of names. */
+Game.prototype.layoutNextRace = function () {
+  var host = document.getElementById('next-race');
+  if (!host || !this.vw) return;
+  var b = this.resultsBox(), u = this.uiCss || 1;
+  var left = b.x * u;
+  host.style.setProperty('--results-left', left + 'px');
+  host.style.setProperty('--results-bottom', Math.round((b.y + b.h) * u + 8) + 'px');
+  host.classList.toggle('is-below', left - 24 < 200);
+};
+
+/* An arrow key at the end of a race. The buttons are RACE AGAIN across the
+   top and two columns under it, in TRACKS order and then RANDOM. The first
+   press only puts the focus on RACE AGAIN. */
+Game.prototype.nextRaceStep = function (code) {
+  var bs = this.nextRaceButtons(), n = bs.length;
+  if (!n) return;
+  var at = -1;
+  for (var i = 0; i < n; i++) if (bs[i] === document.activeElement) at = i;
+  var to = 0;
+  if (at >= 0) {
+    if (code === 'ArrowLeft') to = Math.max(0, at - 1);
+    else if (code === 'ArrowRight') to = Math.min(n - 1, at + 1);
+    else if (code === 'ArrowUp') to = at <= 2 ? 0 : at - 2;
+    else if (code === 'ArrowDown') to = at === 0 ? 1 : Math.min(n - 1, at + 2);
+    else to = at;
+  }
+  bs[to].focus();
+};
+
+/* Where drawResults puts the results, in HUD units: the column in the
+   middle, from its title bar to its best lap line. The next race panel is
+   laid out against it (layoutNextRace). */
+Game.prototype.resultsBox = function () {
+  var W = this.vw, pw = Math.min(W - 16, 220);
+  var n = (this.order || this.cars || []).length;
+  return { x: Math.round((W - pw) / 2), y: 12, w: pw, h: 18 + n * 11 + 9 + GLYPH_H };
 };
 
 Game.prototype.drawResults = function () {
@@ -3566,9 +3917,10 @@ Game.prototype.drawResults = function () {
   g.fillStyle = 'rgba(10,10,14,0.80)';
   g.fillRect(0, 0, W, H);
 
-  var pw = Math.min(W - 16, 220);
-  var px = Math.round((W - pw) / 2);
-  var py = 12;
+  var box = this.resultsBox();
+  var pw = box.w;
+  var px = box.x;
+  var py = box.y;
 
   g.fillStyle = C_PAPAYA;
   g.fillRect(px, py, pw, 12);
@@ -3822,9 +4174,10 @@ Game.prototype.photoCamMissing = function (name) {
  * the engine has counted (the promise settles then). The frame loop is held
  * so nothing draws over it before it is captured: the game is left frozen
  * afterwards, and needs a reload to be played. `timeOfDay`, when given, is
- * set and saved through setTimeOfDay before the frame is drawn; an unknown
- * name is refused before the game is touched. `weather` the same, one of
- * WEATHER_NAMES, through setWeather. `tick` must be a finite whole number from 0 to PHOTO_TICK_MAX; anything
+ * put on the screen through showTimeOfDay before the frame is drawn, and not
+ * saved: a hook's hour is not a player's choice. An unknown name is refused
+ * before the game is touched. `weather` the same, one of WEATHER_NAMES,
+ * through showWeather. `tick` must be a finite whole number from 0 to PHOTO_TICK_MAX; anything
  * else is refused before the game is touched.
  *
  * Everything that would otherwise carry history into the frame is pinned:
@@ -3860,8 +4213,8 @@ Game.prototype.photo = function (opts) {
     }
     var missing = this.photoCamMissing(cam);
     if (missing) return Promise.reject(new Error('MCL64.photo: ' + missing));
-    if (o.timeOfDay != null) this.setTimeOfDay(o.timeOfDay);
-    if (o.weather != null) this.setWeather(o.weather);
+    if (o.timeOfDay != null) this.showTimeOfDay(o.timeOfDay);
+    if (o.weather != null) this.showWeather(o.weather);
 
     this.photoHold = true;
     held = true;
@@ -3985,7 +4338,7 @@ Game.prototype.photoUndo = function () {
  * is the frame time a player actually gets. The first second is a warm up
  * (shaders compile on the first frames after a tier change) and is not
  * counted. Releases a hold left by photo. `timeOfDay` is as photo takes it:
- * one of TIME_OF_DAY_NAMES, set and saved before the run, and anything else
+ * one of TIME_OF_DAY_NAMES, put on the screen (not saved) before the run, and anything else
  * is refused. It changes the picture in Ultra only.
  *
  * The step down guard (watchPace) is switched off for the rest of the load.
@@ -4001,8 +4354,8 @@ Game.prototype.bench = function (opts) {
     if (!this.hookSelect(o.circuit, o.quality)) {
       return Promise.reject(new Error('MCL64.bench: reloading to load ' + o.circuit + '; call again once the page has loaded'));
     }
-    if (o.timeOfDay != null) this.setTimeOfDay(o.timeOfDay);
-    if (o.weather != null) this.setWeather(o.weather);
+    if (o.timeOfDay != null) this.showTimeOfDay(o.timeOfDay);
+    if (o.weather != null) this.showWeather(o.weather);
     this.paceDone = true;
     this.photoHold = false;
     this.hudCanvas.style.visibility = '';

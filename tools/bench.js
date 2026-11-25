@@ -139,7 +139,7 @@ if (badArgs || !args.quality || !args.circuit || !(seconds > 0) || (args.rendere
         broken.join('\n  '));
     }
     const dpr = await page.evaluate(() => window.devicePixelRatio);
-    const timeOfDay = await page.evaluate(() => window.MCL64.settings.timeOfDay);
+    const timeOfDay = await page.evaluate(() => window.MCL64.drawn.timeOfDay);
     const drawn = await page.evaluate(async () => {
       const game = window.MCL64, canvas = game.glCanvas, b = game.renderer.backend;
       const out = { renderTarget: game.gw + 'x' + game.gh, canvas: canvas.width + 'x' + canvas.height };

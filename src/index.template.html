@@ -757,6 +757,53 @@
   :root.fs-on .actions { margin: 0 auto; }
 
 
+  /* --- the next race, chosen at the end of one ---
+     Real buttons over the results, which the HUD draws on its canvas: RACE
+     AGAIN, a button for each circuit and RANDOM. Down the left of the stage,
+     where the results never reach (they are a column in the middle), above
+     the touch layer, and clear of the START pad (bottom middle) and the DRS
+     and CAM pads (right). Game.layoutNextRace sets --results-left, the left
+     edge of the results, so the panel stops short of it; where that leaves
+     too little room it goes under the results instead (.is-below). Every
+     button is at least 44 px high, for a thumb. */
+  .nextrace {
+    position: absolute;
+    z-index: 6;
+    left: calc(12px + env(safe-area-inset-left));
+    top: 50%;
+    transform: translateY(-50%);
+    width: min(320px, calc(var(--results-left, 300px) - 24px - env(safe-area-inset-left)));
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .nextrace[hidden] { display: none; }
+  .nextrace.is-below {
+    top: var(--results-bottom, 50%);
+    transform: none;
+    width: auto;
+    right: calc(12px + env(safe-area-inset-right));
+  }
+  .nextrace .sval {
+    min-width: 0;
+    min-height: 44px;
+    padding: 4px 6px;
+    line-height: 1.25;
+    white-space: normal;
+    background: rgba(12, 12, 16, 0.82);
+  }
+  .nextrace .sval:hover,
+  .nextrace .sval:focus-visible { background: rgba(255, 128, 0, 0.3); color: #fff2e2; }
+  .nextrace .sval[aria-current="true"] { border-color: #ffd0a0; color: #fff2e2; }
+  .nextrace .nextrace-again {
+    grid-column: 1 / -1;
+    background: var(--papaya);
+    border-color: var(--papaya);
+    color: #14120f;
+  }
+  .nextrace .nextrace-again:hover,
+  .nextrace .nextrace-again:focus-visible { background: #ffa040; color: #14120f; }
+
   /* anchored left so it never collides with the stage buttons on the right */
   .rotate-hint {
     position: absolute;
@@ -1002,6 +1049,10 @@
     </div>
 
     <div class="rotate-hint">ROTATE PHONE</div>
+
+    <div class="nextrace" id="next-race" role="group" aria-label="Next race" hidden>
+      <button type="button" class="sval nextrace-again" id="next-again">RACE AGAIN</button>
+    </div>
 
     
     <div class="settings" id="board" hidden>

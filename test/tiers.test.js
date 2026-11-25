@@ -34,7 +34,7 @@ const read = (p) => fs.readFileSync(path.join(REPO, p), 'utf8');
 
 const CIRCUITS = ['monaco-gp-v1', 'las-vegas-v1', 'silverstone-v1', 'indianapolis-v1', 'brands-hatch-v1'];
 const NAMES = ['TIERS', 'TIER_ORDER', 'TIER_SAFE', 'TIER_TRIAL_FRAMES', 'TIER_TRIAL_MS', 'TIER_TRIAL_KEY', 'TIER_GRACE_MS', 'PACE',
-  'SETTINGS_KEY', 'SETTINGS_KEY_OLD', 'settingsLoad', 'settingsWrite', 'tierFresh', 'tierFrame', 'tierPace', 'tierOut', 'tierBack',
+  'SETTINGS_KEY', 'SETTINGS_KEY_OLD', 'SETTINGS_DEFAULTS', 'RANDOM', 'FIRST_VISIT', 'drawLoad', 'drawRace', 'drawHour', 'drawWeather', 'drawCircuit', 'settingsLoad', 'settingsWrite', 'tierFresh', 'tierFrame', 'tierPace', 'tierOut', 'tierBack',
   'tierDeviceLost', 'tierPick', 'tierTaps', 'tierTap', 'tierHint', 'tierKeyParse'];
 const T = new Function('trackById', 'TIME_OF_DAY_NAMES', 'CAM_LABELS', 'clamp',
   read('src/38-tiers.js') + '\nreturn {' + NAMES.map((n) => n + ': ' + n).join(',') + '};'
@@ -79,10 +79,10 @@ function Page(store, opts) {
   this.said = [];
   this.builds = 0;
   const s = {
-    steerTilt: false, tiltInvert: false, steerSens: 6, engineVol: 10, musicVol: 10, musicOn: true, engineOn: false,
-    camMode: 0, autoThrottle: false, autoFullscreen: true,
-    quality: 'ultra', tierChosen: false, tierBarred: false, timeOfDay: 'dusk', trackId: 'monaco-gp-v1',
-    weather: 'clear', defaults: 2, userConfigured: false
+    steerTilt: false, steerChosen: false, tiltInvert: false, steerSens: 1, engineVol: 10, musicVol: 10, musicOn: true, engineOn: false,
+    camMode: 0, autoThrottle: false, throttleChosen: false, autoFullscreen: true,
+    quality: 'ultra', tierChosen: false, tierBarred: false, timeOfDay: 'random', trackId: 'random',
+    weather: 'random', defaults: 3, userConfigured: false
   };
   const g = this.g = Object.assign(T.tierFresh(), { settings: s });
   const t = T.settingsLoad(store, s, { hidden: !!o.hidden });
@@ -160,16 +160,16 @@ console.log('R1  its own settings');
 
 st = new Store({});
 p = new Page(st);
-check(p.on() === 'ultra' && p.g.settings.trackId === 'monaco-gp-v1' && p.g.settings.timeOfDay === 'dusk' && st.saved() &&
-  st.saved().quality === 'ultra' && st.saved().tierChosen === false && st.m[V1] === undefined,
-  'a browser with nothing saved starts in Ultra at Monaco at dusk, saved under the new key only', show(p));
+check(p.on() === 'ultra' && p.g.settings.trackId === 'random' && p.g.settings.timeOfDay === 'random' && st.saved() &&
+  st.saved().quality === 'ultra' && st.saved().tierChosen === false && st.saved().steerSens === 1 && st.m[V1] === undefined && p.g.firstVisit === true,
+  'a browser with nothing saved starts in Ultra, sensitivity 1, the circuit and the hour RANDOM, saved under the new key only, as a first visit', show(p));
 
 const OLD = JSON.stringify({ quality: 'modern', trackId: 'silverstone-v1', musicVol: 4, userConfigured: true });
 st = new Store({ [V1]: OLD });
 p = new Page(st);
-check(p.on() === 'ultra' && st.saved().trackId === 'monaco-gp-v1' && st.saved().timeOfDay === 'dusk' && st.saved().musicVol === 4 &&
-  st.saved().tierChosen === false && st.m[V1] === OLD,
-  'the old defaults under the old key are moved to Ultra, Monaco, dusk; the music volume is kept; the old key is not touched',
+check(p.on() === 'ultra' && st.saved().trackId === 'random' && st.saved().timeOfDay === 'random' && st.saved().musicVol === 4 &&
+  st.saved().tierChosen === false && st.m[V1] === OLD && p.g.firstVisit === false,
+  'the old defaults under the old key are moved to Ultra and RANDOM; the music volume is kept; the old key is not touched; not a first visit',
   show(p) + ', old key ' + st.m[V1]);
 
 st = new Store({ [V1]: JSON.stringify({ quality: 'retro', trackId: 'brands-hatch-v1', timeOfDay: 'golden' }) });
@@ -192,7 +192,7 @@ p = new Page(st);
 w = p.g.settings.weather;
 st = new Store({ [V2]: JSON.stringify({ quality: 'ultra', tierChosen: true, weather: 3, defaults: 2 }) });
 p = new Page(st);
-check(w === 'clear' && p.g.settings.weather === 'clear', 'an unknown weather, or one that is not a word, is clear',
+check(w === 'random' && p.g.settings.weather === 'random', 'an unknown weather, or one that is not a word, is RANDOM',
   'snow gave ' + w + ', 3 gave ' + p.g.settings.weather);
 st = new Store({ [V1]: JSON.stringify({ quality: 'retro', weather: 'cloudy' }) });
 p = new Page(st);
@@ -232,7 +232,7 @@ p = new Page(st);
 p.frames(200, 16.7).pick('retro').leave();
 liveSave(st, { quality: 'modern', trackId: 'silverstone-v1' });
 q = new Page(st);
-check(q.on() === 'retro' && q.g.settings.trackId === 'monaco-gp-v1',
+check(q.on() === 'retro' && q.g.settings.trackId === 'random',
   'the move from the old key happens once: what the live game saves there afterwards is not read again', show(q));
 
 /* --------------------------------------------------------------------------- */
@@ -621,6 +621,96 @@ p = new Page(st);
 check(p.on() === 'retro' && st.key() === null && p.g.tierBarred === false, 'a mark for a tier that is not the saved one is dropped', show(p));
 
 /* --------------------------------------------------------------------------- */
+console.log('the defaults of 25 Nov 2026 (SETTINGS_DEFAULTS 3), and the randomiser');
+
+st = new Store({});
+p = new Page(st);
+check(T.SETTINGS_DEFAULTS === 3 && st.saved().defaults === 3 && st.saved().steerSens === 1 && st.saved().quality === 'ultra' &&
+  ['timeOfDay', 'weather', 'trackId'].every((f) => st.saved()[f] === 'random') && st.saved().steerChosen === false,
+  'a new player: sensitivity 1, Ultra, hour, weather and circuit RANDOM, steering not chosen', JSON.stringify(st.saved()));
+
+const TWO = { defaults: 2, steerSens: 6, timeOfDay: 'dusk', weather: 'clear', trackId: 'monaco-gp-v1', musicVol: 3, engineVol: 2,
+  camMode: 2, engineOn: true, musicOn: false, quality: 'ultra', tierChosen: true, autoThrottle: true };
+st = new Store({ [V2]: JSON.stringify(TWO) });
+p = new Page(st);
+r = st.saved();
+check(r.steerSens === 1 && r.timeOfDay === 'random' && r.weather === 'random' && r.trackId === 'random' && r.defaults === 3 &&
+  r.musicVol === 3 && r.engineVol === 2 && r.camMode === 2 && r.engineOn === true && r.musicOn === false && r.quality === 'ultra' && r.tierChosen === true,
+  'saved under 2 with what the defaults were (6, dusk, clear, Monaco): moved to 1 and RANDOM, saved under 3; volumes, camera, music and engine kept', JSON.stringify(r));
+
+st = new Store({ [V2]: JSON.stringify({ defaults: 2, steerSens: 4, timeOfDay: 'golden', weather: 'rain', trackId: 'silverstone-v1' }) });
+p = new Page(st);
+r = st.saved();
+check(r.steerSens === 4 && r.timeOfDay === 'golden' && r.weather === 'rain' && r.trackId === 'silverstone-v1',
+  'saved under 2 with anything else (4, golden, rain, Silverstone): every one was picked, and kept', JSON.stringify(r));
+
+st = new Store({ [V2]: JSON.stringify(TWO) });
+new Page(st).setting('steerSens', 6).setting('timeOfDay', 'dusk').setting('trackId', 'monaco-gp-v1');
+p = new Page(st);
+check(p.g.settings.steerSens === 6 && p.g.settings.timeOfDay === 'dusk' && p.g.settings.trackId === 'monaco-gp-v1',
+  'the move is made once: 6, dusk and Monaco picked again after it are kept', JSON.stringify(st.saved()));
+
+st = new Store({ [V2]: JSON.stringify({ defaults: 3, steerSens: 6, timeOfDay: 'dusk', weather: 'clear', trackId: 'monaco-gp-v1' }) });
+p = new Page(st);
+check(p.g.settings.steerSens === 6 && p.g.settings.timeOfDay === 'dusk' && p.g.settings.weather === 'clear' && p.g.settings.trackId === 'monaco-gp-v1',
+  'saved under 3, the same values are choices and kept', JSON.stringify(p.g.settings));
+
+st = new Store({ [V1]: JSON.stringify({ quality: 'modern', trackId: 'silverstone-v1', timeOfDay: 'midday', steerSens: 6, steerTilt: true, autoThrottle: false }) });
+p = new Page(st);
+r = p.g.settings;
+check(r.steerSens === 1 && r.trackId === 'random' && r.timeOfDay === 'random' && r.quality === 'ultra' && r.steerChosen === true && r.throttleChosen === true,
+  'saved with no number at all: the defaults of then move to today\'s; a saved tilt and a saved manual throttle were picked', JSON.stringify(r));
+
+st = new Store({ [V2]: JSON.stringify({ defaults: 2, steerTilt: false, autoThrottle: true }) });
+p = new Page(st);
+check(p.g.settings.steerChosen === false && p.g.settings.throttleChosen === false,
+  'a saved joystick and auto throttle from before 3 say nothing was picked, so a phone may be given tilt', JSON.stringify(p.g.settings));
+
+['timeOfDay', 'weather', 'trackId'].forEach((f) => {
+  st = new Store({ [V2]: JSON.stringify({ defaults: 3, [f]: 'random' }) });
+  p = new Page(st);
+  const kept = p.g.settings[f];
+  st = new Store({ [V2]: JSON.stringify({ defaults: 2, [f]: 'random' }) });
+  p = new Page(st);
+  check(kept === 'random' && p.g.settings[f] === 'random', f + ': RANDOM is a value it may hold, and is kept', kept + ', ' + p.g.settings[f]);
+});
+
+/* the draw, with the rolls given */
+const IDS = CIRCUITS;
+const rolls = (list) => { let i = 0; const f = () => { f.used++; return list[i++ % list.length]; }; f.used = 0; return f; };
+const RAND = { trackId: 'random', timeOfDay: 'random', weather: 'random' };
+
+w = rolls([0.9, 0.9, 0.9]);
+r = T.drawLoad(RAND, { firstVisit: true, ids: IDS }, w);
+check(r.trackId === 'monaco-gp-v1' && r.timeOfDay === 'dusk' && r.weather === 'clear' && w.used === 0,
+  'the very first visit is Monaco at dusk, clear, and nothing is rolled (FIRST_VISIT)', JSON.stringify(r));
+r = T.drawLoad(RAND, { firstVisit: false, ids: IDS }, rolls([0.3, 0.3, 0.8]));
+check(r.trackId === 'las-vegas-v1' && r.timeOfDay === 'midday' && r.weather === 'rain',
+  'any other visit draws all three (rolls 0.3, 0.3, 0.8: Las Vegas, midday, rain)', JSON.stringify(r));
+w = rolls([0.5]);
+r = T.drawLoad({ trackId: 'silverstone-v1', timeOfDay: 'golden', weather: 'cloudy' }, { firstVisit: false, ids: IDS }, w);
+check(r.trackId === 'silverstone-v1' && r.timeOfDay === 'golden' && r.weather === 'cloudy' && w.used === 0,
+  'what is chosen is used, and nothing is rolled for it (the tools\' pages draw nothing)', JSON.stringify(r) + ', rolls ' + w.used);
+r = T.drawLoad(RAND, { firstVisit: false, ids: IDS, next: 'indianapolis-v1', last: 'monaco-gp-v1' }, rolls([0.0]));
+check(r.trackId === 'indianapolis-v1', 'a circuit drawn at the end of the last race is the one this load builds', r.trackId);
+
+const tally = (fn) => { const t = {}; for (let i = 0; i < 1000; i++) { const n = fn((i + 0.5) / 1000); t[n] = (t[n] || 0) + 1; } return t; };
+r = tally(T.drawHour);
+check(Object.keys(r).length === 4 && Object.values(r).every((n) => n === 250), 'hours with equal weight: 1000 even rolls give 250 of each', JSON.stringify(r));
+r = tally(T.drawWeather);
+check(r.clear === 500 && r.cloudy === 250 && r.rain === 250, 'weather: clear twice as likely as cloudy or rain (500, 250, 250 of 1000)', JSON.stringify(r));
+r = tally((x) => T.drawCircuit(IDS, 'silverstone-v1', x));
+check(!r['silverstone-v1'] && Object.keys(r).length === 4 && Object.values(r).every((n) => n === 250),
+  'circuits with equal weight, never the one before: four of 250 and no Silverstone', JSON.stringify(r));
+let prev = 'monaco-gp-v1', twice = 0;
+w = rolls([0.0, 0.99, 0.5, 0.25, 0.75, 0.1, 0.6, 0.33, 0.9, 0.05, 0.45, 0.66, 0.2, 0.8, 0.15, 0.95, 0.4, 0.7, 0.3, 0.55]);
+for (let i = 0; i < 20; i++) { const n = T.drawLoad(RAND, { firstVisit: false, ids: IDS, last: prev }, w).trackId; if (n === prev) twice++; prev = n; }
+check(twice === 0, 'twenty draws one after another never give the same circuit twice running', twice + ' repeats');
+r = T.drawRace({ trackId: 'random', timeOfDay: 'random', weather: 'clear' }, { trackId: 'silverstone-v1', timeOfDay: 'dusk', weather: 'clear' }, rolls([0.0, 0.9]));
+check(r.trackId === 'silverstone-v1' && r.timeOfDay === 'morning' && r.weather === 'clear',
+  'another race in the same load draws the hour again, keeps a chosen weather, and keeps the circuit', JSON.stringify(r));
+
+/* --------------------------------------------------------------------------- */
 console.log('R1 and R8, read from the source');
 
 check(!writesTo[V1], 'nothing in this whole run wrote the old settings key', (writesTo[V1] || 0) + ' writes');
@@ -634,7 +724,7 @@ const inTick = ['countFrame', 'watchPace', 'tierAct', 'performance.now', 'Date.n
 check(tickBody.length > 200 && inTick.length === 0, 'Game.tick calls none of this and reads no clock', 'tick holds ' + inTick.join(', ') + ' (' + tickBody.length + ' characters read)');
 check(gameSrc.indexOf(V1) < 0 && gameSrc.indexOf('SETTINGS_KEY_OLD') < 0,
   'src/40-game.js never names the old settings key', 'it does');
-check(/quality: 'ultra',\s+tierChosen: false,\s+tierBarred: false,\s+timeOfDay: 'dusk',\s+trackId: 'monaco-gp-v1',/.test(gameSrc),
+check(/steerSens: 1,[\s\S]*quality: 'ultra',\s+tierChosen: false,\s+tierBarred: false,\s+timeOfDay: RANDOM,\s+trackId: RANDOM,\s+weather: RANDOM,/.test(gameSrc),
   'the defaults of Game.loadSettings are the ones this file starts a page from');
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
