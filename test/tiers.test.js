@@ -34,7 +34,7 @@ const read = (p) => fs.readFileSync(path.join(REPO, p), 'utf8');
 
 const CIRCUITS = ['monaco-gp-v1', 'silverstone-v1', 'indianapolis-v1', 'brands-hatch-v1'];
 const NAMES = ['TIERS', 'TIER_ORDER', 'TIER_SAFE', 'TIER_TRIAL_FRAMES', 'TIER_TRIAL_MS', 'TIER_TRIAL_KEY', 'TIER_GRACE_MS', 'PACE',
-  'SETTINGS_KEY', 'settingsLoad', 'settingsWrite', 'tierFresh', 'tierFrame', 'tierPace', 'tierOut', 'tierBack',
+  'SETTINGS_KEY', 'SETTINGS_KEY_OLD', 'settingsLoad', 'settingsWrite', 'tierFresh', 'tierFrame', 'tierPace', 'tierOut', 'tierBack',
   'tierDeviceLost', 'tierPick', 'tierTaps', 'tierTap', 'tierKeyParse'];
 const T = new Function('trackById', 'TIME_OF_DAY_NAMES', 'CAM_LABELS', 'clamp',
   read('src/38-tiers.js') + '\nreturn {' + NAMES.map((n) => n + ': ' + n).join(',') + '};'
@@ -44,7 +44,7 @@ const T = new Function('trackById', 'TIME_OF_DAY_NAMES', 'CAM_LABELS', 'clamp',
   ['CHASE CAM', 'T-CAM', 'HELMET CAM', 'GYRO CAM'],
   (v, a, b) => (v < a ? a : (v > b ? b : v))
 );
-const KEY = T.TIER_TRIAL_KEY, V2 = T.SETTINGS_KEY;
+const KEY = T.TIER_TRIAL_KEY, V2 = T.SETTINGS_KEY, V1 = T.SETTINGS_KEY_OLD;
 
 let pass = 0, fail = 0;
 function check(ok, name, detail) {
@@ -136,7 +136,86 @@ const show = (p) => 'on ' + p.on() + ', key ' + JSON.stringify(p.store.key()) + 
   JSON.stringify(p.store.saved() && { quality: p.store.saved().quality, tierChosen: p.store.saved().tierChosen, tierBarred: p.store.saved().tierBarred }) +
   ', trial ' + p.g.trialOn + ' ' + p.g.trialLeft + ' frames ' + Math.round(p.g.trialMs) + ' ms, said ' + JSON.stringify(p.said);
 
+/* The live game's own load and save (origin/main, src/40-game.js): it knows
+   Retro and Modern, takes any circuit, and writes the fields it knows. */
+function liveSave(store, change) {
+  const s = { quality: 'modern', trackId: 'silverstone-v1', camMode: 0, musicVol: 10, userConfigured: false };
+  let p = {};
+  try { p = JSON.parse(store.m[V1] || '{}'); } catch (e) { p = {}; }
+  if (p.quality === 'retro' || p.quality === 'modern') s.quality = p.quality;
+  if (CIRCUITS.indexOf(p.trackId) >= 0) s.trackId = p.trackId;
+  if (typeof p.camMode === 'number') s.camMode = p.camMode;
+  if (typeof p.musicVol === 'number') s.musicVol = p.musicVol;
+  Object.assign(s, change, { userConfigured: true });
+  store.m[V1] = JSON.stringify(s);          /* the live game's write, not this build's: not counted */
+  return s;
+}
+
 let st, p, q, r, w;
+
+/* --------------------------------------------------------------------------- */
+console.log('R1  its own settings');
+
+st = new Store({});
+p = new Page(st);
+check(p.on() === 'ultra' && p.g.settings.trackId === 'monaco-gp-v1' && p.g.settings.timeOfDay === 'dusk' && st.saved() &&
+  st.saved().quality === 'ultra' && st.saved().tierChosen === false && st.m[V1] === undefined,
+  'a browser with nothing saved starts in Ultra at Monaco at dusk, saved under the new key only', show(p));
+
+const OLD = JSON.stringify({ quality: 'modern', trackId: 'silverstone-v1', musicVol: 4, userConfigured: true });
+st = new Store({ [V1]: OLD });
+p = new Page(st);
+check(p.on() === 'ultra' && st.saved().trackId === 'monaco-gp-v1' && st.saved().timeOfDay === 'dusk' && st.saved().musicVol === 4 &&
+  st.saved().tierChosen === false && st.m[V1] === OLD,
+  'the old defaults under the old key are moved to Ultra, Monaco, dusk; the music volume is kept; the old key is not touched',
+  show(p) + ', old key ' + st.m[V1]);
+
+st = new Store({ [V1]: JSON.stringify({ quality: 'retro', trackId: 'brands-hatch-v1', timeOfDay: 'golden' }) });
+p = new Page(st);
+check(p.on() === 'retro' && st.saved().trackId === 'brands-hatch-v1' && st.saved().timeOfDay === 'golden' && st.saved().tierChosen === true,
+  'a Retro, a circuit and an hour that were picked under the old key are kept', show(p));
+
+st = new Store({ [V1]: JSON.stringify({ quality: 'modern', tierChosen: true, trackId: 'silverstone-v1', timeOfDay: 'midday', defaults: 2 }) });
+p = new Page(st);
+check(p.on() === 'modern' && st.saved().trackId === 'silverstone-v1' && st.saved().timeOfDay === 'midday' && st.saved().tierChosen === true,
+  'settings an earlier copy of this build saved under the old key are taken as they stand', show(p));
+
+/* the review's case A */
+st = new Store({});
+p = new Page(st).pick('modern').setting('trackId', 'silverstone-v1').setting('timeOfDay', 'morning');
+p.leave();
+liveSave(st, { camMode: 2 });
+q = new Page(st);
+check(q.on() === 'modern' && q.g.settings.trackId === 'silverstone-v1' && q.g.settings.timeOfDay === 'morning' && q.store.key() === null,
+  'Modern, Silverstone and morning picked here survive a save in the live game (was: Ultra at Monaco at dusk, on trial)',
+  show(q) + ', circuit ' + q.g.settings.trackId + ', hour ' + q.g.settings.timeOfDay);
+
+/* the review's case B */
+st = new Store({});
+p = new Page(st);
+p.run(steady(500), 60000);
+p.leave();
+liveSave(st, { musicVol: 3 });
+q = new Page(st);
+check(p.on() === 'modern' && q.on() === 'modern' && q.g.trialOn === false && st.saved().tierChosen === false,
+  'a device stepped down to Modern stays there after a save in the live game (was: Ultra on trial again)', show(q));
+
+/* the review's case C */
+st = new Store({});
+const liveBefore = JSON.stringify(liveSave(st, { quality: 'retro' }));
+p = new Page(st);
+p.frames(200, 16.7).setting('musicVol', 7).pick('modern').circuit('indianapolis-v1');
+check(st.m[V1] === liveBefore && JSON.parse(st.m[V1]).trackId === 'silverstone-v1' && JSON.parse(st.m[V1]).quality === 'retro',
+  'the live game keeps its own circuit and tier whatever this build loads, saves or picks (was: the live game opened at Monaco)',
+  'the old key was ' + liveBefore + ' and is ' + st.m[V1]);
+
+st = new Store({ [V1]: OLD });
+p = new Page(st);
+p.frames(200, 16.7).pick('retro').leave();
+liveSave(st, { quality: 'modern', trackId: 'silverstone-v1' });
+q = new Page(st);
+check(q.on() === 'retro' && q.g.settings.trackId === 'monaco-gp-v1',
+  'the move from the old key happens once: what the live game saves there afterwards is not read again', show(q));
 
 /* --------------------------------------------------------------------------- */
 console.log('R2  a device that cannot run Ultra ends in Modern, within about 10 seconds, and stays');
@@ -418,6 +497,22 @@ check(stepped === 'modern' && kept === 'ultra' && p.g.settings.tierChosen === tr
   'Ultra picked by hand after a step down is not argued with in that load; the load after watches again, and says why', show(p) + '; next ' + show(q));
 
 /* --------------------------------------------------------------------------- */
+console.log('R7  storage that is blocked or full');
+
+st = new Store({}, 'blocked');
+r = [];
+for (let i = 0; i < 3; i++) { p = new Page(st); r.push(p.on()); }
+p.pick('ultra').frames(200, 16.7);
+q = new Page(st);
+check(r.join() === 'modern,modern,modern' && p.on() === 'ultra' && q.on() === 'modern' && p.g.tierBarred === false,
+  'storage blocked: every load starts in Modern, and Ultra picked by hand is on for that visit (was: Ultra on every load)', r.join() + '; picked: ' + p.on());
+
+st = new Store({ [V2]: JSON.stringify({ quality: 'ultra', tierChosen: true, defaults: 2 }) }, 'full');
+p = new Page(st);
+check(p.on() === 'modern' && p.g.trialOn === false && T.tierTaps(p.g).indexOf('ultra') >= 0,
+  'storage that reads and cannot be written: a saved Ultra starts in Modern, and the button still offers Ultra', show(p));
+
+/* --------------------------------------------------------------------------- */
 console.log('the key, as text');
 
 r = T.tierKeyParse('ultra untried');
@@ -432,8 +527,9 @@ p = new Page(st);
 check(p.on() === 'retro' && st.key() === null && p.g.tierBarred === false, 'a mark for a tier that is not the saved one is dropped', show(p));
 
 /* --------------------------------------------------------------------------- */
-console.log('R8, read from the source');
+console.log('R1 and R8, read from the source');
 
+check(!writesTo[V1], 'nothing in this whole run wrote the old settings key', (writesTo[V1] || 0) + ' writes');
 const tiersSrc = read('src/38-tiers.js').replace(/\/\*[\s\S]*?\*\//g, '');
 const reaches = ['document', 'window', 'performance', 'Date', 'localStorage', 'setTimeout', 'requestAnimationFrame'].filter((n) => new RegExp('\\b' + n + '\\b').test(tiersSrc));
 check(reaches.length === 0, 'src/38-tiers.js names no page, no storage and no clock', 'it names ' + reaches.join(', '));
@@ -442,6 +538,8 @@ const tick = gameSrc.slice(gameSrc.indexOf('Game.prototype.tick = function'));
 const tickBody = tick.slice(0, tick.indexOf('\nGame.prototype.', 10));
 const inTick = ['countFrame', 'watchPace', 'tierAct', 'performance.now', 'Date.now', 'STORE'].filter((n) => tickBody.indexOf(n) >= 0);
 check(tickBody.length > 200 && inTick.length === 0, 'Game.tick calls none of this and reads no clock', 'tick holds ' + inTick.join(', ') + ' (' + tickBody.length + ' characters read)');
+check(gameSrc.indexOf(V1) < 0 && gameSrc.indexOf('SETTINGS_KEY_OLD') < 0,
+  'src/40-game.js never names the old settings key', 'it does');
 check(/quality: 'ultra',\s+tierChosen: false,\s+tierBarred: false,\s+timeOfDay: 'dusk',\s+trackId: 'monaco-gp-v1',/.test(gameSrc),
   'the defaults of Game.loadSettings are the ones this file starts a page from');
 

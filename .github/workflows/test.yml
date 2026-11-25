@@ -29,7 +29,9 @@ name: tests
 #              backbeat quietly moved is not something anyone would notice.
 #   tiers      which picture tier a device is given, and when the heavy one is
 #              taken away: the rules at the top of src/38-tiers.js, each
-#              run against a fake storage with no browser.
+#              run against a fake storage with no browser. The saved settings
+#              are part of it: this build must never write the key it shares
+#              with the live game.
 #
 # Not covered, deliberately: anything that renders. 40-game.js has 98 references
 # to `document`, and a browser harness would cost more than it verifies here.

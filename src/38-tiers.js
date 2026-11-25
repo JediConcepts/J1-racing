@@ -87,8 +87,14 @@ var TIER_SAFE = 'modern';
 
    A new player is given Ultra, the heavy tier, on a device nobody has
    measured. Everything from here to the end of the file exists to make these
-   five things true, and test/tiers.test.js has a line for each.
+   seven things true, and test/tiers.test.js has a line for each.
 
+   R1  ITS OWN SETTINGS. The live game is on the same origin, so it shares
+       this build's storage, knows only Retro and Modern, and writes its
+       whole settings object on any save. This build keeps its settings
+       under SETTINGS_KEY and never writes SETTINGS_KEY_OLD. Only when there
+       is nothing under SETTINGS_KEY is the old key read, once, and what it
+       holds moved (see WHO STARTS WHERE) and saved under SETTINGS_KEY.
    R2  A DEVICE THAT CANNOT RUN ULTRA ENDS IN MODERN, by itself, within about
        10 seconds of screen time, and stays there: whatever the length of
        its frames, and whether the player waits, reloads, or leaves and
@@ -108,6 +114,9 @@ var TIER_SAFE = 'modern';
        the tier), and the load after it tries the tier again. A second loss
        in that load turns the tier off until the player picks it again. The
        player's own pick on the Graphics button always wins for that load.
+   R7  STORAGE THAT IS BLOCKED OR FULL. The game still starts. Nothing it
+       learns can be kept there, so it starts in TIER_SAFE, and the player
+       may pick Ultra by hand for that visit.
    R8  NONE OF THIS REACHES THE SIMULATION. No function here reads a clock
        or is called from tick. The frame loop hands the guard its gap.
 
@@ -218,9 +227,10 @@ var TIER_FELL = {
 var PACE = { slowMs: 40, forMs: 3000, windowMs: 1000, gapMs: 100, warmMs: 2000 };
 var PACE_SAID = 'ULTRA TOO SLOW ON THIS DEVICE: NOW MODERN';
 
-/* --- the settings, and where they are kept ------------------------------- */
+/* --- the settings, and where they are kept (R1) -------------------------- */
 
-var SETTINGS_KEY = 'mcl64.settings.v1';
+var SETTINGS_KEY = 'mcl64.settings.v2';
+var SETTINGS_KEY_OLD = 'mcl64.settings.v1';
 
 /* WHO STARTS WHERE, AND WHO KEEPS WHAT. 24 Nov 2026, the owner, having played
    the Ultra build on his phone: "seems to work.. well we need to default to
@@ -245,10 +255,13 @@ var SETTINGS_KEY = 'mcl64.settings.v1';
                builds that had one. None, or midday, becomes dusk; morning
                or golden was picked, and is kept.
 
-   The object is then saved, with the field, so that this happens once and
-   whatever the player picks afterwards is kept, the old defaults included.
-   A player who had truly picked Modern, Silverstone or midday is moved with
-   the rest, once: nothing saved could tell them apart.
+   The object is then saved under SETTINGS_KEY, so this happens once,
+   whatever the live game saves under the old key afterwards, and whatever
+   the player picks from then on is kept, the old defaults included. A
+   player who had truly picked Modern, Silverstone or midday is moved with
+   the rest, once: nothing saved could tell them apart. An object under the
+   old key that does carry the field was saved by an earlier copy of this
+   build, and is taken as it stands.
 
    `tierChosen` says whether the tier is one the player picked on the
    Graphics button. The game's own pick is not: the default, and the tier a
@@ -296,12 +309,21 @@ function settingsTake(s, p, old) {
   if (typeof p.musicVol === 'number' && isFinite(p.musicVol)) s.musicVol = clamp(Math.round(p.musicVol), 0, 10);
 }
 
-/* Writes the settings. `store` is storage as get(key) and set(key, value):
-   a value of null takes the key away, and set answers whether the write
-   went through. */
+/* Writes the settings, under SETTINGS_KEY and nowhere else. `store` is
+   storage as get(key) and set(key, value): a value of null takes the key
+   away, and set answers whether the write went through. */
 function settingsWrite(store, s) {
   s.defaults = SETTINGS_DEFAULTS;
   return store.set(SETTINGS_KEY, JSON.stringify(s));
+}
+
+/* Whether storage keeps what it is given (R7): one key written, read back
+   and taken away again. */
+function storeKeeps(store) {
+  var probe = TIER_TRIAL_KEY + '.probe';
+  var kept = store.set(probe, '1') === true && store.get(probe) === '1';
+  store.set(probe, null);
+  return kept;
 }
 
 /* WHAT A LOAD DOES, given what storage holds. `s` comes in as the defaults
@@ -309,18 +331,18 @@ function settingsWrite(store, s) {
    page is out of view as it loads. Answers what tierLoad answers. The key
    is written before the settings, and both before the world is built. */
 function settingsLoad(store, s, env) {
-  /* `first`: nothing was saved, or what was saved is from before the
-     defaults changed and is moved, this once */
-  var first = true;
+  /* `first`: nothing was saved under this build's own key, so this is its
+     first load in this browser and the old key is read, this once */
+  var first = false;
   try {
     var raw = store.get(SETTINGS_KEY);
+    if (!raw) { first = true; raw = store.get(SETTINGS_KEY_OLD); }
     if (raw) {
       var p = JSON.parse(raw);
-      first = p.defaults !== SETTINGS_DEFAULTS;
-      settingsTake(s, p, first);
+      settingsTake(s, p, first && p.defaults !== SETTINGS_DEFAULTS);
     }
   } catch (e) { /* blocked storage or corrupt JSON — defaults are fine */ }
-  var t = tierLoad(s, store.get(TIER_TRIAL_KEY), { hidden: env.hidden });
+  var t = tierLoad(s, store.get(TIER_TRIAL_KEY), { hidden: env.hidden, works: storeKeeps(store) });
   store.set(TIER_TRIAL_KEY, t.key);
   if (first || t.save) settingsWrite(store, s);
   return t;
@@ -430,12 +452,20 @@ function tierLoad(s, key, env) {
     t.save = true;
   }
   if (TIERS[s.quality].heavy) {
-    /* R4: on trial, whoever picked it. A page that loads out of view is
-       not trying the tier yet, and says so (R3). */
-    t.trialOn = true;
-    t.trialLeft = TIER_TRIAL_FRAMES;
-    t.tierAway = !!env.hidden;
-    t.key = t.tierAway ? tierUntried(s.quality, t.trialMs, t.tierAgain) : s.quality;
+    if (!env.works) {
+      /* R7: no trial could be kept, so no heavy tier unless it is picked */
+      s.quality = TIER_SAFE;
+      s.tierChosen = false;
+      t.tierAgain = false;
+      t.trialMs = 0;
+    } else {
+      /* R4: on trial, whoever picked it. A page that loads out of view is
+         not trying the tier yet, and says so (R3). */
+      t.trialOn = true;
+      t.trialLeft = TIER_TRIAL_FRAMES;
+      t.tierAway = !!env.hidden;
+      t.key = t.tierAway ? tierUntried(s.quality, t.trialMs, t.tierAgain) : s.quality;
+    }
   }
   return t;
 }

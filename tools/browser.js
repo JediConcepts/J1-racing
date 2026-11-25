@@ -189,14 +189,16 @@ async function pinRandom(context) {
 
    Saved once for the context, and not again on a reload: a hook changes
    circuit by saving its choice and reloading the page, and has to find what
-   it saved. `defaults` and `tierChosen` are what src/40-game.js writes for
-   settings saved since the defaults changed and a tier the player picked. */
+   it saved. The key is the one this build keeps its settings under
+   (SETTINGS_KEY in src/38-tiers.js), and `defaults` and `tierChosen` are
+   what it writes for settings saved since the defaults changed and a tier
+   the player picked. */
 const TOOL_START = { quality: 'modern', tierChosen: true, timeOfDay: 'midday', trackId: 'silverstone-v1', defaults: 2 };
 async function startFrom(context) {
   await context.addInitScript((saved) => {
     if (sessionStorage.getItem('tool.started')) return;
     sessionStorage.setItem('tool.started', '1');
-    localStorage.setItem('mcl64.settings.v1', saved);
+    localStorage.setItem('mcl64.settings.v2', saved);
   }, JSON.stringify(TOOL_START));
 }
 
