@@ -1464,13 +1464,26 @@ Game.prototype.bindInput = function () {
      that button calls wake() before it touches the mute, so the toggle was
      never the point — the wake was.
 
-     Capture phase so nothing can swallow it first, and `once` so it costs a
-     single dispatch. wake() is idempotent, so the three firing independently
-     is harmless. */
-  var unlock = function () { self.audio.wake(); };
-  ['pointerdown', 'touchstart', 'keydown'].forEach(function (ev) {
-    document.addEventListener(ev, unlock, { capture: true, once: true });
-  });
+     Capture phase so nothing can swallow it first. wake() is idempotent, so
+     several of these firing for one touch is harmless.
+
+     NOT `once` any more, and the END of a touch is listened for as well as
+     the start. Safari on a phone only lets sound start from the end of a
+     touch or from a click; a resume asked for at the start of one is refused
+     with no error, and the context stays suspended. With `once` on the three
+     start events, that one refusal used up every listener, and a player who
+     changed circuit and then only touched START raced in silence (reported
+     from a phone on 25 Nov 2026). So keep listening until the context really
+     is running, then stop. */
+  var unlockEvents = ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'click', 'keydown'];
+  var unlock = function () {
+    self.audio.wake();
+    var ctx = self.audio.ctx;
+    if (self.audio.failed || (ctx && ctx.state === 'running')) {
+      unlockEvents.forEach(function (ev) { document.removeEventListener(ev, unlock, true); });
+    }
+  };
+  unlockEvents.forEach(function (ev) { document.addEventListener(ev, unlock, { capture: true }); });
 };
 
 /* Four modes now, and the choice STICKS. Picking a circuit reloads the page,
