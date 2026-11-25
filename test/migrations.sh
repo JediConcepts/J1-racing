@@ -114,8 +114,8 @@ is "markup stripped, not stored" "$(q "select display_name from public.profiles 
 is "no metadata falls back"      "$(q "select display_name from public.profiles p join auth.users u on u.id=p.user_id where u.email='empty@t.test'")" "Driver"
 is "no display_name has markup"  "$(q "select count(*) from public.profiles where display_name ~ '[<>&\"/\\\\]'")" "0"
 
-echo; echo "circuits (0012, 0016)"
-is "track_versions exists"       "$(q "select count(*) from public.track_versions")" "4"
+echo; echo "circuits (0012, 0016, 0017)"
+is "track_versions exists"       "$(q "select count(*) from public.track_versions")" "5"
 
 # The registry and the client must agree. Monaco shipped in TRACKS with no
 # matching row for months, so every Monaco lap was rejected with "unknown
@@ -127,6 +127,7 @@ CLIENT_IDS="$(grep -oE "id: '[a-z0-9-]+-v[0-9]+'" "$REPO/src/20-track.js" | sed 
 DB_IDS="$(q "select id from public.track_versions order by id")"
 is "client circuits all seeded"  "$(comm -23 <(echo "$CLIENT_IDS") <(echo "$DB_IDS" | sort) | tr '\n' ' ' | sed 's/ *$//')" ""
 is "monaco is postable"          "$(q "select count(*) from public.track_versions where id='monaco-gp-v1'")" "1"
+is "las vegas is postable"       "$(q "select count(*) from public.track_versions where id='las-vegas-v1'")" "1"
 
 UID1="$(q "select user_id from public.profiles limit 1")"
 
@@ -152,7 +153,7 @@ has "anon cannot read scores"     "$(q "set role anon; select count(*) from publ
 has "anon cannot read runs"       "$(q "set role anon; select count(*) from public.runs")" "permission denied"
 has "anon cannot write scores"    "$(q "set role anon; insert into public.scores (user_id,race_ms,best_lap_ms,finish_position,track_version,sim_version) values ('$UID1',1,1,1,'silverstone-v1','x')")" "permission denied"
 has "anon cannot call submit"     "$(q "set role anon; select public.submit_score('silverstone-v1','x',300000,95000,1::smallint)")" "permission denied"
-is "anon reads track_versions"    "$(q "set role anon; select count(*) from public.track_versions")" "4"
+is "anon reads track_versions"    "$(q "set role anon; select count(*) from public.track_versions")" "5"
 is "board hides user_id"          "$(q "select count(*) from information_schema.columns where table_name='leaderboard' and column_name='user_id'")" "0"
 is "board exposes 9 columns"      "$(q "select count(*) from information_schema.columns where table_name='leaderboard'")" "9"
 is "view reads as owner"          "$(q "select coalesce(array_to_string(reloptions,','),'none') from pg_class where relname='leaderboard'")" "security_invoker=false"

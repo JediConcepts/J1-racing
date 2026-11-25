@@ -316,6 +316,13 @@ var TRACKS = [
     laps: 3,
     halfW: 7.0,          /* wide street circuit */
     city: true,          /* pavement and no woods: see buildLasVegasScenery */
+    /* NO LEADERBOARD YET. The database takes a time only for a circuit in
+       its track_versions table, and this one is added there by
+       supabase/migrations/0017_seed_las_vegas_track.sql, which has not been
+       applied. Until it is, the game posts no Las Vegas result and says so
+       (Game.submitRace, Game.loadBoard). Delete this line the day 0017 is
+       applied, and Las Vegas posts like every other circuit. */
+    board: false,
     /* Concrete walls. Six metres and not less: in the headless race the
        widest car runs 11.5 m out from the middle of the road, and the
        barrier stops a car at 11.9. */
