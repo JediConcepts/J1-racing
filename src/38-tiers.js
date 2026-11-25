@@ -173,7 +173,10 @@ var TIER_SAFE = 'modern';
    since it was built, and it has then kept pace for one window of
    PACE.windowMs (see PACE). It has TIER_TRIAL_MS of screen time to do that
    in, added up over every load it takes, with no single gap counting for
-   more than TIER_TRIAL_GAP_MS. A trial that runs out of time is a device
+   more than TIER_TRIAL_GAP_MS. Only a gap slower than PACE.slowMs is added:
+   an ordinary frame is not evidence of a slow device, and if it counted, a
+   healthy phone left a few times before its trial was over would use the
+   time up and lose the tier. A trial that runs out of time is a device
    too slow for the tier: TIER_SAFE, saved, barred. Time in a pause, with
    the page hidden, or while the Graphics button is being clicked through,
    is not screen time and does not count.
@@ -529,7 +532,7 @@ function tierPace(g, gapMs, held) {
     return null;
   }
   if (!(gapMs > 0)) return null;
-  if (g.trialOn) g.trialMs += Math.min(gapMs, TIER_TRIAL_GAP_MS);
+  if (g.trialOn && gapMs > PACE.slowMs) g.trialMs += Math.min(gapMs, TIER_TRIAL_GAP_MS);
   if (g.trialLeft > 0 || g.paceWarm > 0) {
     g.paceWarm -= gapMs;
   } else {

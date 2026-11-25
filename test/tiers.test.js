@@ -254,6 +254,16 @@ check(p.on() === 'modern' && total <= 12000 && q.on() === 'modern' && st.saved()
   'a slow device reloaded every 3 seconds: Modern in load ' + loads + ', after ' + secs(total) + ' on the screen (was: Ultra on every load, for ever)',
   show(p) + ', loads ' + loads);
 
+/* the review before live: a healthy device's short visits must not add up
+   to a failed trial. Ordinary frames are not evidence of a slow device. */
+st = new Store({});
+for (let i = 0; i < 10; i++) { p = new Page(st); p.run(steady(16.7), 2800); if (p.on() === 'ultra') p.leave(); }
+q = new Page(st);
+q.run(steady(16.7), 4000);
+check(p.on() === 'ultra' && q.on() === 'ultra' && q.g.trialOn === false && st.saved().quality === 'ultra' && st.saved().tierBarred !== true,
+  'a healthy device left ten times after 2.8 seconds keeps Ultra, and passes its trial on the next full visit (was: Modern on the fourth visit, for good)',
+  show(q));
+
 st = new Store({});
 p = new Page(st);
 total = 0;
