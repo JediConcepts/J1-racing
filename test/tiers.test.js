@@ -82,7 +82,7 @@ function Page(store, opts) {
     steerTilt: false, tiltInvert: false, steerSens: 6, engineVol: 10, musicVol: 10, musicOn: true, engineOn: false,
     camMode: 0, autoThrottle: false, autoFullscreen: true,
     quality: 'ultra', tierChosen: false, tierBarred: false, timeOfDay: 'dusk', trackId: 'monaco-gp-v1',
-    defaults: 2, userConfigured: false
+    weather: 'clear', defaults: 2, userConfigured: false
   };
   const g = this.g = Object.assign(T.tierFresh(), { settings: s });
   const t = T.settingsLoad(store, s, { hidden: !!o.hidden });
@@ -181,6 +181,22 @@ st = new Store({ [V1]: JSON.stringify({ quality: 'modern', tierChosen: true, tra
 p = new Page(st);
 check(p.on() === 'modern' && st.saved().trackId === 'silverstone-v1' && st.saved().timeOfDay === 'midday' && st.saved().tierChosen === true,
   'settings an earlier copy of this build saved under the old key are taken as they stand', show(p));
+
+/* The weather is a look in Ultra only (WEATHER_NAMES in src/38-tiers.js).
+   A saved one is kept; anything else is clear. */
+st = new Store({ [V2]: JSON.stringify({ quality: 'ultra', tierChosen: true, weather: 'rain', defaults: 2 }) });
+p = new Page(st);
+check(p.g.settings.weather === 'rain', 'a saved weather of rain is kept', 'weather ' + p.g.settings.weather);
+st = new Store({ [V2]: JSON.stringify({ quality: 'ultra', tierChosen: true, weather: 'snow', defaults: 2 }) });
+p = new Page(st);
+w = p.g.settings.weather;
+st = new Store({ [V2]: JSON.stringify({ quality: 'ultra', tierChosen: true, weather: 3, defaults: 2 }) });
+p = new Page(st);
+check(w === 'clear' && p.g.settings.weather === 'clear', 'an unknown weather, or one that is not a word, is clear',
+  'snow gave ' + w + ', 3 gave ' + p.g.settings.weather);
+st = new Store({ [V1]: JSON.stringify({ quality: 'retro', weather: 'cloudy' }) });
+p = new Page(st);
+check(p.on() === 'retro' && st.saved().weather === 'cloudy', 'a weather saved with Retro is kept in the settings (Retro draws none of it)', show(p));
 
 /* the review's case A */
 st = new Store({});

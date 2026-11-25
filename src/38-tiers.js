@@ -243,6 +243,15 @@ var PACE_SAID = 'ULTRA TOO SLOW ON THIS DEVICE: NOW MODERN';
 var SETTINGS_KEY = 'mcl64.settings.v2';
 var SETTINGS_KEY_OLD = 'mcl64.settings.v1';
 
+/* The names settings.weather may hold, in the order the settings button
+   cycles through them. Like the time of day it means something in Ultra
+   only, and it is a look and nothing else: the grip, the lap times and the
+   leaderboard are the same under every one of them. Here and not in
+   40-game.js beside TIME_OF_DAY_NAMES, because settingsTake below checks a
+   saved value against it and test/tiers.test.js runs this file alone. What
+   each one looks like belongs to 34-weather.js. */
+var WEATHER_NAMES = ['clear', 'cloudy', 'rain'];
+
 /* WHO STARTS WHERE, AND WHO KEEPS WHAT. 24 Nov 2026, the owner, having played
    the Ultra build on his phone: "seems to work.. well we need to default to
    Ultra Dusk and Monaco as game 1 now". So a player who has never chosen
@@ -302,6 +311,8 @@ function settingsTake(s, p, old) {
   }
   if (p.tierBarred === true) s.tierBarred = true;
   if (TIME_OF_DAY_NAMES.indexOf(p.timeOfDay) >= 0 && !(old && p.timeOfDay === OLD_DEFAULTS.timeOfDay)) s.timeOfDay = p.timeOfDay;
+  /* anything that is not a weather keeps the default, which is clear */
+  if (WEATHER_NAMES.indexOf(p.weather) >= 0) s.weather = p.weather;
   /* Validated against the registry: a stale or hand-edited id must fall
      back to a real circuit rather than crashing the boot. */
   if (typeof p.trackId === 'string' && trackById(p.trackId).id === p.trackId && !(old && p.trackId === OLD_DEFAULTS.trackId)) {
