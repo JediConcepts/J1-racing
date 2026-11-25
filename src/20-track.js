@@ -753,23 +753,34 @@ function buildTrackMeshes(track, scene) {
 
   var group = new THREE.Group();
 
-  group.add(new THREE.Mesh(road.geometry(), new THREE.MeshStandardMaterial({
-    map: texFromCanvas(makeAsphaltTex(), 1, 1), vertexColors: true, roughness: 0.92, metalness: 0.0 })));
-  group.add(new THREE.Mesh(runoff.geometry(), new THREE.MeshStandardMaterial({
-    map: texFromCanvas(makeRunoffTex(), 1, 1), vertexColors: true, roughness: 0.95, metalness: 0.0 })));
+  /* `wet` says what each surface becomes in rain (WET in 34-weather.js);
+     nothing reads it in any other weather */
+  var roadMesh = new THREE.Mesh(road.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeAsphaltTex(), 1, 1), vertexColors: true, roughness: 0.92, metalness: 0.0 }));
+  roadMesh.userData.wet = 'road';
+  group.add(roadMesh);
+  var runoffMesh = new THREE.Mesh(runoff.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeRunoffTex(), 1, 1), vertexColors: true, roughness: 0.95, metalness: 0.0 }));
+  runoffMesh.userData.wet = 'runoff';
+  group.add(runoffMesh);
   
   var grassTexCanvas = track.id === 'monaco-gp-v1' ? makeCityGroundTex() : makeGrassTex();
-  group.add(new THREE.Mesh(grass.geometry(), new THREE.MeshStandardMaterial({
-    map: texFromCanvas(grassTexCanvas, 6, 1), vertexColors: true, roughness: 1.0, metalness: 0.0 })));
+  var grassMesh = new THREE.Mesh(grass.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(grassTexCanvas, 6, 1), vertexColors: true, roughness: 1.0, metalness: 0.0 }));
+  if (track.id === 'monaco-gp-v1') grassMesh.userData.wet = 'pavement';
+  group.add(grassMesh);
 
-  group.add(new THREE.Mesh(kerb.geometry(), new THREE.MeshStandardMaterial({
-    map: texFromCanvas(makeKerbTex(), 1, 1, true), vertexColors: true, roughness: 0.72, metalness: 0.0 })));
+  var kerbMesh = new THREE.Mesh(kerb.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeKerbTex(), 1, 1, true), vertexColors: true, roughness: 0.72, metalness: 0.0 }));
+  kerbMesh.userData.wet = 'kerb';
+  group.add(kerbMesh);
   group.add(new THREE.Mesh(wall.geometry(), new THREE.MeshStandardMaterial({
     map: texFromCanvas(makeWallTex(), 1, 1), vertexColors: true, roughness: 0.55, metalness: 0.35 })));
   var lineMesh = new THREE.Mesh(line.geometry(), new THREE.MeshStandardMaterial({
     vertexColors: true, roughness: 0.85, metalness: 0.0,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
   }));
+  lineMesh.userData.wet = 'line';
   group.add(lineMesh);
 
   /* receiveShadow is PER MESH — setting it on the Group does nothing, three.js
@@ -1205,6 +1216,8 @@ function buildScenery(track, scene) {
   return {
     clouds: clouds, ground: cityGround, groundTop: groundTop, treeFeet: placed ? treeFeet / placed : 0,
     setHour: town ? town.setHour : null,
+    /* the track samples under Monaco's tunnel roof, where no rain falls */
+    tunnel: town ? town.tunnel : null,
     farGroundShadow: !town,
     sparseShadows: !!town
   };
@@ -1815,7 +1828,7 @@ function buildMonacoTunnelAndUrbanScenery(track, scene) {
       mats[m].emissive.setRGB(wc[0] * lit, wc[1] * lit, wc[2] * lit);
     }
   }
-  return { setHour: setHour };
+  return { setHour: setHour, tunnel: [tunnelStart, tunnelEnd] };
 }
 
 /* Which windows of Monaco's buildings are lit, as light and not as paint: the

@@ -15,10 +15,10 @@
      being served" — a stale cached copy still returns 200 with a valid title,
      but it cannot carry the version that was just published.
      STANDALONE ONLY: the artifact fragment has no <head> to put it in. -->
-<meta name="build" content="v0.146" />
-<meta name="build-sha" content="8b018ab" />
+<meta name="build" content="v0.174" />
+<meta name="build-sha" content="5019170" />
 <meta name="build-channel" content="dev" />
-<meta name="build-time" content="2026-11-24 17:57Z" />
+<meta name="build-time" content="2026-11-25 10:33Z" />
 <meta name="color-scheme" content="dark light" />
 <meta name="description" content="A Formula 1 racer built the way a 1997 console would have built it: 240p, a five-bit dither, three laps of a stylised Monaco against a full grid, and three more circuits. Plays in a browser, on desktop or phone, with a global leaderboard." />
 <link rel="canonical" href="https://jediconcepts.com/mcl64/" />
@@ -1198,6 +1198,12 @@
           <button type="button" class="sval" id="set-tod">MIDDAY</button>
         </div>
 
+        <div class="srow" id="row-weather" hidden>
+          <span class="slabel">WEATHER</span>
+          <button type="button" class="sval" id="set-weather">CLEAR</button>
+        </div>
+        <p class="shint" id="set-weather-hint" hidden>Rain is for looks: grip and lap times are unchanged.</p>
+
         <p class="shint" id="set-hint">Manual: push forward for gas, pull back to brake.</p>
 
         <div class="acct" id="acct" hidden>
@@ -2130,7 +2136,7 @@ Resources:`;for(let t of c){if(!t||typeof t!=`string`)throw Error(`@supabase/aut
 `);let e=await s.signMessage(new TextEncoder().encode(t),`utf8`);if(!e||!(e instanceof Uint8Array))throw Error(`@supabase/auth-js: Wallet signMessage() API returned an recognized value`);n=e}}try{let{data:r,error:i}=await J(this.fetch,`POST`,`${this.url}/token?grant_type=web3`,{headers:this.headers,body:Object.assign({chain:`solana`,message:t,signature:z(n)},e.options?.captchaToken?{gotrue_meta_security:{captcha_token:e.options?.captchaToken}}:null),xform:Y});if(i)throw i;if(!r||!r.session||!r.user){let e=new R;return this._returnResult({data:{user:null,session:null},error:e})}return r.session&&(await this._saveSession(r.session),await this._notifyAllSubscribers(`SIGNED_IN`,r.session)),this._returnResult({data:Object.assign({},r),error:i})}catch(e){if(P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async _exchangeCodeForSession(e){let[t,n]=(await H(this.storage,`${this.storageKey}-code-verifier`)??``).split(`/`);try{if(!t&&this.flowType===`pkce`)throw new Zn;let{data:r,error:i}=await J(this.fetch,`POST`,`${this.url}/token?grant_type=pkce`,{headers:this.headers,body:{auth_code:e,code_verifier:t},xform:Y});if(await U(this.storage,`${this.storageKey}-code-verifier`),i)throw i;if(!r||!r.session||!r.user){let e=new R;return this._returnResult({data:{user:null,session:null,redirectType:null},error:e})}return r.session&&(await this._saveSession(r.session),await this._notifyAllSubscribers(n===`recovery`?`PASSWORD_RECOVERY`:`SIGNED_IN`,r.session)),this._returnResult({data:Object.assign(Object.assign({},r),{redirectType:n??null}),error:i})}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:{user:null,session:null,redirectType:null},error:e});throw e}}async signInWithIdToken(e){try{let{options:t,provider:n,token:r,access_token:i,nonce:a}=e,{data:o,error:s}=await J(this.fetch,`POST`,`${this.url}/token?grant_type=id_token`,{headers:this.headers,body:{provider:n,id_token:r,access_token:i,nonce:a,gotrue_meta_security:{captcha_token:t?.captchaToken}},xform:Y});if(s)return this._returnResult({data:{user:null,session:null},error:s});if(!o||!o.session||!o.user){let e=new R;return this._returnResult({data:{user:null,session:null},error:e})}return o.session&&(await this._saveSession(o.session),await this._notifyAllSubscribers(`SIGNED_IN`,o.session)),this._returnResult({data:o,error:s})}catch(e){if(P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async signInWithOtp(e){try{if(`email`in e){let{email:t,options:n}=e,r=null,i=null;this.flowType===`pkce`&&([r,i]=await W(this.storage,this.storageKey));let{error:a}=await J(this.fetch,`POST`,`${this.url}/otp`,{headers:this.headers,body:{email:t,data:n?.data??{},create_user:n?.shouldCreateUser??!0,gotrue_meta_security:{captcha_token:n?.captchaToken},code_challenge:r,code_challenge_method:i},redirectTo:n?.emailRedirectTo});return this._returnResult({data:{user:null,session:null},error:a})}if(`phone`in e){let{phone:t,options:n}=e,{data:r,error:i}=await J(this.fetch,`POST`,`${this.url}/otp`,{headers:this.headers,body:{phone:t,data:n?.data??{},create_user:n?.shouldCreateUser??!0,gotrue_meta_security:{captcha_token:n?.captchaToken},channel:n?.channel??`sms`}});return this._returnResult({data:{user:null,session:null,messageId:r?.message_id},error:i})}throw new qn(`You must provide either an email or phone number.`)}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async verifyOtp(e){try{let t,n;`options`in e&&(t=e.options?.redirectTo,n=e.options?.captchaToken);let{data:r,error:i}=await J(this.fetch,`POST`,`${this.url}/verify`,{headers:this.headers,body:Object.assign(Object.assign({},e),{gotrue_meta_security:{captcha_token:n}}),redirectTo:t,xform:Y});if(i)throw i;if(!r)throw Error(`An error occurred on token verification.`);let a=r.session,o=r.user;return a?.access_token&&(await this._saveSession(a),await this._notifyAllSubscribers(e.type==`recovery`?`PASSWORD_RECOVERY`:`SIGNED_IN`,a)),this._returnResult({data:{user:o,session:a},error:null})}catch(e){if(P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async signInWithSSO(e){try{let t=null,n=null;this.flowType===`pkce`&&([t,n]=await W(this.storage,this.storageKey));let r=await J(this.fetch,`POST`,`${this.url}/sso`,{body:Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({},`providerId`in e?{provider_id:e.providerId}:null),`domain`in e?{domain:e.domain}:null),{redirect_to:e.options?.redirectTo??void 0}),e?.options?.captchaToken?{gotrue_meta_security:{captcha_token:e.options.captchaToken}}:null),{skip_http_redirect:!0,code_challenge:t,code_challenge_method:n}),headers:this.headers,xform:Gr});return r.data?.url&&B()&&!e.options?.skipBrowserRedirect&&window.location.assign(r.data.url),this._returnResult(r)}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:null,error:e});throw e}}async reauthenticate(){return await this.initializePromise,this.lock==null?await this._reauthenticate():await this._acquireLock(this.lockAcquireTimeout,async()=>await this._reauthenticate())}async _reauthenticate(){try{return await this._useSession(async e=>{let{data:{session:t},error:n}=e;if(n)throw n;if(!t)throw new L;let{error:r}=await J(this.fetch,`GET`,`${this.url}/reauthenticate`,{headers:this.headers,jwt:t.access_token});return this._returnResult({data:{user:null,session:null},error:r})})}catch(e){if(P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async resend(e){try{let t=`${this.url}/resend`;if(`email`in e){let{email:n,type:r,options:i}=e,a=null,o=null;this.flowType===`pkce`&&([a,o]=await W(this.storage,this.storageKey));let{error:s}=await J(this.fetch,`POST`,t,{headers:this.headers,body:{email:n,type:r,gotrue_meta_security:{captcha_token:i?.captchaToken},code_challenge:a,code_challenge_method:o},redirectTo:i?.emailRedirectTo});return s&&await U(this.storage,`${this.storageKey}-code-verifier`),this._returnResult({data:{user:null,session:null},error:s})}else if(`phone`in e){let{phone:n,type:r,options:i}=e,{data:a,error:o}=await J(this.fetch,`POST`,t,{headers:this.headers,body:{phone:n,type:r,gotrue_meta_security:{captcha_token:i?.captchaToken}}});return this._returnResult({data:{user:null,session:null,messageId:a?.message_id},error:o})}throw new qn(`You must provide either an email or phone number and a type`)}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async getSession(){return await this.initializePromise,this.lock==null?await this._useSession(async e=>e):await this._acquireLock(this.lockAcquireTimeout,async()=>this._useSession(async e=>e))}async _acquireLock(e,t){this._debug(`#_acquireLock`,`begin`,e);try{if(this.lockAcquired){let e=this.pendingInLock.length?this.pendingInLock[this.pendingInLock.length-1]:Promise.resolve(),n=(async()=>(await e,await t()))();return this.pendingInLock.push((async()=>{try{await n}catch{}})()),n}return await this.lock(`lock:${this.storageKey}`,e,async()=>{this._debug(`#_acquireLock`,`lock acquired for storage key`,this.storageKey);try{this.lockAcquired=!0;let e=t();for(this.pendingInLock.push((async()=>{try{await e}catch{}})()),await e;this.pendingInLock.length;){let e=[...this.pendingInLock];await Promise.all(e),this.pendingInLock.splice(0,e.length)}return await e}finally{this._debug(`#_acquireLock`,`lock released for storage key`,this.storageKey),this.lockAcquired=!1}})}finally{this._debug(`#_acquireLock`,`end`)}}async _useSession(e){this._debug(`#_useSession`,`begin`);try{return await e(await this.__loadSession())}finally{this._debug(`#_useSession`,`end`)}}async __loadSession(){this._debug(`#__loadSession()`,`begin`),this.lock!=null&&!this.lockAcquired&&this._debug(`#__loadSession()`,`used outside of an acquired lock!`,Error().stack);try{let e=null,t=await H(this.storage,this.storageKey);if(this._debug(`#getSession()`,`session from storage`,t),t!==null&&(this._isValidSession(t)?e=t:(this._debug(`#getSession()`,`session from storage is not valid`),await this._removeSession())),!e)return{data:{session:null},error:null};let n=e.expires_at?e.expires_at*1e3-Date.now()<zn:!1;if(this._debug(`#__loadSession()`,`session has${n?``:` not`} expired`,`expires_at`,e.expires_at),!n){if(this.userStorage){let t=await H(this.userStorage,this.storageKey+`-user`);t?.user?e.user=t.user:e.user=Lr()}if(this.storage.isServer&&e.user&&!e.user.__isUserNotAvailableProxy){let t={value:this.suppressGetSessionWarning};e.user=Rr(e.user,t),t.value&&(this.suppressGetSessionWarning=!0)}return{data:{session:e},error:null}}let{data:r,error:i}=await this._callRefreshToken(e.refresh_token);if(i){if(e.expires_at&&e.expires_at*1e3>Date.now()){let t=await H(this.storage,this.storageKey);if(t&&t.refresh_token===e.refresh_token)return this._returnResult({data:{session:e},error:null})}return this._returnResult({data:{session:null},error:i})}return this._returnResult({data:{session:r},error:null})}finally{this._debug(`#__loadSession()`,`end`)}}async getUser(e){if(e)return await this._getUser(e);await this.initializePromise;let t;return t=this.lock==null?await this._getUser():await this._acquireLock(this.lockAcquireTimeout,async()=>await this._getUser()),t.data.user&&(this.suppressGetSessionWarning=!0),t}async _getUser(e){try{return e?await J(this.fetch,`GET`,`${this.url}/user`,{headers:this.headers,jwt:e,xform:X}):await this._useSession(async e=>{let{data:t,error:n}=e;if(n)throw n;return!t.session?.access_token&&!this.hasCustomAuthorizationHeader?{data:{user:null},error:new L}:await J(this.fetch,`GET`,`${this.url}/user`,{headers:this.headers,jwt:t.session?.access_token??void 0,xform:X})})}catch(e){if(P(e))return Kn(e)&&(await this._removeSession(),await U(this.storage,`${this.storageKey}-code-verifier`)),this._returnResult({data:{user:null},error:e});throw e}}async updateUser(e,t={}){return await this.initializePromise,this.lock==null?await this._updateUser(e,t):await this._acquireLock(this.lockAcquireTimeout,async()=>await this._updateUser(e,t))}async _updateUser(e,t={}){try{return await this._useSession(async n=>{let{data:r,error:i}=n;if(i)throw i;if(!r.session)throw new L;let a=r.session,o=null,s=null;this.flowType===`pkce`&&e.email!=null&&([o,s]=await W(this.storage,this.storageKey));let{data:c,error:l}=await J(this.fetch,`PUT`,`${this.url}/user`,{headers:this.headers,redirectTo:t?.emailRedirectTo,body:Object.assign(Object.assign({},e),{code_challenge:o,code_challenge_method:s}),jwt:a.access_token,xform:X});if(l)throw l;return a.user=c.user,await this._saveSession(a),await this._notifyAllSubscribers(`USER_UPDATED`,a),this._returnResult({data:{user:a.user},error:null})})}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:{user:null},error:e});throw e}}async setSession(e){return await this.initializePromise,this.lock==null?await this._setSession(e):await this._acquireLock(this.lockAcquireTimeout,async()=>await this._setSession(e))}async _setSession(e){try{if(!e.access_token||!e.refresh_token)throw new L;let t=Date.now()/1e3,n=t,r=!0,i=null,{payload:a}=Tr(e.access_token);if(a.exp&&(n=a.exp,r=n<=t),r){let{data:t,error:n}=await this._callRefreshToken(e.refresh_token);if(n)return this._returnResult({data:{user:null,session:null},error:n});if(!t)return{data:{user:null,session:null},error:null};i=t}else{let{data:r,error:a}=await this._getUser(e.access_token);if(a)return this._returnResult({data:{user:null,session:null},error:a});i={access_token:e.access_token,refresh_token:e.refresh_token,user:r.user,token_type:`bearer`,expires_in:n-t,expires_at:n},await this._saveSession(i),await this._notifyAllSubscribers(`SIGNED_IN`,i)}return this._returnResult({data:{user:i.user,session:i},error:null})}catch(e){if(P(e))return this._returnResult({data:{session:null,user:null},error:e});throw e}}async refreshSession(e){return await this.initializePromise,this.lock==null?await this._refreshSession(e):await this._acquireLock(this.lockAcquireTimeout,async()=>await this._refreshSession(e))}async _refreshSession(e){try{return await this._useSession(async t=>{if(!e){let{data:n,error:r}=t;if(r)throw r;e=n.session??void 0}if(!e?.refresh_token)throw new L;let{data:n,error:r}=await this._callRefreshToken(e.refresh_token);return r?this._returnResult({data:{user:null,session:null},error:r}):n?this._returnResult({data:{user:n.user,session:n},error:null}):this._returnResult({data:{user:null,session:null},error:null})})}catch(e){if(P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}}async _getSessionFromURL(e,t){try{if(!B())throw new Jn(`No browser detected.`);if(e.error||e.error_description||e.error_code)throw new Jn(e.error_description||`Error in URL with unspecified error_description`,{error:e.error||`unspecified_error`,code:e.error_code||`unspecified_code`});switch(t){case`implicit`:if(this.flowType===`pkce`)throw new Xn(`Not a valid PKCE flow url.`);break;case`pkce`:if(this.flowType===`implicit`)throw new Jn(`Not a valid implicit grant flow url.`);break;default:}if(t===`pkce`){if(this._debug(`#_initialize()`,`begin`,`is PKCE flow`,!0),!e.code)throw new Xn(`No code detected.`);let{data:t,error:n}=await this._exchangeCodeForSession(e.code);if(n)throw n;let r=new URL(window.location.href);return r.searchParams.delete(`code`),window.history.replaceState(window.history.state,``,r.toString()),{data:{session:t.session,redirectType:t.redirectType??null},error:null}}let{provider_token:n,provider_refresh_token:r,access_token:i,refresh_token:a,expires_in:o,expires_at:s,token_type:c}=e;if(!i||!o||!a||!c)throw new Jn(`No session defined in URL`);let l=Math.round(Date.now()/1e3),u=parseInt(o),d=l+u;s&&(d=parseInt(s));let f=d-l;f*1e3<=M&&console.warn(`@supabase/gotrue-js: Session as retrieved from URL expires in ${f}s, should have been closer to ${u}s`);let p=d-u;l-p>=120?console.warn(`@supabase/gotrue-js: Session as retrieved from URL was issued over 120s ago, URL could be stale`,p,d,l):l-p<0&&console.warn(`@supabase/gotrue-js: Session as retrieved from URL was issued in the future? Check the device clock for skew`,p,d,l);let{data:m,error:h}=await this._getUser(i);if(h)throw h;let g={provider_token:n,provider_refresh_token:r,access_token:i,expires_in:u,expires_at:d,refresh_token:a,token_type:c,user:m.user};return window.location.hash=``,this._debug(`#_getSessionFromURL()`,`clearing window.location.hash`),this._returnResult({data:{session:g,redirectType:e.type},error:null})}catch(e){if(P(e))return this._returnResult({data:{session:null,redirectType:null},error:e});throw e}}_isImplicitGrantCallback(e){return typeof this.detectSessionInUrl==`function`?this.detectSessionInUrl(new URL(window.location.href),e):!!(e.access_token||e.error||e.error_description||e.error_code)}async _isPKCECallback(e){let t=await H(this.storage,`${this.storageKey}-code-verifier`);return!!(e.code&&t)}async signOut(e={scope:`global`}){return await this.initializePromise,this.lock==null?await this._signOut(e):await this._acquireLock(this.lockAcquireTimeout,async()=>await this._signOut(e))}async _signOut({scope:e}={scope:`global`}){return await this._useSession(async t=>{let n=async()=>{await this._removeSession(),await U(this.storage,`${this.storageKey}-code-verifier`)},{data:r,error:i}=t;if(i&&!Kn(i))return this._returnResult({error:i});let a=r.session?.access_token;if(a){let{error:t}=await this.admin.signOut(a,e);if(t&&!(Gn(t)&&(t.status===404||t.status===401||t.status===403)||Kn(t)))return e!==`others`&&await n(),this._returnResult({error:t})}return e!==`others`&&await n(),this._returnResult({error:null})})}onAuthStateChange(e){let t=vr(),n={id:t,callback:e,unsubscribe:()=>{this._debug(`#unsubscribe()`,`state change callback with id removed`,t),this.stateChangeEmitters.delete(t)}};return this._debug(`#onAuthStateChange()`,`registered callback with id`,t),this.stateChangeEmitters.set(t,n),(async()=>{await this.initializePromise,this.lock==null?await this._emitInitialSession(t):await this._acquireLock(this.lockAcquireTimeout,async()=>{this._emitInitialSession(t)})})(),{data:{subscription:n}}}async _emitInitialSession(e){return await this._useSession(async t=>{try{let{data:{session:n},error:r}=t;if(r)throw r;await this.stateChangeEmitters.get(e)?.callback(`INITIAL_SESSION`,n),this._debug(`INITIAL_SESSION`,`callback id`,e,`session`,n)}catch(t){await this.stateChangeEmitters.get(e)?.callback(`INITIAL_SESSION`,null),this._debug(`INITIAL_SESSION`,`callback id`,e,`error`,t),Kn(t)||er(t)||Gn(t)&&(t.code===`refresh_token_not_found`||t.code===`refresh_token_already_used`||t.code===`session_expired`)?console.warn(t):console.error(t)}})}async resetPasswordForEmail(e,t={}){let n=null,r=null;this.flowType===`pkce`&&([n,r]=await W(this.storage,this.storageKey,!0));try{return await J(this.fetch,`POST`,`${this.url}/recover`,{body:{email:e,code_challenge:n,code_challenge_method:r,gotrue_meta_security:{captcha_token:t.captchaToken}},headers:this.headers,redirectTo:t.redirectTo})}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:null,error:e});throw e}}async getUserIdentities(){try{let{data:e,error:t}=await this.getUser();if(t)throw t;return this._returnResult({data:{identities:e.user.identities??[]},error:null})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async linkIdentity(e){return`token`in e?this.linkIdentityIdToken(e):this.linkIdentityOAuth(e)}async linkIdentityOAuth(e){try{let{data:t,error:n}=await this._useSession(async t=>{let{data:n,error:r}=t;if(r)throw r;let i=await this._getUrlForProvider(`${this.url}/user/identities/authorize`,e.provider,{redirectTo:e.options?.redirectTo,scopes:e.options?.scopes,queryParams:e.options?.queryParams,skipBrowserRedirect:!0});return await J(this.fetch,`GET`,i,{headers:this.headers,jwt:n.session?.access_token??void 0})});if(n)throw n;return B()&&!e.options?.skipBrowserRedirect&&window.location.assign(t?.url),this._returnResult({data:{provider:e.provider,url:t?.url},error:null})}catch(t){if(P(t))return this._returnResult({data:{provider:e.provider,url:null},error:t});throw t}}async linkIdentityIdToken(e){return await this._useSession(async t=>{try{let{error:n,data:{session:r}}=t;if(n)throw n;let{options:i,provider:a,token:o,access_token:s,nonce:c}=e,{data:l,error:u}=await J(this.fetch,`POST`,`${this.url}/token?grant_type=id_token`,{headers:this.headers,jwt:r?.access_token??void 0,body:{provider:a,id_token:o,access_token:s,nonce:c,link_identity:!0,gotrue_meta_security:{captcha_token:i?.captchaToken}},xform:Y});return u?this._returnResult({data:{user:null,session:null},error:u}):!l||!l.session||!l.user?this._returnResult({data:{user:null,session:null},error:new R}):(l.session&&(await this._saveSession(l.session),await this._notifyAllSubscribers(`USER_UPDATED`,l.session)),this._returnResult({data:l,error:u}))}catch(e){if(await U(this.storage,`${this.storageKey}-code-verifier`),P(e))return this._returnResult({data:{user:null,session:null},error:e});throw e}})}async unlinkIdentity(e){try{return await this._useSession(async t=>{let{data:n,error:r}=t;if(r)throw r;return await J(this.fetch,`DELETE`,`${this.url}/user/identities/${e.identity_id}`,{headers:this.headers,jwt:n.session?.access_token??void 0})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _refreshAccessToken(e){let t=`#_refreshAccessToken()`;this._debug(t,`begin`);try{let n=Date.now();return await Dr(async n=>(n>0&&await Er(200*2**(n-1)),this._debug(t,`refreshing attempt`,n),await J(this.fetch,`POST`,`${this.url}/token?grant_type=refresh_token`,{body:{refresh_token:e},headers:this.headers,xform:Y})),(e,t)=>{let r=200*2**e;return t&&er(t)&&Date.now()+r-n<M})}catch(e){if(this._debug(t,`error`,e),P(e))return this._returnResult({data:{session:null,user:null},error:e});throw e}finally{this._debug(t,`end`)}}_isValidSession(e){return typeof e==`object`&&!!e&&`access_token`in e&&`refresh_token`in e&&`expires_at`in e}async _handleProviderSignIn(e,t){let n=await this._getUrlForProvider(`${this.url}/authorize`,e,{redirectTo:t.redirectTo,scopes:t.scopes,queryParams:t.queryParams});return this._debug(`#_handleProviderSignIn()`,`provider`,e,`options`,t,`url`,n),B()&&!t.skipBrowserRedirect&&window.location.assign(n),{data:{provider:e,url:n},error:null}}async _recoverAndRefresh(){let e=`#_recoverAndRefresh()`;this._debug(e,`begin`);try{let t=await H(this.storage,this.storageKey);if(t&&this.userStorage){let e=await H(this.userStorage,this.storageKey+`-user`);!this.storage.isServer&&Object.is(this.storage,this.userStorage)&&!e&&(e={user:t.user},await Cr(this.userStorage,this.storageKey+`-user`,e)),t.user=e?.user??Lr()}else if(t&&!t.user&&!t.user){let e=await H(this.storage,this.storageKey+`-user`);e&&e?.user?(t.user=e.user,await U(this.storage,this.storageKey+`-user`),await Cr(this.storage,this.storageKey,t)):t.user=Lr()}if(this._debug(e,`session from storage`,t),!this._isValidSession(t)){this._debug(e,`session is not valid`),t!==null&&await this._removeSession();return}let n=(t.expires_at??1/0)*1e3-Date.now()<zn;if(this._debug(e,`session has${n?``:` not`} expired with margin of ${zn}s`),n){if(this.autoRefreshToken&&t.refresh_token){let{error:n}=await this._callRefreshToken(t.refresh_token);n&&(nr(n)?this._debug(e,`refresh discarded by commit guard`,n):this._debug(e,`refresh failed`,n))}}else if(t.user&&t.user.__isUserNotAvailableProxy===!0)try{let{data:n,error:r}=await this._getUser(t.access_token);!r&&n?.user?(t.user=n.user,await this._saveSession(t),await this._notifyAllSubscribers(`SIGNED_IN`,t)):this._debug(e,`could not get user data, skipping SIGNED_IN notification`)}catch(t){console.error(`Error getting user data:`,t),this._debug(e,`error getting user data, skipping SIGNED_IN notification`,t)}else await this._notifyAllSubscribers(`SIGNED_IN`,t)}catch(t){this._debug(e,`error`,t),er(t)?console.warn(t):console.error(t);return}finally{this._debug(e,`end`)}}async _callRefreshToken(e){var t,n;if(!e)throw new L;if(this.refreshingDeferred)return this.refreshingDeferred.promise;if(this.lastRefreshFailure&&this.lastRefreshFailure.refreshToken===e&&Date.now()<this.lastRefreshFailure.expiresAt)return this._debug(`#_callRefreshToken()`,`returning cached failure (cooldown active)`),this.lastRefreshFailure.result;let r=`#_callRefreshToken()`;this._debug(r,`begin`);try{this.refreshingDeferred=new wr;let t=await H(this.storage,this.storageKey),{data:n,error:i}=await this._refreshAccessToken(e);if(i)throw i;if(!n.session)throw new L;let a=await H(this.storage,this.storageKey);if(t!==null&&(a===null||a.refresh_token!==t.refresh_token)){this._debug(r,`commit guard: storage changed since refresh started, discarding rotated tokens`,{startedWith:`present`,nowHolds:a?`replaced`:`cleared`});let e={data:null,error:new tr};return this.refreshingDeferred.resolve(e),e}let o=this._sessionRemovalEpoch;if(await this._saveSession(n.session),this._sessionRemovalEpoch!==o){this._debug(r,`commit guard (post-save): _removeSession ran during _saveSession, undoing write`),await U(this.storage,this.storageKey),this.userStorage&&await U(this.userStorage,this.storageKey+`-user`);let e={data:null,error:new tr};return this.refreshingDeferred.resolve(e),e}await this._notifyAllSubscribers(`TOKEN_REFRESHED`,n.session);let s={data:n.session,error:null};return this.lastRefreshFailure=null,this.refreshingDeferred.resolve(s),s}catch(i){if(this._debug(r,`error`,i),P(i)){let n={data:null,error:i};if(!er(i)){let e=await H(this.storage,this.storageKey);e?.expires_at&&e.expires_at*1e3>Date.now()?this._debug(r,`proactive refresh failed, access token still valid — preserving session`):await this._removeSession()}return this.lastRefreshFailure={refreshToken:e,result:n,expiresAt:Date.now()+6e4},(t=this.refreshingDeferred)==null||t.resolve(n),n}throw(n=this.refreshingDeferred)==null||n.reject(i),i}finally{this.refreshingDeferred=null,this._debug(r,`end`)}}async _notifyAllSubscribers(e,t,n=!0){if(this._pendingInitNotifications!==null&&n){this._pendingInitNotifications.push({event:e,session:t,broadcast:n});return}let r=`#_notifyAllSubscribers(${e})`;this._debug(r,`begin`,t,`broadcast = ${n}`);try{this.broadcastChannel&&n&&this.broadcastChannel.postMessage({event:e,session:t});let r=[],i=Array.from(this.stateChangeEmitters.values()).map(async n=>{try{await n.callback(e,t)}catch(e){r.push(e)}});if(await Promise.all(i),r.length>0){for(let e=0;e<r.length;e+=1)console.error(r[e]);throw r[0]}}finally{this._debug(r,`end`)}}async _saveSession(e){this._debug(`#_saveSession()`,e),this.suppressGetSessionWarning=!0;let t=Object.assign({},e),n=t.user&&t.user.__isUserNotAvailableProxy===!0;if(this.userStorage){!n&&t.user&&await Cr(this.userStorage,this.storageKey+`-user`,{user:t.user});let e=Object.assign({},t);delete e.user;let r=zr(e);await Cr(this.storage,this.storageKey,r)}else{let e=zr(t);await Cr(this.storage,this.storageKey,e)}}async _removeSession(){this._sessionRemovalEpoch+=1,this._debug(`#_removeSession()`),this.lastRefreshFailure=null,this.suppressGetSessionWarning=!1,await U(this.storage,this.storageKey),await U(this.storage,this.storageKey+`-code-verifier`),await U(this.storage,this.storageKey+`-user`),this.userStorage&&await U(this.userStorage,this.storageKey+`-user`),await this._notifyAllSubscribers(`SIGNED_OUT`,null)}_removeVisibilityChangedCallback(){this._debug(`#_removeVisibilityChangedCallback()`);let e=this.visibilityChangedCallback;this.visibilityChangedCallback=null;try{e&&B()&&window!=null&&window.removeEventListener&&window.removeEventListener(`visibilitychange`,e)}catch(e){console.error(`removing visibilitychange callback failed`,e)}}async _startAutoRefresh(){await this._stopAutoRefresh(),this._debug(`#_startAutoRefresh()`);let e=setInterval(()=>this._autoRefreshTokenTick(),M);this.autoRefreshTicker=e,e&&typeof e==`object`&&typeof e.unref==`function`?e.unref():typeof Deno<`u`&&typeof Deno.unrefTimer==`function`&&Deno.unrefTimer(e);let t=setTimeout(async()=>{await this.initializePromise,await this._autoRefreshTokenTick()},0);this.autoRefreshTickTimeout=t,t&&typeof t==`object`&&typeof t.unref==`function`?t.unref():typeof Deno<`u`&&typeof Deno.unrefTimer==`function`&&Deno.unrefTimer(t)}async _stopAutoRefresh(){this._debug(`#_stopAutoRefresh()`);let e=this.autoRefreshTicker;this.autoRefreshTicker=null,e&&clearInterval(e);let t=this.autoRefreshTickTimeout;this.autoRefreshTickTimeout=null,t&&clearTimeout(t)}async startAutoRefresh(){this._removeVisibilityChangedCallback(),await this._startAutoRefresh()}async stopAutoRefresh(){this._removeVisibilityChangedCallback(),await this._stopAutoRefresh()}async dispose(){var e;this._removeVisibilityChangedCallback(),await this._stopAutoRefresh(),(e=this.broadcastChannel)==null||e.close(),this.broadcastChannel=null,this.stateChangeEmitters.clear()}async _autoRefreshTokenTick(){if(this._debug(`#_autoRefreshTokenTick()`,`begin`),this.lock!=null){try{await this._acquireLock(0,async()=>{try{let e=Date.now();try{return await this._useSession(async t=>{let{data:{session:n}}=t;if(!n||!n.refresh_token||!n.expires_at){this._debug(`#_autoRefreshTokenTick()`,`no session`);return}let r=Math.floor((n.expires_at*1e3-e)/M);this._debug(`#_autoRefreshTokenTick()`,`access token expires in ${r} ticks, a tick lasts ${M}ms, refresh threshold is 3 ticks`),r<=3&&await this._callRefreshToken(n.refresh_token)})}catch(e){console.error(`Auto refresh tick failed with error. This is likely a transient error.`,e)}}finally{this._debug(`#_autoRefreshTokenTick()`,`end`)}})}catch(e){if(e instanceof Qr)this._debug(`auto refresh token tick lock not available`);else throw e}return}if(this.refreshingDeferred!==null){this._debug(`#_autoRefreshTokenTick()`,`refresh already in flight, skipping`);return}try{let e=Date.now();try{await this._useSession(async t=>{let{data:{session:n}}=t;if(!n||!n.refresh_token||!n.expires_at){this._debug(`#_autoRefreshTokenTick()`,`no session`);return}let r=Math.floor((n.expires_at*1e3-e)/M);this._debug(`#_autoRefreshTokenTick()`,`access token expires in ${r} ticks, a tick lasts ${M}ms, refresh threshold is 3 ticks`),r<=3&&await this._callRefreshToken(n.refresh_token)})}catch(e){console.error(`Auto refresh tick failed with error. This is likely a transient error.`,e)}}finally{this._debug(`#_autoRefreshTokenTick()`,`end`)}}async _handleVisibilityChange(){if(this._debug(`#_handleVisibilityChange()`),!B()||!(window!=null&&window.addEventListener))return this.autoRefreshToken&&this.startAutoRefresh(),!1;try{this.visibilityChangedCallback=async()=>{try{await this._onVisibilityChanged(!1)}catch(e){this._debug(`#visibilityChangedCallback`,`error`,e)}},window==null||window.addEventListener(`visibilitychange`,this.visibilityChangedCallback),await this._onVisibilityChanged(!0)}catch(e){console.error(`_handleVisibilityChange`,e)}}async _onVisibilityChanged(e){let t=`#_onVisibilityChanged(${e})`;if(this._debug(t,`visibilityState`,document.visibilityState),document.visibilityState===`visible`){if(this.autoRefreshToken&&this._startAutoRefresh(),!e)if(await this.initializePromise,this.lock!=null)await this._acquireLock(this.lockAcquireTimeout,async()=>{if(document.visibilityState!==`visible`){this._debug(t,`acquired the lock to recover the session, but the browser visibilityState is no longer visible, aborting`);return}await this._recoverAndRefresh()});else{if(document.visibilityState!==`visible`){this._debug(t,`visibilityState is no longer visible, skipping recovery`);return}await this._recoverAndRefresh()}}else document.visibilityState===`hidden`&&this.autoRefreshToken&&this._stopAutoRefresh()}async _getUrlForProvider(e,t,n){let r=[`provider=${encodeURIComponent(t)}`];if(n?.redirectTo&&r.push(`redirect_to=${encodeURIComponent(n.redirectTo)}`),n?.scopes&&r.push(`scopes=${encodeURIComponent(n.scopes)}`),this.flowType===`pkce`){let[e,t]=await W(this.storage,this.storageKey),n=new URLSearchParams({code_challenge:`${encodeURIComponent(e)}`,code_challenge_method:`${encodeURIComponent(t)}`});r.push(n.toString())}if(n?.queryParams){let e=new URLSearchParams(n.queryParams);r.push(e.toString())}return n?.skipBrowserRedirect&&r.push(`skip_http_redirect=${n.skipBrowserRedirect}`),`${e}?${r.join(`&`)}`}async _unenroll(e){try{return await this._useSession(async t=>{let{data:n,error:r}=t;return r?this._returnResult({data:null,error:r}):await J(this.fetch,`DELETE`,`${this.url}/factors/${e.factorId}`,{headers:this.headers,jwt:n?.session?.access_token})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _enroll(e){try{return await this._useSession(async t=>{let{data:n,error:r}=t;if(r)return this._returnResult({data:null,error:r});let i=Object.assign({friendly_name:e.friendlyName,factor_type:e.factorType},e.factorType===`phone`?{phone:e.phone}:e.factorType===`totp`?{issuer:e.issuer}:{}),{data:a,error:o}=await J(this.fetch,`POST`,`${this.url}/factors`,{body:i,headers:this.headers,jwt:n?.session?.access_token});return o?this._returnResult({data:null,error:o}):(e.factorType===`totp`&&a.type===`totp`&&a?.totp?.qr_code&&(a.totp.qr_code=`data:image/svg+xml;utf-8,${a.totp.qr_code}`),this._returnResult({data:a,error:null}))})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _verify(e){let t=async()=>{try{return await this._useSession(async t=>{let{data:n,error:r}=t;if(r)return this._returnResult({data:null,error:r});let i=Object.assign({challenge_id:e.challengeId},`webauthn`in e?{webauthn:Object.assign(Object.assign({},e.webauthn),{credential_response:e.webauthn.type===`create`?hi(e.webauthn.credential_response):gi(e.webauthn.credential_response)})}:{code:e.code}),{data:a,error:o}=await J(this.fetch,`POST`,`${this.url}/factors/${e.factorId}/verify`,{body:i,headers:this.headers,jwt:n?.session?.access_token});return o?this._returnResult({data:null,error:o}):(await this._saveSession(Object.assign({expires_at:Math.round(Date.now()/1e3)+a.expires_in},a)),await this._notifyAllSubscribers(`MFA_CHALLENGE_VERIFIED`,a),this._returnResult({data:a,error:o}))})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}};return this.lock==null?t():this._acquireLock(this.lockAcquireTimeout,t)}async _challenge(e){let t=async()=>{try{return await this._useSession(async t=>{let{data:n,error:r}=t;if(r)return this._returnResult({data:null,error:r});let i=await J(this.fetch,`POST`,`${this.url}/factors/${e.factorId}/challenge`,{body:e,headers:this.headers,jwt:n?.session?.access_token});if(i.error)return i;let{data:a}=i;if(a.type!==`webauthn`)return{data:a,error:null};switch(a.webauthn.type){case`create`:return{data:Object.assign(Object.assign({},a),{webauthn:Object.assign(Object.assign({},a.webauthn),{credential_options:Object.assign(Object.assign({},a.webauthn.credential_options),{publicKey:pi(a.webauthn.credential_options.publicKey)})})}),error:null};case`request`:return{data:Object.assign(Object.assign({},a),{webauthn:Object.assign(Object.assign({},a.webauthn),{credential_options:Object.assign(Object.assign({},a.webauthn.credential_options),{publicKey:mi(a.webauthn.credential_options.publicKey)})})}),error:null}}})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}};return this.lock==null?t():this._acquireLock(this.lockAcquireTimeout,t)}async _challengeAndVerify(e){let{data:t,error:n}=await this._challenge({factorId:e.factorId});return n?this._returnResult({data:null,error:n}):await this._verify({factorId:e.factorId,challengeId:t.id,code:e.code})}async _listFactors(){let{data:{user:e},error:t}=await this.getUser();if(t)return{data:null,error:t};let n={all:[],phone:[],totp:[],webauthn:[]};for(let t of e?.factors??[])n.all.push(t),t.status===`verified`&&n[t.factor_type].push(t);return{data:n,error:null}}async _getAuthenticatorAssuranceLevel(e){if(e)try{let{payload:t}=Tr(e),n=null;t.aal&&(n=t.aal);let r=n,{data:{user:i},error:a}=await this.getUser(e);if(a)return this._returnResult({data:null,error:a});((i?.factors)?.filter(e=>e.status===`verified`)??[]).length>0&&(r=`aal2`);let o=t.amr||[];return{data:{currentLevel:n,nextLevel:r,currentAuthenticationMethods:o},error:null}}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}let{data:{session:t},error:n}=await this.getSession();if(n)return this._returnResult({data:null,error:n});if(!t)return{data:{currentLevel:null,nextLevel:null,currentAuthenticationMethods:[]},error:null};let{payload:r}=Tr(t.access_token),i=null;r.aal&&(i=r.aal);let a=i;(t.user.factors?.filter(e=>e.status===`verified`)??[]).length>0&&(a=`aal2`);let o=r.amr||[];return{data:{currentLevel:i,nextLevel:a,currentAuthenticationMethods:o},error:null}}async _getAuthorizationDetails(e){try{return await this._useSession(async t=>{let{data:{session:n},error:r}=t;return r?this._returnResult({data:null,error:r}):n?await J(this.fetch,`GET`,`${this.url}/oauth/authorizations/${e}`,{headers:this.headers,jwt:n.access_token,xform:e=>({data:e,error:null})}):this._returnResult({data:null,error:new L})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _approveAuthorization(e,t){try{return await this._useSession(async n=>{let{data:{session:r},error:i}=n;if(i)return this._returnResult({data:null,error:i});if(!r)return this._returnResult({data:null,error:new L});let a=await J(this.fetch,`POST`,`${this.url}/oauth/authorizations/${e}/consent`,{headers:this.headers,jwt:r.access_token,body:{action:`approve`},xform:e=>({data:e,error:null})});return a.data&&a.data.redirect_url&&B()&&!t?.skipBrowserRedirect&&window.location.assign(a.data.redirect_url),a})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _denyAuthorization(e,t){try{return await this._useSession(async n=>{let{data:{session:r},error:i}=n;if(i)return this._returnResult({data:null,error:i});if(!r)return this._returnResult({data:null,error:new L});let a=await J(this.fetch,`POST`,`${this.url}/oauth/authorizations/${e}/consent`,{headers:this.headers,jwt:r.access_token,body:{action:`deny`},xform:e=>({data:e,error:null})});return a.data&&a.data.redirect_url&&B()&&!t?.skipBrowserRedirect&&window.location.assign(a.data.redirect_url),a})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _listOAuthGrants(){try{return await this._useSession(async e=>{let{data:{session:t},error:n}=e;return n?this._returnResult({data:null,error:n}):t?await J(this.fetch,`GET`,`${this.url}/user/oauth/grants`,{headers:this.headers,jwt:t.access_token,xform:e=>({data:e,error:null})}):this._returnResult({data:null,error:new L})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _revokeOAuthGrant(e){try{return await this._useSession(async t=>{let{data:{session:n},error:r}=t;return r?this._returnResult({data:null,error:r}):n?(await J(this.fetch,`DELETE`,`${this.url}/user/oauth/grants`,{headers:this.headers,jwt:n.access_token,query:{client_id:e.clientId},noResolveJson:!0}),{data:{},error:null}):this._returnResult({data:null,error:new L})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async fetchJwk(e,t={keys:[]}){let n=t.keys.find(t=>t.kid===e);if(n)return n;let r=Date.now();if(n=this.jwks.keys.find(t=>t.kid===e),n&&this.jwks_cached_at+6e5>r)return n;let{data:i,error:a}=await J(this.fetch,`GET`,`${this.url}/.well-known/jwks.json`,{headers:this.headers});if(a)throw a;return!i.keys||i.keys.length===0||(this.jwks=i,this.jwks_cached_at=r,n=i.keys.find(t=>t.kid===e),!n)?null:n}async getClaims(e,t={}){try{let n=e;if(!n){let{data:e,error:t}=await this.getSession();if(t||!e.session)return this._returnResult({data:null,error:t});n=e.session.access_token}let{header:r,payload:i,signature:a,raw:{header:o,payload:s}}=Tr(n);if(!t?.allowExpired)try{Pr(i.exp)}catch(e){throw new ar(e instanceof Error?e.message:`JWT validation failed`)}let c=!r.alg||r.alg.startsWith(`HS`)||!r.kid||!(`crypto`in globalThis&&`subtle`in globalThis.crypto)?null:await this.fetchJwk(r.kid,t?.keys?{keys:t.keys}:t?.jwks);if(!c){let{error:e}=await this.getUser(n);if(e)throw e;return{data:{claims:i,header:r,signature:a},error:null}}let l=Fr(r.alg),u=await crypto.subtle.importKey(`jwk`,c,l,!0,[`verify`]);if(!await crypto.subtle.verify(l,u,a,gr(`${o}.${s}`)))throw new ar(`Invalid JWT signature`);return{data:{claims:i,header:r,signature:a},error:null}}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async signInWithPasskey(e){K(this.experimental);try{if(!vi())return this._returnResult({data:null,error:new F(`Browser does not support WebAuthn`,null)});let{data:t,error:n}=await this._startPasskeyAuthentication({options:{captchaToken:e?.options?.captchaToken}});if(n||!t)return this._returnResult({data:null,error:n});let{data:r,error:i}=await bi({publicKey:mi(t.options),signal:e?.options?.signal??fi.createNewAbortSignal()});if(i||!r)return this._returnResult({data:null,error:i??new F(`WebAuthn ceremony failed`,null)});let a=gi(r);return this._verifyPasskeyAuthentication({challengeId:t.challenge_id,credential:a})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async registerPasskey(e){K(this.experimental);try{if(!vi())return this._returnResult({data:null,error:new F(`Browser does not support WebAuthn`,null)});let{data:t,error:n}=await this._startPasskeyRegistration();if(n||!t)return this._returnResult({data:null,error:n});let{data:r,error:i}=await yi({publicKey:pi(t.options),signal:e?.options?.signal??fi.createNewAbortSignal()});if(i||!r)return this._returnResult({data:null,error:i??new F(`WebAuthn ceremony failed`,null)});let a=hi(r);return this._verifyPasskeyRegistration({challengeId:t.challenge_id,credential:a})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _startPasskeyRegistration(){K(this.experimental);try{return await this._useSession(async e=>{let{data:{session:t},error:n}=e;if(n)return this._returnResult({data:null,error:n});if(!t)return this._returnResult({data:null,error:new L});let{data:r,error:i}=await J(this.fetch,`POST`,`${this.url}/passkeys/registration/options`,{headers:this.headers,jwt:t.access_token,body:{}});return i?this._returnResult({data:null,error:i}):this._returnResult({data:r,error:null})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _verifyPasskeyRegistration(e){K(this.experimental);try{return await this._useSession(async t=>{let{data:{session:n},error:r}=t;if(r)return this._returnResult({data:null,error:r});if(!n)return this._returnResult({data:null,error:new L});let{data:i,error:a}=await J(this.fetch,`POST`,`${this.url}/passkeys/registration/verify`,{headers:this.headers,jwt:n.access_token,body:{challenge_id:e.challengeId,credential:e.credential}});return a?this._returnResult({data:null,error:a}):this._returnResult({data:i,error:null})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _startPasskeyAuthentication(e){K(this.experimental);try{let{data:t,error:n}=await J(this.fetch,`POST`,`${this.url}/passkeys/authentication/options`,{headers:this.headers,body:{gotrue_meta_security:{captcha_token:e?.options?.captchaToken}}});return n?this._returnResult({data:null,error:n}):this._returnResult({data:t,error:null})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _verifyPasskeyAuthentication(e){K(this.experimental);try{let{data:t,error:n}=await J(this.fetch,`POST`,`${this.url}/passkeys/authentication/verify`,{headers:this.headers,body:{challenge_id:e.challengeId,credential:e.credential},xform:Y});return n?this._returnResult({data:null,error:n}):(t.session&&(await this._saveSession(t.session),await this._notifyAllSubscribers(`SIGNED_IN`,t.session)),this._returnResult({data:t,error:null}))}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _listPasskeys(){K(this.experimental);try{return await this._useSession(async e=>{let{data:{session:t},error:n}=e;if(n)return this._returnResult({data:null,error:n});if(!t)return this._returnResult({data:null,error:new L});let{data:r,error:i}=await J(this.fetch,`GET`,`${this.url}/passkeys`,{headers:this.headers,jwt:t.access_token,xform:e=>({data:e,error:null})});return i?this._returnResult({data:null,error:i}):this._returnResult({data:r,error:null})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _updatePasskey(e){K(this.experimental);try{return await this._useSession(async t=>{let{data:{session:n},error:r}=t;if(r)return this._returnResult({data:null,error:r});if(!n)return this._returnResult({data:null,error:new L});let{data:i,error:a}=await J(this.fetch,`PATCH`,`${this.url}/passkeys/${e.passkeyId}`,{headers:this.headers,jwt:n.access_token,body:{friendly_name:e.friendlyName}});return a?this._returnResult({data:null,error:a}):this._returnResult({data:i,error:null})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}async _deletePasskey(e){K(this.experimental);try{return await this._useSession(async t=>{let{data:{session:n},error:r}=t;if(r)return this._returnResult({data:null,error:r});if(!n)return this._returnResult({data:null,error:new L});let{error:i}=await J(this.fetch,`DELETE`,`${this.url}/passkeys/${e.passkeyId}`,{headers:this.headers,jwt:n.access_token,noResolveJson:!0});return i?this._returnResult({data:null,error:i}):this._returnResult({data:null,error:null})})}catch(e){if(P(e))return this._returnResult({data:null,error:e});throw e}}};Oi.nextInstanceID={};var ki=Oi,Ai=Xr,ji=ki,Mi=class extends ji{constructor(e){super(e)}},Ni=class{constructor(e,t,n){this.supabaseUrl=e,this.supabaseKey=t;let r=Ln(e);if(!t)throw Error(`supabaseKey is required.`);jn(t),this.realtimeUrl=new URL(`realtime/v1`,r),this.realtimeUrl.protocol=this.realtimeUrl.protocol.replace(`http`,`ws`),this.authUrl=new URL(`auth/v1`,r),this.storageUrl=new URL(`storage/v1`,r),this.functionsUrl=new URL(`functions/v1`,r);let i=`sb-${r.hostname.split(`.`)[0]}-auth-token`,a={db:gn,realtime:vn,auth:{..._n,storageKey:i},global:hn,tracePropagation:yn},o=In(n??{},a);this.settings=o,this.storageKey=o.auth.storageKey??``,this.headers=o.global.headers??{},o.accessToken?(this.accessToken=o.accessToken,this.auth=new Proxy({},{get:(e,t)=>{throw Error(`@supabase/supabase-js: Supabase Client is configured with the accessToken option, accessing supabase.auth.${String(t)} is not possible`)}})):this.auth=this._initSupabaseAuthClient(o.auth??{},this.headers,o.global.fetch),this.fetch=Mn(t,e,this._getSessionToken.bind(this),o.global.fetch,o.tracePropagation),this.functionsFetch=Mn(t,e,this._getSessionToken.bind(this),o.global.fetch,o.tracePropagation,{omitApiKeyAsBearer:!0}),this.realtime=this._initRealtimeClient({headers:this.headers,accessToken:this._getAccessToken.bind(this),fetch:this.fetch,...o.realtime}),this.accessToken&&Promise.resolve(this.accessToken()).then(e=>this.realtime.setAuth(e)).catch(e=>console.warn(`Failed to set initial Realtime auth token:`,e)),this.rest=new ce(new URL(`rest/v1`,r).href,{headers:this.headers,schema:o.db.schema,fetch:this.fetch,timeout:o.db.timeout,urlLengthLimit:o.db.urlLengthLimit}),this.storage=new dn(this.storageUrl.href,this.headers,this.fetch,n?.storage),o.accessToken||this._listenForAuthEvents()}get functions(){return new l(this.functionsUrl.href,{headers:this.headers,customFetch:this.functionsFetch})}from(e){return this.rest.from(e)}schema(e){return this.rest.schema(e)}rpc(e,t={},n={head:!1,get:!1,count:void 0}){return this.rest.rpc(e,t,n)}channel(e,t={config:{}}){return this.realtime.channel(e,t)}getChannels(){return this.realtime.getChannels()}removeChannel(e){return this.realtime.removeChannel(e)}removeAllChannels(){return this.realtime.removeAllChannels()}async _getSessionToken(){if(this.accessToken)return await this.accessToken();let{data:e}=await this.auth.getSession();return e.session?.access_token??null}async _getAccessToken(){return await this._getSessionToken()??this.supabaseKey}_initSupabaseAuthClient({autoRefreshToken:e,persistSession:t,detectSessionInUrl:n,storage:r,userStorage:i,storageKey:a,flowType:o,lock:s,debug:c,throwOnError:l,experimental:u,lockAcquireTimeout:d,skipAutoInitialize:f},p,m){let h={Authorization:`Bearer ${this.supabaseKey}`,apikey:`${this.supabaseKey}`};return new Mi({url:this.authUrl.href,headers:{...h,...p},storageKey:a,autoRefreshToken:e,persistSession:t,detectSessionInUrl:n,storage:r,userStorage:i,flowType:o,lock:s,debug:c,throwOnError:l,experimental:u,fetch:m,lockAcquireTimeout:d,skipAutoInitialize:f,hasCustomAuthorizationHeader:Object.keys(this.headers).some(e=>e.toLowerCase()===`authorization`)})}_initRealtimeClient(e){return new pt(this.realtimeUrl.href,{...e,params:{apikey:this.supabaseKey,...e?.params}})}_listenForAuthEvents(){return this.auth.onAuthStateChange((e,t)=>{this._handleTokenChanged(e,`CLIENT`,t?.access_token)})}_handleTokenChanged(e,t,n){(e===`TOKEN_REFRESHED`||e===`SIGNED_IN`||e===`INITIAL_SESSION`)&&this.changedAccessToken!==n?(this.changedAccessToken=n,this.realtime.setAuth(n)):e===`SIGNED_OUT`&&(this.realtime.setAuth(),t==`STORAGE`&&this.auth.signOut(),this.changedAccessToken=void 0)}};let Pi=(e,t,n)=>new Ni(e,t,n);function Fi(){if(typeof window<`u`||globalThis.Deno!==void 0)return!1;let e=globalThis.process;if(!e)return!1;let t=e.version;if(t==null)return!1;let n=t.match(/^v(\d+)\./);return n?parseInt(n[1],10)<=20:!1}return Fi()&&console.warn(`⚠️  Node.js 20 and below are deprecated and will no longer be supported in future versions of @supabase/supabase-js. Please upgrade to Node.js 22 or later. For more information, visit: https://github.com/orgs/supabase/discussions/45715`),e.AuthAdminApi=Ai,e.AuthApiError=Wn,e.AuthClient=ji,e.AuthError=N,e.AuthImplicitGrantRedirectError=Jn,e.AuthInvalidCredentialsError=qn,e.AuthInvalidJwtError=ar,e.AuthInvalidTokenResponseError=R,e.AuthPKCECodeVerifierMissingError=Zn,e.AuthPKCEGrantCodeExchangeError=Xn,e.AuthRefreshDiscardedError=tr,e.AuthRetryableFetchError=$n,e.AuthSessionMissingError=L,e.AuthUnknownError=F,e.AuthWeakPasswordError=rr,e.CustomAuthError=I,Object.defineProperty(e,`FunctionRegion`,{enumerable:!0,get:function(){return c}}),e.FunctionsError=i,e.FunctionsFetchError=a,e.FunctionsHttpError=s,e.FunctionsRelayError=o,e.GoTrueAdminApi=Xr,e.GoTrueClient=ki,e.NavigatorLockAcquireTimeoutError=$r,e.PostgrestError=p,e.REALTIME_CHANNEL_STATES=ot,Object.defineProperty(e,`REALTIME_LISTEN_TYPES`,{enumerable:!0,get:function(){return E}}),Object.defineProperty(e,`REALTIME_POSTGRES_CHANGES_LISTEN_EVENT`,{enumerable:!0,get:function(){return at}}),Object.defineProperty(e,`REALTIME_PRESENCE_LISTEN_EVENTS`,{enumerable:!0,get:function(){return Ke}}),Object.defineProperty(e,`REALTIME_SUBSCRIBE_STATES`,{enumerable:!0,get:function(){return D}}),e.RealtimeChannel=st,e.RealtimeClient=pt,e.RealtimePostgresFilterBuilder=rt,e.RealtimePresence=qe,e.SIGN_OUT_SCOPES=Yr,e.StorageApiError=At,e.SupabaseClient=Ni,e.WebSocketFactory=le,e.createClient=Pi,e.isAuthApiError=Gn,e.isAuthError=P,e.isAuthImplicitGrantRedirectError=Yn,e.isAuthPKCECodeVerifierMissingError=Qn,e.isAuthRefreshDiscardedError=nr,e.isAuthRetryableFetchError=er,e.isAuthSessionMissingError=Kn,e.isAuthWeakPasswordError=ir,e.lockInternals=Z,e.navigatorLock=ti,e.postgresChangesFilter=it,e.processLock=ri,e})({});
 window.MCL64_CLOUD = {"url":"https://goqhiuxpinzltzxbjgug.supabase.co","key":"sb_publishable_MD1h-WEKI5xqWtLEk_OIOA_T-i77YHW"};
 </script>
-<script>window.MCL64_BUILD = {"version":"v0.146","channel":"dev","sha":"8b018ab","branch":"test","at":"2026-11-24 17:57Z"};
+<script>window.MCL64_BUILD = {"version":"v0.174","channel":"dev","sha":"5019170","branch":"HEAD","at":"2026-11-25 10:33Z"};
 (function(){
 "use strict";
 
@@ -4061,23 +4067,34 @@ function buildTrackMeshes(track, scene) {
 
   var group = new THREE.Group();
 
-  group.add(new THREE.Mesh(road.geometry(), new THREE.MeshStandardMaterial({
-    map: texFromCanvas(makeAsphaltTex(), 1, 1), vertexColors: true, roughness: 0.92, metalness: 0.0 })));
-  group.add(new THREE.Mesh(runoff.geometry(), new THREE.MeshStandardMaterial({
-    map: texFromCanvas(makeRunoffTex(), 1, 1), vertexColors: true, roughness: 0.95, metalness: 0.0 })));
+  /* `wet` says what each surface becomes in rain (WET in 34-weather.js);
+     nothing reads it in any other weather */
+  var roadMesh = new THREE.Mesh(road.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeAsphaltTex(), 1, 1), vertexColors: true, roughness: 0.92, metalness: 0.0 }));
+  roadMesh.userData.wet = 'road';
+  group.add(roadMesh);
+  var runoffMesh = new THREE.Mesh(runoff.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeRunoffTex(), 1, 1), vertexColors: true, roughness: 0.95, metalness: 0.0 }));
+  runoffMesh.userData.wet = 'runoff';
+  group.add(runoffMesh);
   
   var grassTexCanvas = track.id === 'monaco-gp-v1' ? makeCityGroundTex() : makeGrassTex();
-  group.add(new THREE.Mesh(grass.geometry(), new THREE.MeshStandardMaterial({
-    map: texFromCanvas(grassTexCanvas, 6, 1), vertexColors: true, roughness: 1.0, metalness: 0.0 })));
+  var grassMesh = new THREE.Mesh(grass.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(grassTexCanvas, 6, 1), vertexColors: true, roughness: 1.0, metalness: 0.0 }));
+  if (track.id === 'monaco-gp-v1') grassMesh.userData.wet = 'pavement';
+  group.add(grassMesh);
 
-  group.add(new THREE.Mesh(kerb.geometry(), new THREE.MeshStandardMaterial({
-    map: texFromCanvas(makeKerbTex(), 1, 1, true), vertexColors: true, roughness: 0.72, metalness: 0.0 })));
+  var kerbMesh = new THREE.Mesh(kerb.geometry(), new THREE.MeshStandardMaterial({
+    map: texFromCanvas(makeKerbTex(), 1, 1, true), vertexColors: true, roughness: 0.72, metalness: 0.0 }));
+  kerbMesh.userData.wet = 'kerb';
+  group.add(kerbMesh);
   group.add(new THREE.Mesh(wall.geometry(), new THREE.MeshStandardMaterial({
     map: texFromCanvas(makeWallTex(), 1, 1), vertexColors: true, roughness: 0.55, metalness: 0.35 })));
   var lineMesh = new THREE.Mesh(line.geometry(), new THREE.MeshStandardMaterial({
     vertexColors: true, roughness: 0.85, metalness: 0.0,
     polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2
   }));
+  lineMesh.userData.wet = 'line';
   group.add(lineMesh);
 
   /* receiveShadow is PER MESH — setting it on the Group does nothing, three.js
@@ -4513,6 +4530,8 @@ function buildScenery(track, scene) {
   return {
     clouds: clouds, ground: cityGround, groundTop: groundTop, treeFeet: placed ? treeFeet / placed : 0,
     setHour: town ? town.setHour : null,
+    /* the track samples under Monaco's tunnel roof, where no rain falls */
+    tunnel: town ? town.tunnel : null,
     farGroundShadow: !town,
     sparseShadows: !!town
   };
@@ -5123,7 +5142,7 @@ function buildMonacoTunnelAndUrbanScenery(track, scene) {
       mats[m].emissive.setRGB(wc[0] * lit, wc[1] * lit, wc[2] * lit);
     }
   }
-  return { setHour: setHour };
+  return { setHour: setHour, tunnel: [tunnelStart, tunnelEnd] };
 }
 
 /* Which windows of Monaco's buildings are lit, as light and not as paint: the
@@ -6262,6 +6281,9 @@ function SkyRig(scene, renderer, sun, hemi, ambient) {
   this.ambient = ambient;
   this.mode = 'dome';
   this.timeOfDay = 'midday';
+  /* one of WEATHER_NAMES (38-tiers.js); the look of each is WEATHER_LOOK in
+     34-weather.js. In 'dome' it is only remembered, as the hour is. */
+  this.weather = 'clear';
   this.north = 0;
   this.circuit = '';
   this.rows = {};
@@ -6302,6 +6324,12 @@ function SkyRig(scene, renderer, sun, hemi, ambient) {
   this.envTarget = null;
   this.pmrem = null;
   this.gain = null;
+  /* the overcast laid over the model's sky for a weather other than clear
+     (see makeSky): a flat colour, how much of the model's own light is kept
+     under it, and how far the sky goes over to it */
+  this.over = null;
+  this.overKeep = null;
+  this.overMix = null;
   /* what SkyMesh's showSunDisc is set to for a race camera and for a long
      lens (see SUN_LONG) */
   this.discFull = 1;
@@ -6324,14 +6352,37 @@ SkyRig.prototype.rowFor = function (name) {
   var base = TIME_OF_DAY[name];
   if (!base) return null;
   var own = (TIME_OF_DAY_AT[this.circuit] || {})[name];
-  if (!own) return base;
+  var look = this.weather !== 'clear' ? WEATHER_LOOK[this.weather] : null;
+  if (!own && !look) return base;
   if (!this.rows[name]) {
     var row = {}, k;
     for (k in base) if (base.hasOwnProperty(k)) row[k] = base[k];
-    for (k in own) if (own.hasOwnProperty(k)) row[k] = own[k];
-    this.rows[name] = row;
+    if (own) for (k in own) if (own.hasOwnProperty(k)) row[k] = own[k];
+    /* and the weather over the circuit's hour: see weatherRow */
+    this.rows[name] = look ? weatherRow(row, look) : row;
   }
   return this.rows[name];
+};
+
+/* One of WEATHER_NAMES. Each hour's row is made again with the weather over
+   it, and under the physical sky the hour is drawn again at once. Under the
+   dome it is only remembered. */
+SkyRig.prototype.setWeather = function (name) {
+  if (!WEATHER_LOOK.hasOwnProperty(name) && name !== 'clear') throw new Error('unknown weather ' + name);
+  if (name === this.weather) return;
+  this.weather = name;
+  this.rows = {};
+  this.drawn = '';
+  if (this.mode === 'physical') this.setTimeOfDay(this.timeOfDay);
+};
+
+/* How fast the model's clouds move. Held at 0 (the clouds stand still) for
+   clear, where it always has been, and for a photo, which must give the same
+   frame every time; set by Game.applyWeather for the other weathers in play.
+   Only the sky that is drawn moves: the environment is drawn once for each
+   hour and would not follow it anyway. */
+SkyRig.prototype.setCloudSpeed = function (v) {
+  if (this.sky) this.sky.cloudSpeed.value = v;
 };
 
 /* Where "ahead" is for the azimuths in TIME_OF_DAY: the direction the cars
@@ -6353,7 +6404,18 @@ SkyRig.prototype.setNorth = function (x, z) {
 SkyRig.prototype.makeSky = function () {
   var T = THREE.TSL;
   var sky = new THREE.SkyMesh();
-  sky.material.colorNode = T.vec4(T.clamp(sky.material.colorNode.rgb.mul(this.gain), 0.0, SUN_DISC), 1.0);
+  var model = sky.material.colorNode.rgb.mul(this.gain);
+  sky.material.colorNode = T.vec4(T.clamp(model, 0.0, SUN_DISC), 1.0);
+  /* THE OVERCAST, for any weather but clear: the model's sky goes most of
+     the way over to one flat colour (this.over, set for each hour by
+     setTimeOfDay), and keeps a share of its own light on top of it. That
+     share is what leaves the clouds a texture and puts a pale smudge where
+     the sun is, warm at dusk. A second node and not a uniform at 0 in the
+     clear node, so that clear draws exactly the shader it always has;
+     useOvercast swaps them. */
+  sky.userData.clearNode = sky.material.colorNode;
+  sky.userData.overNode = T.vec4(T.clamp(
+    T.mix(model, this.over.add(model.mul(this.overKeep)), this.overMix), 0.0, SUN_DISC), 1.0);
   sky.cloudSpeed.value = 0;
   sky.frustumCulled = false;
   sky.renderOrder = -1;
@@ -6363,6 +6425,9 @@ SkyRig.prototype.makeSky = function () {
 SkyRig.prototype.buildPhysical = function () {
   var rig = this;
   this.gain = THREE.TSL.uniform(new THREE.Vector3(1, 1, 1));
+  this.over = THREE.TSL.uniform(new THREE.Vector3(0, 0, 0));
+  this.overKeep = THREE.TSL.uniform(0);
+  this.overMix = THREE.TSL.uniform(0);
 
   /* the sky that is drawn: a box round the camera, pushed to the far plane
      by its own vertex stage, so its size only has to keep the camera inside */
@@ -6478,7 +6543,14 @@ SkyRig.prototype.setTimeOfDay = function (name) {
     skies[i].mieCoefficient.value = row.mieCoefficient;
     skies[i].mieDirectionalG.value = row.mieDirectionalG;
     skies[i].cloudCoverage.value = row.cloud;
+    /* 0.4 is SkyMesh's own figure, which clear has always had */
+    skies[i].cloudDensity.value = row.cloudDensity || 0.4;
     skies[i].sunPosition.value.set(sx, sy, sz);
+    /* the overcast node for a weather, the model's own for clear: a swap
+       builds the material again, which happens on a change of weather and
+       never on a change of hour */
+    var want = row.overcast ? skies[i].userData.overNode : skies[i].userData.clearNode;
+    if (skies[i].material.colorNode !== want) { skies[i].material.colorNode = want; skies[i].material.needsUpdate = true; }
   }
   this.gain.value.set(row.gain * row.tint[0], row.gain * row.tint[1], row.gain * row.tint[2]);
 
@@ -6489,6 +6561,8 @@ SkyRig.prototype.setTimeOfDay = function (name) {
   this.discFull = SUN_DISC / Math.max(
     disc[0] * row.gain * row.tint[0], disc[1] * row.gain * row.tint[1], disc[2] * row.gain * row.tint[2]);
   this.discLong = this.discFull * SUN_DISC_LONG / SUN_DISC;
+  /* under cloud there is no disc to see, only the smudge the overcast keeps */
+  if (row.overcast) this.discFull = this.discLong = 0;
   this.sky.showSunDisc.value = this.discFull;
 
   /* The land in the environment: what the ground sends back up under this
@@ -6514,6 +6588,22 @@ SkyRig.prototype.setTimeOfDay = function (name) {
   this.scene.fog.far = row.haze[1];
   this.sunDir.set(sx, sy, sz);
   var turns = [0.5, 1, 1.5];
+  /* The overcast's flat colour: the brightness of the clear horizon away
+     from the sun, times the weather's own figure, in the weather's own
+     tint. Worked out with the overcast off, then put on, before anything
+     below asks the horizon for a colour. */
+  this.overMix.value = 0;
+  if (row.overcast) {
+    var mean = 0;
+    for (var t0 = 0; t0 < turns.length; t0++) {
+      var h0 = this.horizon(az + turns[t0] * Math.PI);
+      mean += (0.2126 * h0[0] + 0.7152 * h0[1] + 0.0722 * h0[2]) / turns.length;
+    }
+    var ob = mean * row.overBright;
+    this.over.value.set(ob * row.overTint[0], ob * row.overTint[1], ob * row.overTint[2]);
+    this.overKeep.value = row.overKeep;
+    this.overMix.value = row.overcast;
+  }
   this.fogBase[0] = this.fogBase[1] = this.fogBase[2] = 0;
   for (var q = 0; q < turns.length; q++) {
     var c = this.horizon(az + turns[q] * Math.PI);
@@ -6528,7 +6618,14 @@ SkyRig.prototype.setTimeOfDay = function (name) {
 SkyRig.prototype.horizon = function (a) {
   var row = this.row, s = this.sunDir;
   var c = skyLight(Math.sin(a), 0, -Math.cos(a), s.x, s.y, s.z, row);
-  for (var k = 0; k < 3; k++) c[k] = Math.min(c[k] * row.gain * row.tint[k], SKY_CAP);
+  /* the overcast, as the sky's node lays it on (see makeSky) */
+  var m = this.overMix ? this.overMix.value : 0, o = m ? this.over.value : null;
+  var oc = [o ? o.x : 0, o ? o.y : 0, o ? o.z : 0], keep = m ? this.overKeep.value : 0;
+  for (var k = 0; k < 3; k++) {
+    var v = c[k] * row.gain * row.tint[k];
+    if (m) v = v + (oc[k] + v * keep - v) * m;
+    c[k] = Math.min(v, SKY_CAP);
+  }
   return c;
 };
 
@@ -6974,6 +7071,378 @@ ShadowRig.prototype.dispose = function () {
      built (see setMode) */
   this.sun.dispose();
 };
+
+
+/* ===== src/34-weather.js ===== */
+/* =========================================================================
+   MCL-64: the weather, as a look (Ultra only)
+   =========================================================================
+   Cloud and rain are a picture and nothing else. The design's ruling: "Rain
+   in the picture stage is a look, not a condition. It is an Ultra setting,
+   clearly labelled as visual only, with dry grip and the normal board."
+   Nothing in this file is read by the simulation, and nothing here reads a
+   clock: the rain falls by a time the frame loop hands it (Game.render).
+
+   The names are WEATHER_NAMES in 38-tiers.js. Clear is the picture as it
+   was before any of this, and nothing here is built, drawn or set for it. */
+
+/* WHAT EACH WEATHER DOES TO AN HOUR. Laid over the hour's row (TIME_OF_DAY
+   and TIME_OF_DAY_AT in 32-sky.js) by weatherRow, so every hour and every
+   circuit has its own cloudy and its own rain, and a dusk under cloud is
+   still a dusk.
+
+     sunK, skyK, fillK   what the hour's three light strengths are
+                         multiplied by. Cloud cuts the direct sun hard and
+                         spreads it into the sky light and the fill, so the
+                         picture is lit soft and flat with faint shadows.
+     grey, greyMix       how far the colour of the sky light and the fill go
+                         over to a neutral grey: an overcast sky is not blue
+     land                the colour the light from below goes over to
+     cloud, cloudDensity the model's own clouds: cover and how solid
+     overcast            how far the drawn sky goes over to one flat colour
+                         (see makeSky in 32-sky.js)
+     overBright          that colour's brightness, as a share of the clear
+                         horizon's brightness away from the sun at the hour
+     overTint            its colour
+     overKeep            how much of the model's own sky is kept on top, for
+                         the cloud's texture and the smudge where the sun is
+     haze                what the hour's fog start and end are multiplied
+                         by: the air is greyer and nearer
+     windows             what the lit windows of an hour that has them are
+                         multiplied by (setHour in 20-track.js): with the sun
+                         gone they carry the picture
+     cloudSpeed          how fast the model's clouds move in play (never in
+                         a photo)
+     grade               multiplied into the hour's grade (GRADES in
+                         40-game.js): a cooler, greyer finish */
+var WEATHER_LOOK = {
+  cloudy: {
+    sunK: 0.16, skyK: 1.20, fillK: 1.25,
+    grey: [0.84, 0.85, 0.88], greyMix: 0.65, land: [0.40, 0.38, 0.34],
+    cloud: 0.85, cloudDensity: 0.7,
+    overcast: 0.85, overBright: 0.58, overTint: [0.93, 0.97, 1.05], overKeep: 0.20,
+    haze: [0.55, 0.90],
+    windows: 1.3,
+    cloudSpeed: 0.00004,
+    grade: { gain: [0.98, 0.99, 1.03], saturation: 0.84 }
+  },
+  rain: {
+    sunK: 0.03, skyK: 0.55, fillK: 0.60,
+    grey: [0.74, 0.79, 0.88], greyMix: 0.80, land: [0.30, 0.30, 0.30],
+    cloud: 0.95, cloudDensity: 1.0,
+    overcast: 0.95, overBright: 0.30, overTint: [0.88, 0.94, 1.08], overKeep: 0.10,
+    haze: [0.30, 0.70],
+    windows: 2.6,
+    cloudSpeed: 0.00008,
+    grade: { gain: [0.96, 0.98, 1.04], saturation: 0.74 }
+  }
+};
+
+function mix3(a, b, t) {
+  return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+}
+
+/* An hour's row with a weather over it: a new object, the row is not
+   touched. */
+function weatherRow(row, look) {
+  var r = {}, k;
+  for (k in row) if (row.hasOwnProperty(k)) r[k] = row[k];
+  r.sunK = row.sunK * look.sunK;
+  r.skyK = row.skyK * look.skyK;
+  r.fillK = row.fillK * look.fillK;
+  r.sky = mix3(row.sky, look.grey, look.greyMix);
+  r.fill = mix3(row.fill, look.grey, look.greyMix * 0.6);
+  r.land = mix3(row.land, look.land, look.greyMix);
+  r.cloud = look.cloud;
+  r.cloudDensity = look.cloudDensity;
+  r.overcast = look.overcast;
+  r.overBright = look.overBright;
+  r.overTint = look.overTint;
+  r.overKeep = look.overKeep;
+  r.haze = [row.haze[0] * look.haze[0], row.haze[1] * look.haze[1]];
+  if (row.windows) r.windows = row.windows * look.windows;
+  return r;
+}
+
+/* --- the rain that falls ---------------------------------------------------
+
+   ONE DRAW. A single mesh of RAIN_STREAKS thin quads, each a streak of rain,
+   placed in the vertex stage and never touched by the CPU after it is made.
+   Every streak has a fixed point in the world, given by the two uv sets it
+   carries, that falls with time at RAIN.fall metres a second; the stage
+   wraps it into a box round the camera, so the rain is always round the
+   player and stands still in the world as the car drives through it. The
+   quad is turned to face the camera about the line the streak falls along.
+
+   Two layers in the one mesh: the near rain, in a box RAIN.box across, and
+   a soft far veil of longer, fainter streaks, in a box RAIN.far times as
+   big. The near ones fade in from RAIN.near metres, so nothing is drawn
+   across the lens, and both fade out towards the walls of their box, so no
+   streak is seen to jump from one side to the other.
+
+   The positions come from uv sets and not from the position attribute,
+   because the engine's bundle exports uv() and not the node for the
+   position attribute (tools/three-entry.webgpu.js). The position attribute
+   is there only to give the draw its vertex count. */
+var RAIN_STREAKS = 6400;
+var RAIN = {
+  near_share: 0.72,              /* the share of the streaks in the near box */
+  box: [24, 16, 24],             /* the near box, metres: x, y, z */
+  far: 3.5,                      /* the far box is this many times bigger */
+  fall: [1.6, -12.5, 0.9],       /* metres a second: a little slanted */
+  length: 0.85,                  /* metres: what the eye sees in a frame */
+  farLength: 2.6,
+  width: 0.006,                  /* metres, and at least this share of the
+                                    distance, so a far streak is a pixel */
+  widthPerMetre: 0.0016,
+  near: 0.8,                     /* metres from the camera where a streak
+                                    has faded in */
+  alpha: 0.24,                   /* the near streaks */
+  farAlpha: 0.20                 /* the far veil */
+};
+
+function RainRig(scene) {
+  var T = THREE.TSL;
+  this.uTime = T.uniform(0);
+  this.uCam = T.uniform(new THREE.Vector3());
+  this.uColour = T.uniform(new THREE.Vector3(0.5, 0.5, 0.5));
+  this.uAlpha = T.uniform(1);
+
+  var n = RAIN_STREAKS, rnd = mulberry32(31);
+  var pos = new Float32Array(n * 12);
+  var corner = new Float32Array(n * 8), seed = new Float32Array(n * 8), more = new Float32Array(n * 8);
+  var index = [];
+  var cx = [-1, 1, 1, -1], cy = [0, 0, 1, 1];
+  for (var i = 0; i < n; i++) {
+    var sx = rnd(), sy = rnd(), sz = rnd(), layer = i < n * RAIN.near_share ? 0 : 1;
+    for (var v = 0; v < 4; v++) {
+      var o = (i * 4 + v) * 2;
+      corner[o] = cx[v]; corner[o + 1] = cy[v];
+      seed[o] = sx; seed[o + 1] = sz;
+      more[o] = sy; more[o + 1] = layer;
+    }
+    var b = i * 4;
+    index.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  }
+  var g = this.geometry = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('uv', new THREE.BufferAttribute(corner, 2));
+  g.setAttribute('uv1', new THREE.BufferAttribute(seed, 2));
+  g.setAttribute('uv2', new THREE.BufferAttribute(more, 2));
+  g.setIndex(index);
+
+  var at = T.uv(), s = T.uv(1), m = T.uv(2);
+  var layer = m.y;
+  var scale = T.mix(T.float(1.0), T.float(RAIN.far), layer);
+  var box = T.vec3(RAIN.box[0], RAIN.box[1], RAIN.box[2]).mul(scale);
+  var fall = T.vec3(RAIN.fall[0], RAIN.fall[1], RAIN.fall[2]);
+  /* the streak's own point, falling, then wrapped into the box round the
+     camera: fract and not mod, which is the same on both backends for a
+     number below zero */
+  var p = T.vec3(s.x, m.x, s.y).mul(box).add(fall.mul(this.uTime));
+  var rel = p.sub(this.uCam).div(box).fract().sub(0.5).mul(box);
+  /* the box sits a little high: rain is seen falling from above the car */
+  rel = rel.add(T.vec3(0, box.y.mul(0.2), 0));
+  var dir = fall.normalize();
+  var len = T.mix(T.float(RAIN.length), T.float(RAIN.farLength), layer);
+  var dist = rel.length();
+  var width = dist.mul(RAIN.widthPerMetre).max(RAIN.width);
+  var side = dir.cross(rel).normalize();
+  var head = this.uCam.add(rel);
+  /* both sides: which face of a streak is towards the camera depends on
+     which way it is turned, and a streak has no back to hide */
+  this.material = new THREE.MeshBasicNodeMaterial({ transparent: true, depthWrite: false, fog: false, side: THREE.DoubleSide });
+  this.material.positionNode = head.add(dir.mul(len.mul(at.y.sub(1.0)))).add(side.mul(width.mul(at.x)));
+
+  /* how strongly each streak is drawn: faded in near the lens, out towards
+     the walls of its box (on the ground, by its distance across; in the
+     air, by its height), brightest at its head, and a third as strong across
+     its width at the edges so it is a soft line */
+  var across = T.vec2(rel.x, rel.z).length().div(box.x.mul(0.5));
+  var edge = T.float(1.0).sub(across.smoothstep(0.55, 1.0));
+  var up = rel.y.div(box.y.mul(0.5));
+  var high = T.float(1.0).sub(up.abs().smoothstep(0.6, 0.95));
+  var inFront = dist.smoothstep(RAIN.near * 0.4, RAIN.near);
+  var shape = at.y.mul(0.7).add(0.3).mul(T.float(1.0).sub(at.x.abs().mul(0.6)));
+  var strength = T.mix(T.float(RAIN.alpha), T.float(RAIN.farAlpha), layer);
+  /* smoothstep and the rest are methods on a node: the bundle's THREE.TSL
+     carries only the few functions listed in tools/three-entry.webgpu.js */
+  this.material.colorNode = T.vec4(this.uColour, 1.0);
+  this.material.opacityNode = strength.mul(edge).mul(high).mul(inFront).mul(shape).mul(this.uAlpha);
+
+  this.mesh = new THREE.Mesh(g, this.material);
+  this.mesh.frustumCulled = false;
+  /* after everything else that is see through, and never in a shadow */
+  this.mesh.renderOrder = 5;
+  this.mesh.castShadow = false;
+  this.mesh.receiveShadow = false;
+  this.mesh.visible = false;
+  this.mesh.name = 'rain';
+  scene.add(this.mesh);
+}
+
+/* The rain for this frame: where the camera is, how long it has been
+   falling (seconds, from the frame loop), the colour it takes from the light
+   it falls through, and how much of it there is (0 in Monaco's tunnel). */
+RainRig.prototype.place = function (cam, t, colour, amount) {
+  this.uCam.value.copy(cam);
+  this.uTime.value = t;
+  this.uColour.value.copy(colour);
+  this.uAlpha.value = amount;
+};
+
+RainRig.prototype.dispose = function () {
+  if (this.mesh.parent) this.mesh.parent.remove(this.mesh);
+  this.geometry.dispose();
+  this.material.dispose();
+};
+
+/* --- the wet road ----------------------------------------------------------
+
+   The road, the kerbs, the lines and the runoff (and Monaco's pavements) are
+   marked `wet` where they are built (buildTrackMeshes in 20-track.js). In
+   rain each goes darker and far smoother, and the smooth surface takes the
+   grey sky from the environment as a sheen. Puddles are a map of roughness:
+   a soft pattern of patches where the surface is smoother still, and nothing
+   in the geometry. Each wet value is the dry one times the figure here, or
+   the figure itself for roughness; leaving rain puts the dry values back.
+
+     colour      what the surface's colour is multiplied by: wet is darker
+     roughness   the roughness where there is no puddle. The puddle map
+                 takes it down to a fifth of this at the wettest. */
+var WET = {
+  road:     { colour: 0.50, roughness: 0.30 },
+  runoff:   { colour: 0.55, roughness: 0.34 },
+  kerb:     { colour: 0.70, roughness: 0.26 },
+  line:     { colour: 0.75, roughness: 0.28 },
+  pavement: { colour: 0.45, roughness: 0.40 }
+};
+
+/* The puddles: a grey canvas, white for dry and dark where the water lies,
+   which scales the roughness (see WetLook.set). Soft blobs in loose chains
+   along the road, as water stands in the low line of a surface. */
+function makePuddleTex() {
+  var w = 128, h = 256, cv = makeCanvas(w, h), ctx = cv.getContext('2d'), rnd = mulberry32(47);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+  for (var i = 0; i < 46; i++) {
+    var x = rnd() * w, y = rnd() * h, r = 6 + rnd() * 22;
+    var deep = 0.35 + rnd() * 0.45;
+    for (var dx = -1; dx <= 1; dx++) for (var dy = -1; dy <= 1; dy++) {
+      /* drawn nine times over, so a blob at an edge carries on at the
+         opposite edge and the map tiles with no seam */
+      var gx = x + dx * w, gy = y + dy * h;
+      var g = ctx.createRadialGradient(gx, gy, 0, gx, gy, r);
+      g.addColorStop(0, 'rgba(40,40,40,' + deep.toFixed(3) + ')');
+      g.addColorStop(0.6, 'rgba(60,60,60,' + (deep * 0.6).toFixed(3) + ')');
+      g.addColorStop(1, 'rgba(60,60,60,0)');
+      ctx.fillStyle = g;
+      ctx.save();
+      ctx.translate(gx, gy);
+      ctx.scale(0.7, 1.6);
+      ctx.translate(-gx, -gy);
+      ctx.fillRect(gx - r, gy - r, r * 2, r * 2);
+      ctx.restore();
+    }
+  }
+  var t = new THREE.CanvasTexture(cv);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+
+function WetLook(root) {
+  var list = this.list = [];
+  root.traverse(function (o) {
+    var kind = o.userData && o.userData.wet;
+    if (!kind || !o.material || o.material.length) return;
+    var m = o.material;
+    list.push({ m: m, kind: kind, wet: WET[kind], color: m.color.clone() });
+  });
+  this.on = false;
+  this.puddles = null;
+  this.nodes = null;
+}
+
+WetLook.prototype.set = function (on) {
+  if (on === this.on) return;
+  this.on = on;
+  if (on && !this.puddles) {
+    /* The puddles are a roughness node read at the mesh's own uv, one for
+       each kind of surface and kept: across the road once, and along it
+       once every 32 m (the road's v runs one for every 8 m:
+       buildTrackMeshes). Put on only once the page has drawn a frame (see
+       Game.applyWeather). */
+    var T = THREE.TSL;
+    this.puddles = makePuddleTex();
+    var water = T.texture(this.puddles, T.uv().mul(T.vec2(1.0, 0.25))).g;
+    this.nodes = {};
+    for (var kind in WET) if (WET.hasOwnProperty(kind)) this.nodes[kind] = water.mul(WET[kind].roughness);
+  }
+  for (var i = 0; i < this.list.length; i++) {
+    var e = this.list[i], m = e.m;
+    if (on) {
+      m.color.copy(e.color).multiplyScalar(e.wet.colour);
+      m.roughnessNode = this.nodes[e.kind];
+    } else {
+      m.color.copy(e.color);
+      m.roughnessNode = null;
+    }
+    /* a node put on or taken off builds the material again: on a change of
+       weather only */
+    m.needsUpdate = true;
+  }
+};
+
+WetLook.prototype.dispose = function () {
+  this.set(false);
+  if (this.puddles) this.puddles.dispose();
+  this.puddles = null;
+};
+
+/* --- the lights on the wet road ---------------------------------------------
+
+   What makes a wet road look wet is the lights in it: every lamp and lit
+   window seen again in the road, smeared down it towards the camera. There
+   is no reflection of the scene to draw that from, so it is made in the
+   post pass, out of what the bloom has already found bright.
+
+   A pixel below the horizon looks up the bloom at the pixel mirrored about
+   the horizon, which is where a flat wet road shows a thing that is far
+   away, and at WET_SMEAR.taps pixels running from there towards the
+   horizon, less and less of each: so a lamp is drawn again under itself,
+   upside down, and drawn out towards the camera. It is right for anything
+   well away from the camera, and the bloom's blur hides how far it is out
+   for anything near. It fades in over a short way below the horizon, out
+   again towards the foot of the frame, and is given nothing above it.
+
+   The horizon's height in the frame is wetHorizon(), a uniform the frame
+   loop sets from the camera (Game.drawFrame); `bloomTex` is the bloom's
+   texture node, `at` the pixel's uv (origin at the top on this renderer). */
+var WET_SMEAR = { taps: 8, step: 0.014, strength: 0.9 };
+var _wetHorizon = null;
+function wetHorizon() {
+  if (!_wetHorizon) _wetHorizon = THREE.TSL.uniform(0.5);
+  return _wetHorizon;
+}
+
+function wetSmear(bloomTex, at) {
+  var T = THREE.TSL, h = wetHorizon();
+  var below = at.y.sub(h);
+  var mirror = h.sub(below);
+  var sum = T.vec3(0, 0, 0), total = 0;
+  for (var k = 0; k < WET_SMEAR.taps; k++) {
+    var f = k / WET_SMEAR.taps;
+    var w = (1 - f) * (1 - f);
+    total += w;
+    var y = T.clamp(mirror.add(k * WET_SMEAR.step), 0.0, h);
+    sum = sum.add(bloomTex.sample(T.vec2(at.x, y)).rgb.mul(w));
+  }
+  /* in below the horizon, and out again towards the foot of the frame,
+     where the road is under the camera, the mirror is furthest out and the
+     player's own car is drawn */
+  var low = below.smoothstep(0.01, 0.08).mul(T.float(1.0).sub(below.smoothstep(0.22, 0.48)));
+  return sum.mul(WET_SMEAR.strength / total).mul(low);
+}
 
 
 /* ===== src/35-mobile.js ===== */
@@ -7757,25 +8226,22 @@ Cloud.prototype.leaderboard = function (trackVersion, limit) {
 };
 
 
-/* ===== src/40-game.js ===== */
+/* ===== src/38-tiers.js ===== */
 /* =========================================================================
-   MCL-64  —  renderer, HUD, race director, input, main loop
-   ========================================================================= */
-
-/* Fallback only. The live figure is this.track.laps — a circuit sets its own
-   distance, so a 4 km oval is not forced to the same lap count as a 5.5 km
-   road course. Read it via this.laps(). */
-var TOTAL_LAPS = 3;
-var GRID_SIZE = 6;
-var STEP = 1 / 60;
-
-var STATE = { TITLE: 0, COUNTDOWN: 1, RACING: 2, FINISHED: 3 };
+   MCL-64: the picture tiers, and which of them a device is given
+   =========================================================================
+   The table of tiers, the saved settings, the trial a heavy tier is put on
+   and the guard that steps down from it. Nothing in this file touches the
+   page, the renderer or a clock: each function is handed what it needs and
+   answers with what is to be done, so test/tiers.test.js runs all of it in
+   plain node. Game (40-game.js) calls these from its listeners and its
+   frame loop, and carries the answers out. */
 
 /* --- the picture tiers --------------------------------------------------- */
 
 /* ONE TABLE for everything that differs between the tiers. applyQuality and
-   resize read it, and nothing else asks which tier is on. The order of the
-   keys is the order the settings button cycles through.
+   resize read it, and nothing else asks which tier is on. The order the
+   settings button cycles through them is TIER_ORDER, below.
 
      target       'small'  the console's low framebuffer, stretched up
                   'super'  drawn above the display size and scaled down
@@ -7791,9 +8257,9 @@ var STATE = { TITLE: 0, COUNTDOWN: 1, RACING: 2, FINISHED: 3 };
                             which is what main has always had
                   'target'  the size of the render target and no larger
      heavy        true for a tier that not every device is known to hold.
-                  Such a tier is not trusted until it has drawn (see
-                  chooseTier and loadSettings), and is given up for
-                  TIER_SAFE if the frames come too slowly (see watchPace).
+                  Such a tier is not trusted until it has drawn, and is
+                  given up for TIER_SAFE if the frames come too slowly
+                  (see THE RULES below).
 
    Retro and Modern are what main has always drawn, in every field, the two
    layers over the page included: main lays them over both.
@@ -7832,110 +8298,627 @@ var TIERS = {
   }
 };
 
-/* --- a tier is not trusted until it has drawn ---------------------------- */
+/* The order the Graphics button steps through the tiers: Ultra, Modern,
+   Retro, and round to Ultra again. The step from Modern is Retro, so nobody
+   passes through Ultra on the way there (rule R6 below). */
+var TIER_ORDER = ['ultra', 'modern', 'retro'];
 
 /* How long the Graphics button waits after the last click before the tier it
-   shows is built, in milliseconds. The button steps through the tiers in one
-   direction, so the way from Modern to Retro passes Ultra, and Ultra takes
-   seconds to build the first time. With the wait, two quick clicks pass it
-   without building it. */
+   shows is built, in milliseconds. Ultra takes seconds to build the first
+   time, and from Retro the way to Modern passes it. With the wait, two quick
+   clicks pass it without building it. */
 var TIER_SETTLE_MS = 400;
 
-/* The tier a failed heavy tier falls back to, and how many frames a heavy
-   tier has to draw before it is trusted. */
+/* The tier a heavy tier falls back to. */
 var TIER_SAFE = 'modern';
+
+/* =========================================================================
+   WHO IS GIVEN WHICH TIER: THE RULES
+
+   A new player is given Ultra, the heavy tier, on a device nobody has
+   measured. Everything from here to the end of the file exists to make these
+   eight things true, and test/tiers.test.js has a line for each.
+
+   R1  ITS OWN SETTINGS. The live game is on the same origin, so it shares
+       this build's storage, knows only Retro and Modern, and writes its
+       whole settings object on any save. This build keeps its settings
+       under SETTINGS_KEY and never writes SETTINGS_KEY_OLD. Only when there
+       is nothing under SETTINGS_KEY is the old key read, once, and what it
+       holds moved (see WHO STARTS WHERE) and saved under SETTINGS_KEY.
+   R2  A DEVICE THAT CANNOT RUN ULTRA ENDS IN MODERN, by itself, within about
+       10 seconds of screen time, and stays there: whatever the length of
+       its frames, and whether the player waits, reloads, or leaves and
+       comes back.
+   R3  A DEVICE THAT CAN RUN ULTRA NEVER HAS IT TAKEN AWAY BY MISTAKE. None
+       of these counts against it: a page that is hidden, before or during
+       its trial; a graphics device lost while the page is hidden or within
+       TIER_GRACE_MS of its coming back; the slow frames of the load itself;
+       a browser held to 30 frames a second, with the odd frame doubled.
+   R4  EVERY LOAD THAT BUILDS A HEAVY TIER IS ON TRIAL, whoever picked the
+       tier and however often it has run before. And once the trial is
+       passed, a tab the system kills while the page is in view leaves a
+       mark the next load reads as a loss. A tab thrown away in the
+       background leaves none.
+   R5  THE SECOND CHANCE. One loss on a page in view costs the tier one load
+       (that load is in TIER_SAFE, and says so to a player who had picked
+       the tier), and the load after it tries the tier again. A second loss
+       in that load turns the tier off until the player picks it again. The
+       player's own pick on the Graphics button always wins for that load.
+   R6  NOBODY PASSES THROUGH ULTRA ON THE WAY FROM MODERN TO RETRO (see
+       TIER_ORDER). And once the game itself has taken a heavy tier away on
+       this device, a tap on the Graphics button leaves the heavy tiers out
+       until the player has tapped all the way round the others once in
+       that load. After that the button offers Ultra again, where it always
+       was, after Retro. There is no second control: the hint under the row
+       says how (see tierTap).
+   R7  STORAGE THAT IS BLOCKED OR FULL. The game still starts. Nothing it
+       learns can be kept there, so it starts in TIER_SAFE, and the player
+       may pick Ultra by hand for that visit.
+   R8  NONE OF THIS REACHES THE SIMULATION. No function here reads a clock
+       or is called from tick. The frame loop hands the guard its gap.
+
+   HOW: ONE KEY AND ONE TABLE. Everything the game has learned about the
+   heavy tier on this device is in the settings (the tier, `tierChosen`,
+   `tierBarred`) and in one more key, TIER_TRIAL_KEY, which says what the
+   heavy tier was doing when the page was last heard from. A page writes the
+   key at each event in the right hand column, and the load that finds it
+   does what the middle column says.
+
+     the key holds        the load that finds it      written when
+     -------------------  --------------------------  ------------------------
+     (nothing)            builds the saved tier;      a light tier is on; or
+                          a heavy one goes on trial   the page is out of view
+                                                      with its trial passed
+     ultra                the tier did not start:     a page in view starts or
+                          TIER_SAFE, saved, off       resumes a trial (before
+                                                      the tier is built)
+     ultra untried MS     no failure: the tier        a page on trial is
+                          again, on trial, with MS    hidden, left or reloaded
+                          of its time already used    with nothing wrong on it
+     ultra running        a loss: the tab died in     the trial is passed and
+                          view                        the page is in view; or
+                                                      a page is left inside
+                                                      its trial with an error
+                                                      on it
+     ultra lost           a loss: the device went     the graphics device is
+                                                      lost on a page in view
+     ultra again          the tier again, on trial,   a load has just counted
+                          as its second chance        a first loss (it is in
+                                                      TIER_SAFE itself)
+
+   A FIRST LOSS is not saved: the load is in TIER_SAFE and the key becomes
+   'ultra again' (with ' chosen' after it for a tier the player picked,
+   because any setting saved in that load writes the settings out whole with
+   TIER_SAFE in them). The second chance load writes ' twice' after whatever
+   it writes ('ultra running twice', 'ultra lost twice'), and a loss found
+   with that word turns the tier off: TIER_SAFE, saved, `tierBarred`.
+
+   A key that names a heavy tier other than the saved one is dropped. If it
+   says the tier failed, the tier was one the player had clicked to and that
+   died before it was saved: nothing else changes, but it is barred (R6).
+
+   THE TRIAL (R2, R3, R4). A heavy tier is on trial from before it is built
+   until it has drawn TIER_TRIAL_FRAMES frames, PACE.warmMs have passed
+   since it was built, and it has then kept pace for one window of
+   PACE.windowMs (see PACE). It has TIER_TRIAL_MS of screen time to do that
+   in, added up over every load it takes, with no single gap counting for
+   more than TIER_TRIAL_GAP_MS. Only a gap slower than PACE.slowMs is added:
+   an ordinary frame is not evidence of a slow device, and if it counted, a
+   healthy phone left a few times before its trial was over would use the
+   time up and lose the tier. A trial that runs out of time is a device
+   too slow for the tier: TIER_SAFE, saved, barred. Time in a pause, with
+   the page hidden, or while the Graphics button is being clicked through,
+   is not screen time and does not count.
+   ========================================================================= */
 var TIER_TRIAL_FRAMES = 60;
-
-/* THE TRIAL KEY. A heavy tier is built on the player's say so and saved, and
-   a device that cannot hold it may lose its graphics device, or the whole
-   tab, in the frames that follow. The saved tier would then be built again
-   on every load, with no way back short of clearing the site's storage. So
-   the tier's name is written here before it is built and taken away once it
-   has drawn TIER_TRIAL_FRAMES frames; a load that finds it knows the tier
-   never got that far (see loadSettings). What the key holds:
-
-     'ultra'           being tried now. Found at load: it did not start.
-     'ultra lost'      the graphics device was lost while it was on, for
-                       the first time. Found at load: that load is in
-                       TIER_SAFE, and the key becomes 'ultra again'.
-     'ultra again'     one loss behind it, and owed a second chance (with
-                       ' chosen' after it for a tier the player picked).
-                       Found at load: the tier is on again, on trial.
-     'ultra lost twice'  lost again in the load that was its second chance.
-                       Found at load: the tier is off, and saved as off.
-     'ultra untried'   the page was left before the trial was over, and
-                       nothing had gone wrong on it: the game reloaded it
-                       itself (a change of circuit), or the player closed
-                       or reloaded the tab (see leaveTier). Found at load:
-                       no failure, the trial starts again from the first
-                       frame.
-
-   Storage that is blocked reads as no key and writes nothing, which is the
-   game as it was before there was a trial. */
+var TIER_TRIAL_MS = 10000;
+var TIER_TRIAL_GAP_MS = 4000;
+var TIER_GRACE_MS = 5000;
 var TIER_TRIAL_KEY = 'mcl64.tierTrial.v1';
-function tierTrialRead() {
-  try { return window.localStorage ? localStorage.getItem(TIER_TRIAL_KEY) : null; } catch (e) { return null; }
-}
-function tierTrialWrite(value) {
-  try {
-    if (value == null) localStorage.removeItem(TIER_TRIAL_KEY);
-    else localStorage.setItem(TIER_TRIAL_KEY, value);
-  } catch (e) {}
-}
 
-/* ONE LOST DEVICE DOES NOT TURN A TIER OFF FOR GOOD. Devices are lost for
-   reasons that have nothing to do with the tier on the screen: a driver
-   restarts, a browser takes back a context. (Measured in review: headless
-   Chromium lost its context within two seconds of starting in 1 start of
-   3 in Modern, where no heavy tier was on to blame.) So a first loss costs
-   the tier one load and no more: the load after the loss is in TIER_SAFE,
-   and the one after that tries the tier again, on trial. A device that
-   loses it in that load as well has lost it twice running, and the tier is
-   turned off until the player picks it again. The key carries all of it
-   (see above), with the word 'chosen' to say whose tier it was, because
-   any setting saved in the load between writes the settings out whole with
-   TIER_SAFE in them.
-
-   What the player is told when a load finds the key, by how it was left.
-   Only a player who picked the tier is told: one who was given it as the
-   default never asked for it, and comes up in TIER_SAFE with no word. */
+/* What the player is told when a load finds a heavy tier gone, by how it
+   went. Only a player who picked the tier is told: one who was given it as
+   the default never asked for it, and comes up in TIER_SAFE with no word.
+   (Devices are lost for reasons that have nothing to do with the tier on
+   the screen. Measured in review: headless Chromium lost its context within
+   two seconds of starting in 1 start of 3 in Modern, where no heavy tier
+   was on to blame. That is why one loss is not the end of a tier.) */
 var TIER_FELL = {
   failed: 'ULTRA OFF: IT DID NOT START LAST TIME',
-  lost: 'ULTRA OFF: THE GRAPHICS DEVICE WAS LOST'
+  lost: 'ULTRA OFF: THE GRAPHICS DEVICE WAS LOST',
+  died: 'ULTRA OFF: THE PAGE STOPPED LAST TIME'
 };
 
-/* --- stepping down when the device cannot keep up ------------------------ */
+/* --- stepping down when the device cannot keep up ------------------------
 
-/* Ultra is 2.5 to 4.8 times the work of a Modern frame, and every figure
+   Ultra is 2.5 to 4.8 times the work of a Modern frame, and every figure
    there is for it was measured on one fast machine. So the frames of a
-   heavy tier are watched from the first one drawn (Game.watchPace), on the
-   title screen and in the attract demo as well as in a race: Ultra is the
-   tier a new player is given, so a device that cannot hold it has to be
-   found out before the player has done anything. The gap between frames is
-   kept as a running mean over about `meanMs`; when the mean has stood over
-   `slowMs` for `forMs`, the tier is given up for TIER_SAFE.
+   heavy tier are watched (tierPace), on the title screen and in the attract
+   demo as well as in a race.
+
+   THE WARM UP. Nothing is judged until the trial's frames are drawn and
+   `warmMs` have passed since the tier was built: the first frames of a tier
+   build its shaders and its shadow maps, and say nothing of how it runs.
+
+   THE WINDOWS. After that the frames are taken a window of `windowMs` at a
+   time. A window is slow when the mean gap between its frames is over
+   `slowMs`, and no gap feeds the mean more than `gapMs`: one hitch is one
+   hitch, however long it lasted. One window that is not slow passes the
+   trial. Windows slow for `forMs` on end, on trial or long after it, give
+   the tier up for TIER_SAFE. A gap longer than a window is a window by
+   itself, so a device at four seconds a frame is found out in three frames
+   and not in thirty.
 
    WHY 40 ms. It is 25 frames a second. A phone in Low Power Mode, a laptop
    saving energy and a 30 Hz screen all hold the browser to 30 frames a
    second, which is a gap of 33 ms on a device that may be running the tier
-   with time to spare: a healthy device with a cap on it, and Modern would
-   run at the same 30 there. The limit has to stand clear of that, or such
-   a device has the tier taken away on every load for nothing (the limit
-   was 25 ms once, and did exactly that). Under 25 frames a second no cap
-   explains the gap, and the device is a slow one.
+   with time to spare. The limit has to stand clear of that (it was 25 ms
+   once, and took the tier from every such device). Held to 30 with one
+   frame in seven taking two refreshes, the mean is 38 ms and the tier
+   stays; under 25 frames a second no cap explains the gap.
 
-   A gap over `ignoreMs` that stands alone is not a slow frame, it is a
-   change of tab or of tier, and is left out altogether: the first
-   `ignoreRun` of them in a row are. A device that takes that long over
-   every frame is the slowest there is, and the one the guard is most for,
-   so from the next long gap in the row each counts, as `ignoreMs` and no
-   more.
+   IT STEPS DOWN ONCE IN A LOAD (`paceDone`). A player who picks the heavy
+   tier again has chosen it, and is not argued with a second time in that
+   load; the load after it watches again.
 
    PACE_SAID is for the player who picked the tier, and says why it went. A
    player who never picked it is not told anything alarming: the tier
    changes, and a race that is running flashes the name of the new one. */
-var PACE = { slowMs: 40, forMs: 3000, ignoreMs: 250, ignoreRun: 3, meanMs: 500 };
+var PACE = { slowMs: 40, forMs: 3000, windowMs: 1000, gapMs: 100, warmMs: 2000 };
 var PACE_SAID = 'ULTRA TOO SLOW ON THIS DEVICE: NOW MODERN';
+
+/* --- the settings, and where they are kept (R1) -------------------------- */
+
+var SETTINGS_KEY = 'mcl64.settings.v2';
+var SETTINGS_KEY_OLD = 'mcl64.settings.v1';
+
+/* The names settings.weather may hold, in the order the settings button
+   cycles through them. Like the time of day it means something in Ultra
+   only, and it is a look and nothing else: the grip, the lap times and the
+   leaderboard are the same under every one of them. Here and not in
+   40-game.js beside TIME_OF_DAY_NAMES, because settingsTake below checks a
+   saved value against it and test/tiers.test.js runs this file alone. What
+   each one looks like belongs to 34-weather.js. */
+var WEATHER_NAMES = ['clear', 'cloudy', 'rain'];
+
+/* WHO STARTS WHERE, AND WHO KEEPS WHAT. 24 Nov 2026, the owner, having played
+   the Ultra build on his phone: "seems to work.. well we need to default to
+   Ultra Dusk and Monaco as game 1 now". So a player who has never chosen
+   gets the Ultra tier, at dusk, at Monaco (monaco-gp-v1), on a phone as on
+   a desk, on the title screen and for the first race.
+
+   A player who picked a tier, an hour or a circuit keeps it. What was saved
+   before today cannot say which of its values were picked: the whole object
+   is written on any save, a change of music volume included, so it holds
+   the defaults of its day beside the choices. Hence the `defaults` field,
+   which every save from today writes as SETTINGS_DEFAULTS. A saved object
+   without it is from before today, and is read like this, once:
+
+     tier      'modern' was the default, on every device, on main and on
+               every build since (the comment there said Retro; the code
+               said Modern). A saved 'modern' is taken for never chosen and
+               becomes Ultra. 'retro' or 'ultra' was picked, and is kept.
+     circuit   'silverstone-v1' was the default, on every device. A saved
+               Silverstone becomes Monaco; any other circuit is kept.
+     hour      there was none on main, and 'midday' was the default on the
+               builds that had one. None, or midday, becomes dusk; morning
+               or golden was picked, and is kept.
+
+   The object is then saved under SETTINGS_KEY, so this happens once,
+   whatever the live game saves under the old key afterwards, and whatever
+   the player picks from then on is kept, the old defaults included. A
+   player who had truly picked Modern, Silverstone or midday is moved with
+   the rest, once: nothing saved could tell them apart. An object under the
+   old key that does carry the field was saved by an earlier copy of this
+   build, and is taken as it stands.
+
+   `tierChosen` says whether the tier is one the player picked on the
+   Graphics button. The game's own pick is not: the default, and the tier a
+   failed or slow Ultra falls back to. Nobody is told off for a tier they
+   never asked for. `tierBarred` says the game has taken a heavy tier away
+   on this device and the player has not picked it again since (R6). */
+var SETTINGS_DEFAULTS = 2;
+var OLD_DEFAULTS = { quality: 'modern', trackId: 'silverstone-v1', timeOfDay: 'midday' };
+
+/* Copies what a saved object `p` holds into the settings `s`, field by
+   field. `old` is an object from before the defaults changed. */
+function settingsTake(s, p, old) {
+  /* validate each field rather than trusting the blob — a stale or hand
+     edited entry must not be able to wedge the controls */
+  if (typeof p.steerTilt === 'boolean') s.steerTilt = p.steerTilt;
+  if (typeof p.tiltInvert === 'boolean') s.tiltInvert = p.tiltInvert;
+  if (typeof p.autoThrottle === 'boolean') s.autoThrottle = p.autoThrottle;
+  if (typeof p.autoFullscreen === 'boolean') s.autoFullscreen = p.autoFullscreen;
+  if (typeof p.userConfigured === 'boolean') s.userConfigured = p.userConfigured;
+  /* Anything that is not a tier, or not a time of day, keeps the
+     default. So does a value that was the default when an object from
+     before today was saved; any other value in such an object was
+     picked. */
+  if (typeof p.quality === 'string' && TIERS.hasOwnProperty(p.quality) && !(old && p.quality === OLD_DEFAULTS.quality)) {
+    s.quality = p.quality;
+    s.tierChosen = old || p.tierChosen === true;
+  }
+  if (p.tierBarred === true) s.tierBarred = true;
+  if (TIME_OF_DAY_NAMES.indexOf(p.timeOfDay) >= 0 && !(old && p.timeOfDay === OLD_DEFAULTS.timeOfDay)) s.timeOfDay = p.timeOfDay;
+  /* anything that is not a weather keeps the default, which is clear */
+  if (WEATHER_NAMES.indexOf(p.weather) >= 0) s.weather = p.weather;
+  /* Validated against the registry: a stale or hand-edited id must fall
+     back to a real circuit rather than crashing the boot. */
+  if (typeof p.trackId === 'string' && trackById(p.trackId).id === p.trackId && !(old && p.trackId === OLD_DEFAULTS.trackId)) {
+    s.trackId = p.trackId;
+  }
+  /* tiltSens is the old field name — read it so anyone who already set a
+     value keeps it instead of being silently reset to 6 */
+  var sv = (typeof p.steerSens === 'number') ? p.steerSens : p.tiltSens;
+  if (typeof sv === 'number' && isFinite(sv)) s.steerSens = clamp(Math.round(sv), 1, 10);
+  /* 0 is a legitimate value here — silent — so these check isFinite
+     rather than truthiness, or muting a bus would never persist. */
+  if (typeof p.camMode === 'number' && CAM_LABELS[p.camMode]) s.camMode = p.camMode | 0;
+  if (typeof p.musicOn === 'boolean') s.musicOn = p.musicOn;
+  if (typeof p.engineOn === 'boolean') s.engineOn = p.engineOn;
+  if (typeof p.engineVol === 'number' && isFinite(p.engineVol)) s.engineVol = clamp(Math.round(p.engineVol), 0, 10);
+  if (typeof p.musicVol === 'number' && isFinite(p.musicVol)) s.musicVol = clamp(Math.round(p.musicVol), 0, 10);
+}
+
+/* Writes the settings, under SETTINGS_KEY and nowhere else. `store` is
+   storage as get(key) and set(key, value): a value of null takes the key
+   away, and set answers whether the write went through. */
+function settingsWrite(store, s) {
+  s.defaults = SETTINGS_DEFAULTS;
+  return store.set(SETTINGS_KEY, JSON.stringify(s));
+}
+
+/* Whether storage keeps what it is given (R7): one key written, read back
+   and taken away again. */
+function storeKeeps(store) {
+  var probe = TIER_TRIAL_KEY + '.probe';
+  var kept = store.set(probe, '1') === true && store.get(probe) === '1';
+  store.set(probe, null);
+  return kept;
+}
+
+/* WHAT A LOAD DOES, given what storage holds. `s` comes in as the defaults
+   and goes out as the settings of this load. `env.hidden` is whether the
+   page is out of view as it loads. Answers what tierLoad answers. The key
+   is written before the settings, and both before the world is built. */
+function settingsLoad(store, s, env) {
+  /* `first`: nothing was saved under this build's own key, so this is its
+     first load in this browser and the old key is read, this once */
+  var first = false;
+  try {
+    var raw = store.get(SETTINGS_KEY);
+    if (!raw) { first = true; raw = store.get(SETTINGS_KEY_OLD); }
+    if (raw) {
+      var p = JSON.parse(raw);
+      settingsTake(s, p, first && p.defaults !== SETTINGS_DEFAULTS);
+    }
+  } catch (e) { /* blocked storage or corrupt JSON — defaults are fine */ }
+  var t = tierLoad(s, store.get(TIER_TRIAL_KEY), { hidden: env.hidden, works: storeKeeps(store) });
+  store.set(TIER_TRIAL_KEY, t.key);
+  if (first || t.save) settingsWrite(store, s);
+  return t;
+}
+
+/* --- the key, as text ---------------------------------------------------- */
+
+/* Reads the key. Null for no key, a tier that is not heavy, or a word this
+   build does not write. A key with no word after the tier is a trial. */
+function tierKeyParse(text) {
+  if (typeof text !== 'string' || !text) return null;
+  var p = text.split(' ');
+  if (!TIERS.hasOwnProperty(p[0]) || !TIERS[p[0]].heavy) return null;
+  var word = p.length > 1 ? p[1] : 'trying';
+  if (['trying', 'untried', 'running', 'lost', 'again'].indexOf(word) < 0) return null;
+  var ms = word === 'untried' ? parseInt(p[2], 10) : 0;
+  return {
+    tier: p[0], word: word, ms: ms > 0 ? ms : 0,
+    twice: p.indexOf('twice') > 1, chosen: p.indexOf('chosen') > 1
+  };
+}
+function tierHeavyOn(g) { return !!g.tierOn && TIERS[g.tierOn].heavy; }
+function tierUntried(tier, ms, again) { return tier + ' untried ' + Math.round(ms) + (again ? ' twice' : ''); }
+function tierRunning(g) { return g.tierOn + ' running' + (g.tierAgain ? ' twice' : ''); }
+
+/* --- what a page knows, and what each event does to it -------------------
+
+   The fields a page keeps for all of this. Game copies them on to itself,
+   and every function below is handed the Game (or, in the test, a plain
+   object with the same fields and a `settings`). Each answers null for
+   nothing to do, or what is to be done:
+
+     key    what TIER_TRIAL_KEY is to hold now (null takes it away; left
+            out, the key stands)
+     build  the tier in settings.quality is to be put on the screen
+     save   the settings are to be saved
+     say    'slow': tell the player the tier was too slow (PACE_SAID);
+            'quiet': only flash the new tier's name */
+function tierFresh() {
+  return {
+    /* the tier on the screen (applyQuality) */
+    tierOn: null,
+    /* whether that tier is on trial, the frames of the trial still to
+       draw, and the screen time the trial has used, in milliseconds */
+    trialOn: false, trialLeft: 0, trialMs: 0,
+    /* whether this load is the tier's second chance (R5) */
+    tierAgain: false,
+    /* whether the page is out of view: hidden, left, or being reloaded */
+    tierAway: false,
+    /* whether the graphics device has gone, and whether an error nobody
+       caught has been seen on this page */
+    tierGone: false, tierBroke: false,
+    /* whether the game has taken a heavy tier away on this device, so
+       that the Graphics button leaves the heavy tiers out; whether the
+       player has since tapped all the way round the others in this load,
+       so that it offers them again (R6); and why a tier the player picked
+       was given up at load (a name in TIER_FELL) */
+    tierBarred: false, tierRound: false, tierFell: null,
+    /* the guard (see PACE): the tier it last saw, what is left of the
+       warm up, the window being filled (its length, what it feeds the
+       mean, its frames), how long the windows have been slow, and whether
+       this load has already stepped down once */
+    paceTier: null, paceWarm: 0, paceWin: 0, paceFed: 0, paceFrames: 0, paceSlow: 0, paceDone: false
+  };
+}
+
+/* THE LOAD. `s` holds what was saved (or the defaults) and is changed to
+   what this load runs; nothing is on the screen yet. Answers the fields of
+   tierFresh that differ, with `key` and `save`. */
+function tierLoad(s, key, env) {
+  var t = {
+    trialOn: false, trialLeft: 0, trialMs: 0, tierAgain: false, tierAway: false,
+    tierBarred: s.tierBarred === true, tierFell: null, key: null, save: false
+  };
+  var k = tierKeyParse(key);
+  var mine = !!k && k.tier === s.quality;
+  if (k && k.word === 'again') {
+    /* THE SECOND CHANCE: the tier is put back, as the player's own or the
+       game's as it was. Storage may still hold the tier, or TIER_SAFE as
+       the game's pick, which is what a setting saved in the load between
+       leaves there. A player who picked a tier in that load has no such
+       key (tierPick wrote over it), or has `tierChosen` set. */
+    if (mine || (s.quality === TIER_SAFE && !s.tierChosen)) {
+      s.quality = k.tier;
+      s.tierChosen = k.chosen;
+      t.tierAgain = true;
+      t.save = true;
+    }
+  } else if (mine && k.word === 'untried') {
+    t.trialMs = k.ms;
+    t.tierAgain = k.twice;
+  } else if (mine && (k.word === 'lost' || k.word === 'running') && !k.twice) {
+    /* A FIRST LOSS: this load is in TIER_SAFE, and nothing is saved */
+    if (s.tierChosen) t.tierFell = k.word === 'lost' ? 'lost' : 'died';
+    t.key = k.tier + ' again' + (s.tierChosen ? ' chosen' : '');
+    s.quality = TIER_SAFE;
+    s.tierChosen = false;
+    t.tierBarred = true;
+  } else if (mine) {
+    /* IT DID NOT START, OR WAS LOST TWICE RUNNING: off, and saved as off */
+    if (s.tierChosen) t.tierFell = k.word === 'lost' ? 'lost' : (k.word === 'running' ? 'died' : 'failed');
+    s.quality = TIER_SAFE;
+    s.tierChosen = false;
+    s.tierBarred = t.tierBarred = true;
+    t.save = true;
+  } else if (k && k.word !== 'untried') {
+    /* a tier the player clicked to, that died before it was saved */
+    s.tierBarred = t.tierBarred = true;
+    t.save = true;
+  }
+  if (TIERS[s.quality].heavy) {
+    if (!env.works) {
+      /* R7: no trial could be kept, so no heavy tier unless it is picked */
+      s.quality = TIER_SAFE;
+      s.tierChosen = false;
+      t.tierAgain = false;
+      t.trialMs = 0;
+    } else {
+      /* R4: on trial, whoever picked it. A page that loads out of view is
+         not trying the tier yet, and says so (R3). */
+      t.trialOn = true;
+      t.trialLeft = TIER_TRIAL_FRAMES;
+      t.tierAway = !!env.hidden;
+      t.key = t.tierAway ? tierUntried(s.quality, t.trialMs, t.tierAgain) : s.quality;
+    }
+  }
+  return t;
+}
+
+/* THE TRIAL IS PASSED: the tier is trusted, and from here the key says it
+   is running on a page in view (R4). */
+function tierPassed(g) {
+  g.trialOn = false;
+  g.trialLeft = 0;
+  g.trialMs = 0;
+  return { key: tierRunning(g) };
+}
+
+/* THE DEVICE IS TOO SLOW FOR THE TIER (R2): TIER_SAFE, saved as the game's
+   pick and not the player's, and barred. */
+function tierSlow(g) {
+  var chosen = g.settings.tierChosen;
+  g.paceDone = true;
+  g.trialOn = false;
+  g.trialLeft = 0;
+  g.trialMs = 0;
+  g.tierAgain = false;
+  g.settings.quality = TIER_SAFE;
+  g.settings.tierChosen = false;
+  g.settings.tierBarred = g.tierBarred = true;
+  g.tierRound = false;
+  return { key: null, build: true, save: true, say: chosen ? 'slow' : 'quiet' };
+}
+
+/* A FRAME WAS DRAWN. Counts the frames of the trial. With the guard held
+   for the load (`paceDone`) there is no pace to wait for, and the frames
+   alone pass the trial. */
+function tierFrame(g) {
+  if (!g.trialOn || g.tierAway || g.tierGone) return null;
+  if (g.trialLeft > 0) g.trialLeft--;
+  return g.trialLeft === 0 && g.paceDone ? tierPassed(g) : null;
+}
+
+/* THE GUARD: the gap since the frame before, in milliseconds, from the
+   frame loop (see PACE and THE TRIAL). `held` is a pause, a hidden page or
+   a tier clicked to and not yet built: the window starts again, and the
+   time is not screen time. */
+function tierPace(g, gapMs, held) {
+  var heavy = tierHeavyOn(g);
+  if (g.paceTier !== g.tierOn) {
+    g.paceTier = g.tierOn;
+    g.paceWarm = heavy ? PACE.warmMs : 0;
+  }
+  if (held || g.paceDone || g.tierAway || g.tierGone || !heavy) {
+    g.paceWin = g.paceFed = g.paceFrames = g.paceSlow = 0;
+    return null;
+  }
+  if (!(gapMs > 0)) return null;
+  if (g.trialOn && gapMs > PACE.slowMs) g.trialMs += Math.min(gapMs, TIER_TRIAL_GAP_MS);
+  if (g.trialLeft > 0 || g.paceWarm > 0) {
+    g.paceWarm -= gapMs;
+  } else {
+    g.paceWin += gapMs;
+    g.paceFed += Math.min(gapMs, PACE.gapMs);
+    g.paceFrames++;
+    if (g.paceWin >= PACE.windowMs) {
+      var mean = g.paceFed / g.paceFrames;
+      g.paceWin = g.paceFed = g.paceFrames = 0;
+      if (mean <= PACE.slowMs) {
+        g.paceSlow = 0;
+        if (g.trialOn) return tierPassed(g);
+      } else {
+        g.paceSlow += PACE.windowMs;
+        if (g.paceSlow >= PACE.forMs) return tierSlow(g);
+      }
+    }
+  }
+  return g.trialOn && g.trialMs >= TIER_TRIAL_MS ? tierSlow(g) : null;
+}
+
+/* THE PAGE GOES OUT OF VIEW: hidden, left (pagehide), or about to be
+   reloaded by the game. That is not a failure (R3). A tier on trial is
+   marked untried, with the time its trial has used, and a tier that is
+   trusted takes its mark away, so a tab thrown away in the background
+   leaves nothing behind (R4).
+
+   Only a page on which nothing went wrong may say a trial is untried. One
+   that had an error nobody caught leaves the mark of a page that stopped:
+   something did fail there, and the tier may be why, so it is a loss, with
+   a second chance after it like any other (R5). A render that throws on
+   every frame is turned off by the second such load; one stray error on a
+   device that runs the tier well costs it one load. And a page whose
+   device has gone has said what it has to say (tierDeviceLost). */
+function tierOut(g) {
+  if (g.tierAway) return null;
+  g.tierAway = true;
+  if (g.tierGone || !tierHeavyOn(g)) return null;
+  if (!g.trialOn) return { key: null };
+  return { key: g.tierBroke ? tierRunning(g) : tierUntried(g.tierOn, g.trialMs, g.tierAgain) };
+}
+
+/* THE PAGE IS IN VIEW AGAIN (visibilitychange, or pageshow for a page the
+   browser kept). The key says once more what the tier is doing. */
+function tierBack(g) {
+  if (!g.tierAway) return null;
+  g.tierAway = false;
+  if (g.tierGone || !tierHeavyOn(g)) return null;
+  return { key: g.trialOn ? g.tierOn : tierRunning(g) };
+}
+
+/* THE GRAPHICS DEVICE HAS GONE. `hidden` is whether the page is out of
+   view, `sinceMs` how long ago it last came back into view (Infinity for a
+   page that never left). A device taken from a page in the background, or
+   found gone as the page comes back, says nothing about the tier (R3): the
+   key is left as a page out of view leaves it. On a page in view it is a
+   loss, the first or the second running (R5). */
+function tierDeviceLost(g, hidden, sinceMs) {
+  g.tierGone = true;
+  if (!tierHeavyOn(g)) return null;
+  if (hidden || g.tierAway || sinceMs < TIER_GRACE_MS) {
+    return { key: g.trialOn ? tierUntried(g.tierOn, g.trialMs, g.tierAgain) : null };
+  }
+  return { key: g.tierOn + ' lost' + (g.tierAgain ? ' twice' : '') };
+}
+
+/* THE PLAYER HAS PICKED THE TIER IN settings.quality (the clicks on the
+   Graphics button have stopped). A heavy tier goes on trial before it is
+   built: the key is in storage first, so a build that takes the tab down
+   with it leaves the key behind. The pick is the player's own from here
+   on, a heavy tier picked is no longer barred (and one that is taken away
+   after this has to be tapped round to afresh), and whatever second chance
+   was owed is forgotten: the key is written over. */
+function tierPick(g) {
+  var name = g.settings.quality, heavy = TIERS[name].heavy;
+  var o = { save: true };
+  if (name !== g.tierOn) {
+    g.trialOn = heavy;
+    g.trialLeft = heavy ? TIER_TRIAL_FRAMES : 0;
+    g.trialMs = 0;
+    g.tierAgain = false;
+    /* (a click whose wait ran out after the page was hidden is not in
+       view, and its key says so) */
+    o.key = !heavy ? null : (g.tierAway ? tierUntried(name, 0, false) : name);
+    o.build = true;
+  }
+  g.settings.tierChosen = true;
+  if (heavy) g.settings.tierBarred = g.tierBarred = g.tierRound = false;
+  return o;
+}
+
+/* THE GRAPHICS BUTTON (R6). tierTaps is the tiers a tap steps through, in
+   order: all of them, or the light ones only while the heavy ones are
+   barred and the player has not yet been all the way round.
+
+   tierTap is one tap: it answers the tier the button is to show next. A tap
+   that comes round to the start of the order with a heavy tier left out is
+   the player having been all the way round (`tierRound`), and from then on
+   the taps of that load take in every tier. So on a device the game took
+   Ultra away from, starting in Modern: Retro, Modern, Retro, and only then
+   Ultra. Nobody gets there with one tap, or with two, and nobody is shut
+   out of it either. The load after starts the count again, for as long as
+   the tier is barred.
+
+   tierHint is which line the hint under the row adds to say so: 'round'
+   while the heavy tiers are left out, 'offered' once they are back in the
+   order and one is still barred, and null when nothing is barred or a
+   heavy tier is the one on the button. */
+function tierTaps(g) {
+  var out = [];
+  for (var i = 0; i < TIER_ORDER.length; i++) {
+    if (!(g.tierBarred && !g.tierRound && TIERS[TIER_ORDER[i]].heavy)) out.push(TIER_ORDER[i]);
+  }
+  return out;
+}
+function tierTap(g) {
+  var names = tierTaps(g);
+  var i = names.indexOf(g.settings.quality) + 1;
+  if (i >= names.length) {
+    i = 0;
+    if (g.tierBarred) g.tierRound = true;
+  }
+  return names[i];
+}
+function tierHint(g) {
+  if (!g.tierBarred || TIERS[g.settings.quality].heavy) return null;
+  return g.tierRound ? 'offered' : 'round';
+}
+
+
+/* ===== src/40-game.js ===== */
+/* =========================================================================
+   MCL-64  —  renderer, HUD, race director, input, main loop
+   ========================================================================= */
+
+/* Fallback only. The live figure is this.track.laps — a circuit sets its own
+   distance, so a 4 km oval is not forced to the same lap count as a 5.5 km
+   road course. Read it via this.laps(). */
+var TOTAL_LAPS = 3;
+var GRID_SIZE = 6;
+var STEP = 1 / 60;
+
+var STATE = { TITLE: 0, COUNTDOWN: 1, RACING: 2, FINISHED: 3 };
+
+/* The picture tiers (TIERS), and everything that decides which of them a
+   device is given, are in 38-tiers.js. */
 
 /* The names settings.timeOfDay may hold, in the order the settings button
    cycles through them. Only the names live here: what each one looks like
@@ -8102,6 +9085,9 @@ function buildPostNode(frame, uRes, uFade, retro, full) {
     var c = T.texture(frame, vUv).rgb;
 
     if (full) c = c.add(T.vec4(full.bloom).rgb).mul(full.uGain);
+    /* rain only: the lights smeared down the wet road (wetSmear in
+       34-weather.js), in light, before the tone map, as the bloom is */
+    if (full && full.wet) c = c.add(wetSmear(full.bloom.getTextureNode(), vUv).mul(full.uGain));
 
     /* Modern: ACES, with the exposure read from renderer.toneMappingExposure.
        The colour space argument is the working space, so renderOutput tone
@@ -8171,29 +9157,14 @@ function Game(host, renderer) {
   /* a line for the player that is not part of the race (see notify) */
   this.notice = '';
   this.noticeT = 0;
-  /* the tier that is on the screen (applyQuality), the timer of a tier that
-     has been clicked to and not yet built, the frames a heavy tier still has
-     to draw before it is trusted, and why a tier the player picked was given
-     up at load (see chooseTier and loadSettings) */
-  this.tierOn = null;
+  /* What this page knows about its tier (tierFresh in 38-tiers.js lists the
+     fields), the timer of a tier that has been clicked to and not yet
+     built (see chooseTier), and when the page last came back into view,
+     on the clock of performance.now() (null for a page that never left) */
+  var fresh = tierFresh();
+  for (var field in fresh) if (fresh.hasOwnProperty(field)) this[field] = fresh[field];
   this.tierTimer = null;
-  this.trialLeft = 0;
-  this.tierFell = null;
-  /* whether a heavy tier has one lost device behind it already, so that a
-     loss in this load is the second running (see TIER_FELL) */
-  this.tierAgain = false;
-  /* whether something has gone wrong on this page that the tier on the
-     screen may be to blame for: a lost graphics device, or an error nobody
-     caught (see leaveTier) */
-  this.tierBroke = false;
-  /* the running mean of the frame gap in a heavy tier, how long it has
-     stood over the limit, both in milliseconds, how many gaps too long to
-     be a frame have come in a row, and whether this load has already
-     stepped down once (see watchPace) */
-  this.paceMean = 0;
-  this.paceSlow = 0;
-  this.paceLong = 0;
-  this.paceDone = false;
+  this.shownAt = null;
   /* OFF to start. The halo is the one part of the car that sits between the
      camera and the driver, and the onboard mounts are framed through it — so
      the first thing anyone sees is the shot without a bar across it, and H
@@ -8316,9 +9287,18 @@ Game.prototype.buildRenderer = function (renderer) {
 
    What the last call built is taken down first: the old target, and the
    bloom node with the eleven small targets and seven materials it owns. */
-Game.prototype.buildTarget = function (modern, full) {
+Game.prototype.buildTarget = function (modern, full, wet) {
   full = !!full;
-  if (this.rt && this.rtModern === modern && this.rtFull === full) return;
+  /* `wet`: rain, in Ultra only. It changes the post node and nothing else,
+     so the target and the bloom are kept and only the node is built again */
+  wet = full && !!wet;
+  if (this.rt && this.rtModern === modern && this.rtFull === full) {
+    if (this.rtWet === wet) return;
+    this.rtWet = wet;
+    this.buildPostNodeNow();
+    return;
+  }
+  this.rtWet = wet;
   if (this.rt) this.rt.dispose();
   if (this.bloom) { this.bloom.dispose(); this.bloom = null; }
   this.rtModern = modern;
@@ -8331,7 +9311,7 @@ Game.prototype.buildTarget = function (modern, full) {
     colorSpace: modern ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace,
     depthBuffer: true, stencilBuffer: false
   });
-  var extra = null;
+  this.postExtra = null;
   if (full) {
     this.bloom = THREE.bloom(THREE.TSL.texture(this.rt.texture), BLOOM.strength, BLOOM.radius, BLOOM.threshold);
     /* The node draws its targets "before" the pass that uses it, and by
@@ -8339,19 +9319,71 @@ Game.prototype.buildTarget = function (modern, full) {
        photo draws a frame whenever it is called, which need not be once for
        each of those, and a still must never carry the glow of the frame
        before it. 'render' is the engine's NodeUpdateType.RENDER (the bundle
-       does not export the name): once for every draw of the post pass. */
+       does not export the name): once for every draw of the post pass.
+       The shadow maps follow the same count and have no such switch, so
+       photo waits for the count to move before it draws (see photo). */
     this.bloom.updateBeforeType = 'render';
     this.bloom.highPassFn = bloomHighPass;
-    extra = { bloom: this.bloom, uGain: this.postU.uGain, uLift: this.postU.uLift, uSat: this.postU.uSat };
+    this.postExtra = { bloom: this.bloom, uGain: this.postU.uGain, uLift: this.postU.uLift, uSat: this.postU.uSat };
   }
-  this.postMat.fragmentNode = buildPostNode(this.rt.texture, this.postU.uRes, this.postU.uFade, !modern, extra);
+  this.buildPostNodeNow();
+};
+
+/* The post node for the target buildTarget holds, wet or not. */
+Game.prototype.buildPostNodeNow = function () {
+  var extra = this.postExtra;
+  if (extra) extra.wet = this.rtWet;
+  this.postMat.fragmentNode = buildPostNode(this.rt.texture, this.postU.uRes, this.postU.uFade, !this.rtModern, extra);
   this.postMat.needsUpdate = true;
 };
 
 /* The two draws of a frame: the scene into the target, then the post pass
    on to the canvas. The renderer clears the target by itself before the
-   first. `fade` is 1 for a full picture and 0 for black. */
+   first. `fade` is 1 for a full picture and 0 for black.
+
+   THE FIRST FRAME OF A TIER BUILDS ALL OF IT (`buildAll`, set by
+   applyQuality). The engine makes a material's shader and pipeline, and each
+   object's own share of them, in the first frame that draws the object, and
+   it draws only what the camera can see. Left to that, a tier is built a
+   piece at a time: the title's first cut to a camera in another part of the
+   town, or the first run into Monaco's tunnel, stops the picture while the
+   pieces it needs are made, for half a second and more on a phone.
+
+   So that one frame is drawn with nothing culled. Every visible object goes
+   through the main pass and through each shadow map's pass, and everything
+   is built there: under the loading panel at boot (see boot), and in the
+   frame a change of tier stalls on already. What is out of view leaves no
+   pixel, so the frame is the picture it would have been. An object that is
+   hidden at the time (`visible` false) is still built when it is first shown.
+
+   The engine's own compileAsync does not do this, read in 0.187: it culls
+   with the camera exactly as a frame does (StandardDrawingPipeline.project),
+   and it leaves the shadow maps out (ShadowNode.updateBefore returns at once
+   during a precompile), so the cascades' depth passes are not built by it.
+   An engine update has to look at both again. */
 Game.prototype.drawFrame = function (fade) {
+  if (this.buildAll) {
+    this.buildAll = false;
+    var lifted = [];
+    this.scene.traverse(function (o) {
+      if (o.frustumCulled) { o.frustumCulled = false; lifted.push(o); }
+    });
+    try {
+      this.drawFrame(fade);
+    } finally {
+      for (var li = 0; li < lifted.length; li++) lifted[li].frustumCulled = true;
+    }
+    return;
+  }
+  if (this.rain && this.rain.mesh.visible) this.placeRain();
+  /* the horizon's height in the frame, for the lights in the wet road
+     (wetSmear in 34-weather.js): from how far the camera looks up or down */
+  if (this.rtWet) {
+    var ce = this.camera.matrixWorld.elements;
+    this.camera.updateMatrixWorld();
+    var up = clamp(-ce[9], -0.99, 0.99);
+    wetHorizon().value = 0.5 + Math.tan(Math.asin(up)) / (2 * Math.tan(this.camera.fov * Math.PI / 360));
+  }
   this.renderer.setRenderTarget(this.rt);
   this.renderer.render(this.scene, this.camera);
   this.renderer.setRenderTarget(null);
@@ -8363,8 +9395,21 @@ Game.prototype.drawFrame = function (fade) {
     this.postU.uGain.value.set(grade.gain[0], grade.gain[1], grade.gain[2]);
     this.postU.uLift.value.set(grade.lift[0], grade.lift[1], grade.lift[2]);
     this.postU.uSat.value = grade.saturation;
+    /* and the weather's finish over the hour's (WEATHER_LOOK in 34-weather.js) */
+    var look = WEATHER_LOOK[this.weatherNow()];
+    if (look) {
+      this.postU.uGain.value.multiply(_weatherGain.set(look.grade.gain[0], look.grade.gain[1], look.grade.gain[2]));
+      this.postU.uSat.value *= look.grade.saturation;
+    }
   }
   this.postQuad.render(this.renderer);
+  this.drewOnce = true;
+  /* the wet road of a page that loaded in rain: see applyWeather */
+  if (this.wetLater != null) {
+    var wet = this.wetLater;
+    this.wetLater = null;
+    this.wetLook.set(wet);
+  }
 };
 
 /* The post pass for a tier: TIERS[...].post, 'retro' | 'grade' | 'full'.
@@ -8373,7 +9418,7 @@ Game.prototype.drawFrame = function (fade) {
    of the tone map and a grade for the time of day behind it. buildTarget
    takes down what the last mode built. */
 Game.prototype.applyPostMode = function (mode) {
-  this.buildTarget(mode !== 'retro', mode === 'full');
+  this.buildTarget(mode !== 'retro', mode === 'full', this.weatherNow() === 'rain');
   /* the lit start lights are brighter under the full pass: see setLights */
   if (this.gantry) this.setLights(this.lightsLit || 0);
 };
@@ -8404,8 +9449,10 @@ Game.prototype.applySkyMode = function (mode) {
   var t = this.track, a = t.p[t.startIndex], b = t.p[(t.startIndex + 1) % t.n];
   this.skyRig.setNorth(b.x - a.x, b.z - a.z);
   this.skyRig.setCircuit(t.id);
-  /* the hour first, so that a rig coming up from the dome draws its
-     environment once, for the right hour */
+  /* the weather and the hour first, so that a rig coming up from the dome
+     draws its environment once, for the right hour in the right weather.
+     Under the dome there is no weather (see weatherNow). */
+  this.skyRig.setWeather(mode === 'physical' ? this.settings.weather : 'clear');
   this.skyRig.setTimeOfDay(this.settings.timeOfDay);
   this.skyRig.setMode(mode);
   /* applyHaze has just written the dome's haze: see SkyRig.takeFog */
@@ -8633,7 +9680,8 @@ Game.prototype.buildWorld = function () {
   /* Each circuit brings its own score; absent or unknown falls back to the
      original theme, so a new circuit needs no music work to ship. */
   this.audio.setMusicTheme(this.track.def.music);
-  buildTrackMeshes(this.track, scene);
+  /* kept for the wet road (WetLook in 34-weather.js) */
+  this.trackGroup = buildTrackMeshes(this.track, scene);
   this.gantry = buildStartGantry(this.track, scene);
   this.scenery = buildScenery(this.track, scene);
   /* what the camera drags along with it: the rig's dome, and its physical sky */
@@ -8797,9 +9845,10 @@ Game.prototype.resetRace = function (toTitle) {
   this.countdown = 0;
   this.state = toTitle ? STATE.TITLE : STATE.COUNTDOWN;
   if (toTitle) { this.demoShot = 0; this.demoT = 99; this.demoCar = this.cars[1]; }
-  /* A circuit with an opening shot starts on it, from its first frame: see
-     TITLE_OPENING. The cars are placed and driven exactly as they were. */
-  this.demoOpen = (toTitle && TITLE_OPENING[t.id]) || null;
+  /* A circuit with an opening shot starts on it, from its first frame, while
+     the sky is the physical one: see TITLE_OPENING. The cars are placed and
+     driven exactly as they were. */
+  this.demoOpen = (toTitle && this.skyRig.mode === 'physical' && TITLE_OPENING[t.id]) || null;
   if (this.demoOpen) { this.demoT = 0; this.demoCar = this.cars[this.demoOpen.car]; }
   this.setLights(0);
   this.updateCamera(0, true);
@@ -8975,8 +10024,7 @@ Game.prototype.bindInput = function () {
   var qualitySet = document.getElementById('set-quality');
   if (qualitySet) qualitySet.addEventListener('click', function (e) {
     e.preventDefault();
-    var names = self.tierCycle();
-    self.chooseTier(names[(names.indexOf(self.settings.quality) + 1) % names.length]);
+    self.chooseTier(tierTap(self));
   });
 
   var todSet = document.getElementById('set-tod');
@@ -8986,6 +10034,15 @@ Game.prototype.bindInput = function () {
     self.setTimeOfDay(TIME_OF_DAY_NAMES[(i + 1) % TIME_OF_DAY_NAMES.length]);
     self.applySettings();
     self.flash(self.settings.timeOfDay.toUpperCase());
+  });
+
+  var weatherSet = document.getElementById('set-weather');
+  if (weatherSet) weatherSet.addEventListener('click', function (e) {
+    e.preventDefault();
+    var i = WEATHER_NAMES.indexOf(self.settings.weather);
+    self.setWeather(WEATHER_NAMES[(i + 1) % WEATHER_NAMES.length]);
+    self.applySettings();
+    self.flash(self.settings.weather.toUpperCase());
   });
 
   var autoFsSet = document.getElementById('set-autofs');
@@ -9532,7 +10589,21 @@ Game.prototype.playerInput = function (dt) {
    The chrome button and the settings panel are two views of ONE state, so
    changing either has to end up calling applySettings(). */
 
-var SETTINGS_KEY = 'mcl64.settings.v2';
+/* Where the settings are kept, and who starts where, is in 38-tiers.js
+   (SETTINGS_KEY, settingsLoad). This is storage as those functions take it:
+   a browser that refuses storage reads as empty and keeps nothing. */
+var STORE = {
+  get: function (key) {
+    try { return window.localStorage ? localStorage.getItem(key) : null; } catch (e) { return null; }
+  },
+  set: function (key, value) {
+    try {
+      if (value == null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+      return true;
+    } catch (e) { return false; }
+  }
+};
 
 /* ---- one sensitivity, three meanings -----------------------------------
    Each input type needs a different knob turned, but the player should only
@@ -9563,41 +10634,6 @@ function applyExpo(v, k) {
   return sign(v) * Math.pow(Math.abs(v), k);
 }
 
-/* WHO STARTS WHERE, AND WHO KEEPS WHAT. 24 Nov 2026, the owner, having played
-   the Ultra build on his phone: "seems to work.. well we need to default to
-   Ultra Dusk and Monaco as game 1 now". So a player who has never chosen
-   gets the Ultra tier, at dusk, at Monaco (monaco-gp-v1), on a phone as on
-   a desk, on the title screen and for the first race.
-
-   A player who picked a tier, an hour or a circuit keeps it. What was saved
-   before today cannot say which of its values were picked: the whole object
-   is written on any save, a change of music volume included, so it holds
-   the defaults of its day beside the choices. Hence the `defaults` field,
-   which every save from today writes as SETTINGS_DEFAULTS. A saved object
-   without it is from before today, and is read like this, once:
-
-     tier      'modern' was the default, on every device, on main and on
-               every build since (the comment there said Retro; the code
-               said Modern). A saved 'modern' is taken for never chosen and
-               becomes Ultra. 'retro' or 'ultra' was picked, and is kept.
-     circuit   'silverstone-v1' was the default, on every device. A saved
-               Silverstone becomes Monaco; any other circuit is kept.
-     hour      there was none on main, and 'midday' was the default on the
-               builds that had one. None, or midday, becomes dusk; morning
-               or golden was picked, and is kept.
-
-   The object is then saved, with the field, so that this happens once and
-   whatever the player picks afterwards is kept, the old defaults included.
-   A player who had truly picked Modern, Silverstone or midday is moved with
-   the rest, once: nothing saved could tell them apart.
-
-   `tierChosen` says whether the tier is one the player picked on the
-   Graphics button. The game's own pick is not: the default, and the tier a
-   failed or slow Ultra falls back to. Nobody is told off for a tier they
-   never asked for (see watchPace and TIER_FELL). */
-var SETTINGS_DEFAULTS = 2;
-var OLD_DEFAULTS = { quality: 'modern', trackId: 'silverstone-v1', timeOfDay: 'midday' };
-
 Game.prototype.loadSettings = function () {
   /* Phones default to auto throttle: one thumb cannot hold the gas and steer
      accurately at the same time. Tilt deliberately stays OFF — switching it on
@@ -9620,125 +10656,21 @@ Game.prototype.loadSettings = function () {
     camMode: 0,
     autoThrottle: touchLikely(),
     autoFullscreen: true,
-    /* see WHO STARTS WHERE above */
+    /* see WHO STARTS WHERE in 38-tiers.js */
     quality: 'ultra',
     tierChosen: false,
+    tierBarred: false,
     timeOfDay: 'dusk',
     trackId: 'monaco-gp-v1',
+    weather: 'clear',
     defaults: SETTINGS_DEFAULTS,
     userConfigured: false
   };
-  /* whether storage held settings at all, and whether they were saved before
-     today's defaults */
-  var found = false, old = false;
-  try {
-    var raw = window.localStorage ? localStorage.getItem(SETTINGS_KEY) : null;
-    if (raw) {
-      var p = JSON.parse(raw);
-      old = p.defaults !== SETTINGS_DEFAULTS;
-      /* validate each field rather than trusting the blob — a stale or hand
-         edited entry must not be able to wedge the controls */
-      if (typeof p.steerTilt === 'boolean') s.steerTilt = p.steerTilt;
-      if (typeof p.tiltInvert === 'boolean') s.tiltInvert = p.tiltInvert;
-      if (typeof p.autoThrottle === 'boolean') s.autoThrottle = p.autoThrottle;
-      if (typeof p.autoFullscreen === 'boolean') s.autoFullscreen = p.autoFullscreen;
-      if (typeof p.userConfigured === 'boolean') s.userConfigured = p.userConfigured;
-      /* Anything that is not a tier, or not a time of day, keeps the
-         default. So does a value that was the default when an object from
-         before today was saved; any other value in such an object was
-         picked. */
-      if (typeof p.quality === 'string' && TIERS.hasOwnProperty(p.quality) && !(old && p.quality === OLD_DEFAULTS.quality)) {
-        s.quality = p.quality;
-        s.tierChosen = old || p.tierChosen === true;
-      }
-      if (TIME_OF_DAY_NAMES.indexOf(p.timeOfDay) >= 0 && !(old && p.timeOfDay === OLD_DEFAULTS.timeOfDay)) s.timeOfDay = p.timeOfDay;
-      /* Validated against the registry: a stale or hand-edited id must fall
-         back to a real circuit rather than crashing the boot. */
-      if (typeof p.trackId === 'string' && trackById(p.trackId).id === p.trackId && !(old && p.trackId === OLD_DEFAULTS.trackId)) {
-        s.trackId = p.trackId;
-      }
-      /* tiltSens is the old field name — read it so anyone who already set a
-         value keeps it instead of being silently reset to 6 */
-      var sv = (typeof p.steerSens === 'number') ? p.steerSens : p.tiltSens;
-      if (typeof sv === 'number' && isFinite(sv)) s.steerSens = clamp(Math.round(sv), 1, 10);
-      /* 0 is a legitimate value here — silent — so these check isFinite
-         rather than truthiness, or muting a bus would never persist. */
-      if (typeof p.camMode === 'number' && CAM_LABELS[p.camMode]) s.camMode = p.camMode | 0;
-      if (typeof p.musicOn === 'boolean') s.musicOn = p.musicOn;
-      if (typeof p.engineOn === 'boolean') s.engineOn = p.engineOn;
-      if (typeof p.engineVol === 'number' && isFinite(p.engineVol)) s.engineVol = clamp(Math.round(p.engineVol), 0, 10);
-      if (typeof p.musicVol === 'number' && isFinite(p.musicVol)) s.musicVol = clamp(Math.round(p.musicVol), 0, 10);
-      found = true;
-    }
-  } catch (e) { /* blocked storage or corrupt JSON — defaults are fine */ }
-  /* the tier of this load is the game's pick and not the player's: nothing
-     was saved, or it was saved before today and held the old default */
-  var given = (!found || old) && !s.tierChosen;
-  var write = found && old;
-
-  /* A TIER LEFT ON TRIAL (see TIER_TRIAL_KEY). The key is taken away
-     whatever it says, so one failure is acted on once. If it names the tier
-     of this load, that tier either never drew its frames or lost the
-     graphics device: the load goes to TIER_SAFE instead. The constructor
-     tells a player who had picked the tier; one who was given it is told
-     nothing. A key marked untried is a page that was left with nothing
-     wrong on it, and the trial starts again.
-
-     A tier that never drew its frames, or lost the device twice running, is
-     off, and that is saved here and now, or the next load would try the
-     same tier again. A FIRST lost device is not saved (see TIER_FELL): what
-     storage holds is left alone, and the key is written again to say the
-     tier is owed a second chance. The load that finds that puts the tier
-     back, on trial, as the player's own or the game's as it was. It does so
-     whether storage still holds the tier or holds TIER_SAFE as the game's
-     pick, which is what a setting saved in the load between leaves there.
-     A player who picked a tier in that load has no such key: commitTier
-     wrote over it. */
-  var trial = tierTrialRead();
-  if (trial) {
-    tierTrialWrite(null);
-    var parts = trial.split(' ');
-    var named = TIERS.hasOwnProperty(parts[0]) && TIERS[parts[0]].heavy ? parts[0] : null;
-    if (named && parts[1] === 'again') {
-      if (s.quality === named || (s.quality === TIER_SAFE && !s.tierChosen)) {
-        s.quality = named;
-        s.tierChosen = parts[2] === 'chosen';
-        tierTrialWrite(named);
-        this.trialLeft = TIER_TRIAL_FRAMES;
-        this.tierAgain = true;
-        write = true;
-      }
-    } else if (named && named === s.quality) {
-      if (parts[1] === 'untried') {
-        tierTrialWrite(named);
-        this.trialLeft = TIER_TRIAL_FRAMES;
-      } else if (parts[1] === 'lost' && parts[2] !== 'twice') {
-        if (s.tierChosen) this.tierFell = 'lost';
-        tierTrialWrite(named + ' again' + (s.tierChosen ? ' chosen' : ''));
-        this.tierAgain = true;
-        s.quality = TIER_SAFE;
-        s.tierChosen = false;
-      } else {
-        if (s.tierChosen) this.tierFell = parts[1] === 'lost' ? 'lost' : 'failed';
-        s.quality = TIER_SAFE;
-        s.tierChosen = false;
-        write = true;
-      }
-    }
-  }
-
-  /* A HEAVY TIER NOBODY PICKED goes on trial exactly as a picked one does
-     (commitTier): the key is written before the world is built, and the
-     settings are saved with it, so a first load that dies before it has
-     drawn TIER_TRIAL_FRAMES frames leaves both behind and the load after it
-     comes up in TIER_SAFE. A load that draws them takes the key away, and
-     the saved tier is trusted from then on like any other. */
-  if (given && TIERS[s.quality].heavy && !(this.trialLeft > 0)) {
-    tierTrialWrite(s.quality);
-    this.trialLeft = TIER_TRIAL_FRAMES;
-    write = true;
-  }
-  if (write) { try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(s)); } catch (e2) {} }
+  /* What storage holds decides the rest (settingsLoad): the settings, the
+     tier of this load and whether it is on trial. The page may be loading
+     out of view, in a background tab. */
+  var t = settingsLoad(STORE, s, { hidden: document.hidden === true });
+  for (var field in t) if (t.hasOwnProperty(field) && field !== 'key' && field !== 'save') this[field] = t[field];
   return s;
 };
 
@@ -9750,10 +10682,9 @@ Game.prototype.saveSettings = function () {
 };
 
 /* Writes the settings without saying the player set anything: for the game's
-   own changes (a tier given up, see watchPace). */
+   own changes (a tier given up, see tierAct). */
 Game.prototype.storeSettings = function () {
-  this.settings.defaults = SETTINGS_DEFAULTS;
-  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(this.settings)); } catch (e) {}
+  settingsWrite(STORE, this.settings);
 };
 
 Game.prototype.applySettings = function () {
@@ -9793,6 +10724,16 @@ var TIER_UI = {
   }
 };
 
+/* WHILE THE HEAVY TIERS ARE BARRED (rule R6 in 38-tiers.js) the Graphics
+   button leaves Ultra out until the player has tapped all the way round
+   the other tiers once. One of these lines is added to the hint under the
+   row, by what tierHint answers, so a button that has stopped offering
+   Ultra says why, and says how to have it back. */
+var TIER_BARRED_HINT = {
+  round: 'Ultra was turned off on this device. Tap all the way round once and it is offered again.',
+  offered: 'Ultra was turned off on this device. It is offered again, after Retro.'
+};
+
 Game.prototype.syncSettingsUi = function () {
   var s = this.settings;
   function put(id, txt) { var e = document.getElementById(id); if (e) e.textContent = txt; }
@@ -9804,12 +10745,19 @@ Game.prototype.syncSettingsUi = function () {
   this.syncTrackList();
 
   put('set-quality', TIER_UI[s.quality].label);
-  put('set-quality-hint', TIER_UI[s.quality].hint);
+  var barred = tierHint(this);
+  put('set-quality-hint', TIER_UI[s.quality].hint + (barred ? ' ' + TIER_BARRED_HINT[barred] : ''));
   /* the time of day means something in Ultra only, so its row is shown there
      and nowhere else */
   put('set-tod', s.timeOfDay.toUpperCase());
   var todRow = document.getElementById('row-tod');
   if (todRow) todRow.hidden = s.quality !== 'ultra';
+  /* the weather the same, and a line under it in rain saying it is a look */
+  put('set-weather', s.weather.toUpperCase());
+  var weatherRow = document.getElementById('row-weather');
+  if (weatherRow) weatherRow.hidden = s.quality !== 'ultra';
+  var weatherHint = document.getElementById('set-weather-hint');
+  if (weatherHint) weatherHint.hidden = s.quality !== 'ultra' || s.weather !== 'rain';
 
   /* No point offering an automatic fullscreen the platform will refuse. */
   var fsRow = document.getElementById('row-autofs');
@@ -10326,16 +11274,29 @@ Game.prototype.tick = function (dt) {
    Monaco. The bearing is the bearing of Monaco's dusk sun (TIME_OF_DAY_AT),
    so the camera looks into the sunset from behind the papaya car as it leaves
    the harbour front, with the water and a moored boat to the left and the
-   lit town across the frame. The 8 m to the side is not taste: from the first
+   lit town across the frame. The 9 m to the side is not taste: from the first
    stretch of that road the sun stands in a gap between two towers about 6 m
-   wide, and 8 m to the right of the car is where the camera sees through it
-   for the first second and a little more. It was found by looking, at 2 m
-   steps, and it holds only while the sun and those towers stay where they
-   are: move either and look again. After about 1.2 seconds a nearer tower
-   takes the sun, and the shot ends at 3.2 with the car turning away. */
+   wide, and 9 m to the right of the car is where the camera sees through it
+   from the very first frame and for the first second. At 8 m the sun came
+   into the gap a twentieth of a second in, so the one frame a slow device
+   holds longest, the first, was the one without it. It was found by looking,
+   and it holds only while the sun and those towers stay where they are: move
+   either and look again.
+
+   After about a second a nearer tower takes the sun. It comes back behind
+   the La Rascasse sign at 3 seconds and again through the trees at 4.5, so
+   the shot is held to 4.6 and ends on that. It cannot be held longer: at 5
+   seconds the camera rides through the Anthony Noghes sign, which fills the
+   frame, and at 10, on a screen held upright, through a tree.
+
+   THE SHOT IS ULTRA'S. It was placed for a sun that the painted dome does not
+   have, and Retro and Modern draw what the live game draws, on the title as
+   in a race: so it is taken up only while the sky is the physical one
+   (resetRace), a change of tier while it runs ends it (tickDemo), and the
+   bench never runs it (bench). */
 var TITLE_OPENING = {
   'monaco-gp-v1': {
-    car: 0, azimuth: 322, back: 15, side: 8, up: 3.6, turn: 14, tilt: 0, fov: 52, hold: 3.2,
+    car: 0, azimuth: 322, back: 15, side: 9, up: 3.6, turn: 14, tilt: 0, fov: 52, hold: 4.6,
     tall: { back: 20, turn: 11, tilt: -3, fov: 68 }
   }
 };
@@ -10357,9 +11318,23 @@ Game.prototype.tickDemo = function (dt) {
   }
   resolveCarContacts(this.cars, null);
 
+  /* The opening shot is Ultra's (TITLE_OPENING). A tier without the physical
+     sky that comes on while it runs gets the cameras it has always had, from
+     where resetRace starts them. */
+  if (this.demoOpen && this.skyRig.mode !== 'physical') this.demoPlain();
+
   this.demoT += dt;
   var dur = this.demoOpen ? this.demoOpen.hold : (this.demoShot === 0 ? 7.5 : 5.0);
   if (this.demoT >= dur) this.nextDemoShot();
+};
+
+/* The demo's own cameras, from their start, with no opening shot: what
+   resetRace(true) sets for a circuit or a tier that has none. */
+Game.prototype.demoPlain = function () {
+  this.demoOpen = null;
+  this.demoShot = 0;
+  this.demoT = 99;
+  this.demoCar = this.cars[1];
 };
 
 Game.prototype.nextDemoShot = function () {
@@ -11198,9 +12173,10 @@ Game.prototype.applyQuality = function () {
      and a canvas the size of the render target for 'target'. */
   this.renderer.setPixelRatio(tier.canvas === 'target' ? 1 : (window.devicePixelRatio || 1));
 
-  this.applyShadowMode(tier.shadows);   /* 'blob' | 'single' | 'cascades': the shadows */
+  this.applyShadowMode(this.shadowModeFor(tier));   /* 'blob' | 'single' | 'cascades': the shadows */
   this.applySkyMode(tier.sky);          /* 'dome' | 'physical': the sky and time of day */
   this.applyPostMode(tier.post);        /* 'retro' | 'grade' | 'full': the bloom and grading */
+  this.applyWeather();                  /* Ultra only: cloud, rain and the wet road */
 
   /* The page's scanline and glow layers. `display`, because photo hides the
      same two layers through `visibility` and the two must not undo each
@@ -11209,23 +12185,44 @@ Game.prototype.applyQuality = function () {
   for (var li = 0; li < layers.length; li++) layers[li].style.display = tier.overlays ? '' : 'none';
 
   this.resize();
+  /* the next frame builds the whole tier: see drawFrame */
+  this.buildAll = true;
 };
 
-/* The tiers the Graphics button steps through, in order, on every device:
-   the ruling that kept Ultra off touch devices until it had been run on a
-   phone was lifted on 24 Nov 2026, when the owner ran it on his. */
-Game.prototype.tierCycle = function () {
-  var out = [];
-  for (var name in TIERS) {
-    if (TIERS.hasOwnProperty(name)) out.push(name);
+/* --- the tier of this device: carrying out what 38-tiers.js decides -------
+
+   Every decision is made there, by a function that is handed this Game and
+   answers with what is to be done. The methods here are the events of a
+   page, in the order a page meets them, and tierAct carries the answer out.
+   The rules they serve (R1 to R8) and the table of what the key holds are
+   at the top of 38-tiers.js. */
+
+/* Carries out an answer: the key first, so that it is in storage before a
+   tier is built and a build that takes the tab down leaves it behind; then
+   the tier; then the settings, so a build that throws saves nothing. */
+Game.prototype.tierAct = function (o, byPlayer) {
+  if (!o) return;
+  if (o.key !== undefined) STORE.set(TIER_TRIAL_KEY, o.key);
+  if (o.build) this.applyQuality();
+  if (o.build || o.save) this.applySettings();
+  if (o.save) {
+    if (byPlayer) this.saveSettings();
+    else this.storeSettings();
   }
-  return out;
+  if (o.say === 'slow') this.notify(PACE_SAID);
+  else if (o.say === 'quiet') this.flash(TIER_UI[this.settings.quality].flash);
 };
 
-/* THE PLAYER PICKS A TIER (the Graphics button). The button and its hint
-   say the new tier at once, and nothing else happens until the clicks have
-   stopped for TIER_SETTLE_MS: a tier that was only passed through on the way
-   to another is never built and never saved. */
+/* The tiers a tap on the Graphics button steps through now, in order. */
+Game.prototype.tierCycle = function () {
+  return tierTaps(this);
+};
+
+/* THE PLAYER PICKS A TIER (a tap on the Graphics button; tierTap says
+   which). The button and its hint say the new tier at once, and nothing else
+   happens until the clicks have stopped for TIER_SETTLE_MS: a tier that was
+   only passed through on the way to another is never built and never
+   saved. */
 Game.prototype.chooseTier = function (name) {
   var self = this;
   this.settings.quality = name;
@@ -11235,115 +12232,50 @@ Game.prototype.chooseTier = function (name) {
   this.tierTimer = setTimeout(function () { self.tierTimer = null; self.commitTier(); }, TIER_SETTLE_MS);
 };
 
-/* The clicks have stopped. A heavy tier goes on trial before it is built:
-   the key is in storage first, so a build that takes the tab down with it
-   leaves the key behind (see TIER_TRIAL_KEY). The settings are saved after,
-   not before: a build that throws saves nothing. */
+/* The clicks have stopped (see tierPick). */
 Game.prototype.commitTier = function () {
-  var name = this.settings.quality;
-  if (name !== this.tierOn) {
-    var heavy = TIERS[name].heavy;
-    this.trialLeft = heavy ? TIER_TRIAL_FRAMES : 0;
-    tierTrialWrite(heavy ? name : null);
-    this.applyQuality();
-  }
-  /* the tier the clicks ended on is the player's own from here on */
-  this.settings.tierChosen = true;
-  this.saveSettings();
+  this.tierAct(tierPick(this), true);
 };
 
-/* Called by the frame loop for every frame it has drawn. The frame that
-   ends a trial takes the key away: the tier is trusted from then on. */
+/* Called by the frame loop for every frame it has drawn. */
 Game.prototype.countFrame = function () {
-  if (this.trialLeft > 0 && --this.trialLeft === 0) tierTrialWrite(null);
+  this.tierAct(tierFrame(this));
 };
 
 /* Called by the frame loop with the gap since the frame before, in
-   milliseconds (see PACE). It is given the gap and reads no clock, and it is
-   never called from tick: the simulation knows nothing of it. Every frame of
-   a heavy tier counts, from the first, whatever is on the screen: the title,
-   the attract demo, a race, the results. In a pause or with the page hidden
-   the count starts again.
-
-   It steps down ONCE in a load. A player who picks the heavy tier again has
-   chosen it, and is not argued with a second time in that load; the load
-   after it watches again. (A browser that something holds back looks the
-   same from here as a device that cannot keep up. The limit is set clear
-   of the common case, a cap at 30 frames a second, but the guard can still
-   be wrong, and must not be able to be wrong over and over.)
-
-   What it gives up is saved, so the device stays stepped down, and it is
-   saved as the game's pick and not the player's (storeSettings). A player
-   who had picked the tier is told why it went. One who was given it is not:
-   a race that is running flashes the new tier's name, and that is all. */
+   milliseconds (see PACE in 38-tiers.js). It is given the gap and reads no
+   clock, and it is never called from tick: the simulation knows nothing of
+   it. Every frame of a heavy tier counts, whatever is on the screen: the
+   title, the attract demo, a race, the results. In a pause, with the page
+   hidden, or with a tier clicked to and not yet built, the count starts
+   again. */
 Game.prototype.watchPace = function (gapMs) {
-  if (this.paceDone || this.paused || document.hidden || this.tierTimer || !this.tierOn || !TIERS[this.tierOn].heavy) {
-    this.paceMean = 0;
-    this.paceSlow = 0;
-    this.paceLong = 0;
-    return;
-  }
-  if (!(gapMs > 0)) return;
-  /* a long gap is left out while it stands alone, and counts once it is
-     plainly how this device draws (see PACE) */
-  if (gapMs > PACE.ignoreMs) {
-    if (++this.paceLong <= PACE.ignoreRun) return;
-    gapMs = PACE.ignoreMs;
-  } else {
-    this.paceLong = 0;
-  }
-  this.paceMean = this.paceMean > 0
-    ? this.paceMean + (gapMs - this.paceMean) * Math.min(1, gapMs / PACE.meanMs)
-    : gapMs;
-  if (this.paceMean <= PACE.slowMs) { this.paceSlow = 0; return; }
-  this.paceSlow += gapMs;
-  if (this.paceSlow < PACE.forMs) return;
-
-  var chosen = this.settings.tierChosen;
-  this.paceDone = true;
-  this.paceMean = 0;
-  this.paceSlow = 0;
-  this.paceLong = 0;
-  this.settings.quality = TIER_SAFE;
-  this.settings.tierChosen = false;
-  this.trialLeft = 0;
-  tierTrialWrite(null);
-  this.applyQuality();
-  this.applySettings();
-  this.storeSettings();
-  if (chosen) this.notify(PACE_SAID);
-  else this.flash(TIER_UI[TIER_SAFE].flash);
+  this.tierAct(tierPace(this, gapMs, this.paused || document.hidden === true || !!this.tierTimer));
 };
 
-/* The graphics device has gone (boot's onDeviceLost). If a heavy tier was on,
-   the next load must not go straight back into it. Whether this is the
-   first loss or the second running is for the load that finds the key to
-   act on (see TIER_FELL). */
+/* The graphics device has gone (boot's onDeviceLost). Whether that counts
+   against the tier depends on whether the page was in view, and for how
+   long (see tierDeviceLost). */
 Game.prototype.tierLost = function () {
-  this.tierBroke = true;
   if (this.tierTimer) { clearTimeout(this.tierTimer); this.tierTimer = null; }
-  if (this.tierOn && TIERS[this.tierOn].heavy) tierTrialWrite(this.tierOn + (this.tierAgain ? ' lost twice' : ' lost'));
+  var since = this.shownAt == null ? Infinity : performance.now() - this.shownAt;
+  this.tierAct(tierDeviceLost(this, document.hidden === true, since));
+};
+
+/* The page is hidden (boot's visibilitychange): another tab, another app,
+   a locked phone. See tierOut. */
+Game.prototype.hideTier = function () {
+  this.tierAct(tierOut(this));
 };
 
 /* THE PLAYER LEAVES THE PAGE (boot's pagehide: the tab is closed, reloaded
-   or sent somewhere else) while a heavy tier is still on trial. That is not
-   a failure. Read as one, it costs every new player who looks and leaves
-   inside the first 60 frames the tier they were given: Ultra is everyone's
-   default, and the next visit would come up in TIER_SAFE without a word.
-   So the tier is marked untried, as carryTier marks it, and the load that
-   follows starts its trial again from the first frame.
+   or sent somewhere else). For the key that is the same as being hidden.
 
-   Only a page on which nothing went wrong may say so. One that lost its
-   graphics device, or had an error nobody caught, leaves the key as it
-   stands: something did fail there, and the tier may be why. And a tab
-   the system kills gets no pagehide at all, so a tier that takes its tab
-   down with it is caught as before.
-
-   A tier that was clicked to and not yet built is dropped, on any page.
-   Its timer can fire while the page waits to be replaced (see carryTier),
-   and it was never saved, so what is saved stays as it was. The button
-   goes back to the tier on the screen, for a page the browser keeps and
-   brings back. */
+   A tier that was clicked to and not yet built is dropped as well. Its
+   timer can fire while the page waits to be replaced (see carryTier), and
+   it was never saved, so what is saved stays as it was. The button goes
+   back to the tier on the screen, for a page the browser keeps and brings
+   back. */
 Game.prototype.leaveTier = function () {
   if (this.tierTimer) {
     clearTimeout(this.tierTimer);
@@ -11351,34 +12283,31 @@ Game.prototype.leaveTier = function () {
     this.settings.quality = this.tierOn;
     this.applySettings();
   }
-  if (this.tierBroke || !(this.trialLeft > 0)) return;
-  tierTrialWrite(TIERS[this.tierOn].heavy ? this.tierOn + ' untried' : null);
+  this.tierAct(tierOut(this));
 };
 
-/* The browser kept the page that was left and has brought it back (boot's
-   pageshow). Its trial carries on where it stopped, so the key says once
-   more that the tier is being tried now. */
+/* The page is in view again: it was hidden and is shown (boot's
+   visibilitychange), or the browser kept the page that was left and has
+   brought it back (boot's pageshow). The time is kept for tierLost. */
 Game.prototype.returnTier = function () {
-  if (this.tierBroke || !(this.trialLeft > 0) || !TIERS[this.tierOn].heavy) return;
-  tierTrialWrite(this.tierOn);
+  this.shownAt = performance.now();
+  this.tierAct(tierBack(this));
 };
 
-/* The game is about to reload the page itself. A tier that is clicked to
-   and not yet built, or built and still on trial, has not failed: it is
-   marked untried, so the load that follows starts its trial again and does
-   not take the key for a failure. */
+/* The game is about to reload the page itself (a change of circuit).
+
+   THIS PAGE LIVES ON until the answer to the reload arrives, and that can
+   take longer than the wait of a tier that was clicked to. So the timer of
+   that tier is stopped here. Left running, it builds the tier on the page
+   that is being left and writes the plain key, and if the build is still
+   going when the page is replaced the load that follows finds a tier that
+   "did not start". The tier that was clicked to is already in the settings
+   the caller saved, and the load that follows puts it on trial like any
+   other. From here the page counts as out of view: no frame it still draws
+   may end a trial or write the key again. */
 Game.prototype.carryTier = function () {
-  if (!this.tierTimer && !(this.trialLeft > 0)) return;
-  /* THIS PAGE LIVES ON until the answer to the reload arrives, and that can
-     take longer than the wait of a tier that was clicked to. So the timer
-     of that tier is stopped here. Left running, it builds the tier on the
-     page that is being left, writes the plain key over the mark and saves,
-     and the load that follows finds a tier that "did not start". Nor may a
-     frame this page still draws end the trial and take the mark away. */
   if (this.tierTimer) { clearTimeout(this.tierTimer); this.tierTimer = null; }
-  this.trialLeft = 0;
-  var name = this.settings.quality;
-  tierTrialWrite(TIERS[name].heavy ? name + ' untried' : null);
+  this.tierAct(tierOut(this));
 };
 
 /* Sets the time of day by name (one of TIME_OF_DAY_NAMES), saves it, and has
@@ -11389,6 +12318,103 @@ Game.prototype.setTimeOfDay = function (name) {
   this.saveSettings();
   this.applyTimeOfDay();
 };
+
+/* THE WEATHER (34-weather.js). A look in Ultra and nothing else: the
+   simulation never reads it, and Retro and Modern draw exactly what they
+   drew before it existed.
+
+   The weather drawn now: settings.weather under the physical sky, which only
+   Ultra has, and clear under the dome whatever is saved. */
+Game.prototype.weatherNow = function () {
+  return this.skyRig && this.skyRig.mode === 'physical' ? this.settings.weather : 'clear';
+};
+
+/* The shadows a tier has in the weather drawn now. Rain hides the sun, and
+   with it nearly every shadow the cascades draw, which are the largest cost
+   of Ultra on a phone, so in rain the cascades give way to the blob under
+   each car that Retro has. Cloud keeps them: its shadows are faint, not
+   gone. */
+Game.prototype.shadowModeFor = function (tier) {
+  if (tier.shadows === 'cascades' && tier.sky === 'physical' && this.settings.weather === 'rain') return 'blob';
+  return tier.shadows;
+};
+
+/* Sets the weather by name (one of WEATHER_NAMES), saves it, and has the
+   picture follow. Anything else is refused. */
+Game.prototype.setWeather = function (name) {
+  if (WEATHER_NAMES.indexOf(name) < 0) throw new Error('unknown weather ' + name);
+  this.settings.weather = name;
+  this.saveSettings();
+  this.applyWeather();
+};
+
+/* Puts the weather drawn now on the screen. Called by applyQuality (last,
+   once the sky, the shadows and the post pass are the tier's) and by
+   setWeather. Whatever cloud and rain need is built the first time it is
+   asked for and kept, hidden, from then on: the rain's mesh, the wet road's
+   puddle map. A change of weather builds nothing new after that, so any
+   number of them leaves nothing behind. In clear nothing of it is built,
+   drawn or set. */
+Game.prototype.applyWeather = function () {
+  var w = this.weatherNow(), look = WEATHER_LOOK[w] || null, rain = w === 'rain';
+  /* the sky, the lights, the fog and the environment */
+  this.skyRig.setWeather(w);
+  this.skyRig.setCloudSpeed(look && !this.photoHold ? look.cloudSpeed : 0);
+  /* THE WET ROAD, once the page has drawn a frame. Put on a road material
+     that has never been built, the wet look made the engine fail to build
+     it on the WebGL 2 fallback ("getInputType is not a function", four
+     materials, on a page loaded in rain), where put on the same materials
+     after one frame it builds cleanly. The cause inside the engine was not
+     found. So a page that loads in rain draws its first frame with the road
+     dry and puts the wet look on straight after it (see drawFrame). */
+  if (rain && !this.wetLook) this.wetLook = new WetLook(this.trackGroup);
+  if (this.wetLook) {
+    if (this.drewOnce) this.wetLook.set(rain);
+    else this.wetLater = rain;
+  }
+  /* the rain in the air */
+  if (rain && !this.rain) this.rain = new RainRig(this.scene);
+  if (this.rain) this.rain.mesh.visible = rain;
+  /* the cascades go in rain and come back after it (shadowModeFor) */
+  var tier = TIERS[this.tierOn || this.settings.quality];
+  var shadows = this.shadowModeFor(tier);
+  if (this.shadowRig.mode !== shadows) {
+    this.applyShadowMode(shadows);
+    this.buildAll = true;
+  }
+  /* the lights on the wet road, in the post pass */
+  if (this.rt) this.buildTarget(this.rtModern, this.rtFull, rain);
+  /* the lit windows and the shadows follow the hour as it now is */
+  this.applyTimeOfDay();
+};
+
+/* Where the rain is drawn this frame: round the camera, falling by the time
+   the frame loop has counted (rainT, see render), in the colour of the air,
+   and none of it under Monaco's tunnel roof. */
+Game.prototype.placeRain = function () {
+  var cam = this.camera.position, amount = 1;
+  var tun = this.scenery && this.scenery.tunnel;
+  if (tun) {
+    var best = Infinity, p = this.track.p;
+    for (var i = tun[0] + 2; i <= tun[1] - 2; i++) {
+      var dx = p[i].x - cam.x, dy = p[i].y - cam.y, dz = p[i].z - cam.z;
+      var d = dx * dx + dy * dy + dz * dz;
+      if (d < best) best = d;
+    }
+    amount = clamp((Math.sqrt(best) - 7) / 10, 0, 1);
+  }
+  var f = this.scene.fog.color;
+  _rainColour.set(f.r * RAIN_LIGHT + RAIN_LIFT, f.g * RAIN_LIGHT + RAIN_LIFT, f.b * RAIN_LIGHT + RAIN_LIFT * 1.2);
+  this.rain.place(cam, this.rainT || 0, _rainColour, amount);
+};
+/* how much brighter than the fog the streaks are drawn: lit by the same sky,
+   but nearer, so with less of the air in front of them. The lift is a fixed
+   amount on top, which is what keeps them seen against a dark dusk without
+   turning them white against a bright midday. */
+var RAIN_LIGHT = 1.15;
+var RAIN_LIFT = 0.10;
+var _rainColour = new THREE.Vector3();
+var _weatherGain = new THREE.Vector3();
 
 Game.prototype.isTouch = function () {
   return document.documentElement.classList.contains('has-touch');
@@ -11476,6 +12502,9 @@ Game.prototype.render = function (dt) {
 
   /* drift the clouds; nothing else in the sky moves */
   if (this.scenery && this.scenery.clouds) this.scenery.clouds.rotation.y += dt * 0.004;
+  /* the rain's own clock, which the frame loop keeps and the simulation
+     never sees */
+  if (this.rain) this.rainT = (this.rainT || 0) + dt;
 
   var fade = 1;
   if (this.state === STATE.COUNTDOWN && this.countdown < 0.6) fade = clamp(this.countdown / 0.6, 0, 1);
@@ -11653,15 +12682,17 @@ Game.prototype.photoCamMissing = function (name) {
   return '';
 };
 
-/* MCL64.photo({ circuit, tick, cam, quality, timeOfDay }) -> Promise<void>
+/* MCL64.photo({ circuit, tick, cam, quality, timeOfDay, weather }) -> Promise<void>
  *
  * Starts a real race (grid, countdown and all), drives the player with the
  * demo driver for exactly `tick` sim ticks without drawing, places camera
- * `cam`, and draws ONE frame with the HUD hidden. The frame loop is then held
+ * `cam`, and draws ONE frame with the HUD hidden, in the next animation frame
+ * the engine has counted (the promise settles then). The frame loop is held
  * so nothing draws over it before it is captured: the game is left frozen
  * afterwards, and needs a reload to be played. `timeOfDay`, when given, is
  * set and saved through setTimeOfDay before the frame is drawn; an unknown
- * name is refused before the game is touched. `tick` must be a finite whole number from 0 to PHOTO_TICK_MAX; anything
+ * name is refused before the game is touched. `weather` the same, one of
+ * WEATHER_NAMES, through setWeather. `tick` must be a finite whole number from 0 to PHOTO_TICK_MAX; anything
  * else is refused before the game is touched.
  *
  * Everything that would otherwise carry history into the frame is pinned:
@@ -11691,12 +12722,14 @@ Game.prototype.photo = function (opts) {
       throw new Error('tick must be a whole number from 0 to ' + PHOTO_TICK_MAX);
     }
     if (o.timeOfDay != null && TIME_OF_DAY_NAMES.indexOf(o.timeOfDay) < 0) throw new Error('unknown time of day ' + o.timeOfDay);
+    if (o.weather != null && WEATHER_NAMES.indexOf(o.weather) < 0) throw new Error('unknown weather ' + o.weather);
     if (!this.hookSelect(o.circuit, o.quality)) {
       return Promise.reject(new Error('MCL64.photo: reloading to load ' + o.circuit + '; call again once the page has loaded'));
     }
     var missing = this.photoCamMissing(cam);
     if (missing) return Promise.reject(new Error('MCL64.photo: ' + missing));
     if (o.timeOfDay != null) this.setTimeOfDay(o.timeOfDay);
+    if (o.weather != null) this.setWeather(o.weather);
 
     this.photoHold = true;
     held = true;
@@ -11753,6 +12786,10 @@ Game.prototype.photo = function (opts) {
     this.shadowRig.update(true);
 
     if (this.scenery && this.scenery.clouds) this.scenery.clouds.rotation.y = ticks * STEP * 0.004;
+    /* the weather's clouds stand still and its rain is where the tick count
+       puts it, so the same arguments give the same frame */
+    this.skyRig.setCloudSpeed(0);
+    this.rainT = ticks * STEP;
 
     this.syncUiState();
     /* The game picture only: the HUD and the page's own scanline and glow
@@ -11761,25 +12798,56 @@ Game.prototype.photo = function (opts) {
     this.hudCanvas.style.visibility = 'hidden';
     var layers = this.host.querySelectorAll('.scanlines, .glow');
     for (var li = 0; li < layers.length; li++) layers[li].style.visibility = 'hidden';
-    this.drawFrame(1);
-    return Promise.resolve();
+
+    /* THE FRAME IS DRAWN ONCE THE ENGINE HAS MOVED ON A FRAME, not here. The
+       engine draws a shadow map at most once for a camera in each frame it
+       has counted (ShadowNode.updateBefore), and with a draw it skips it
+       keeps the old map AND the old place for it. It counts in an animation
+       callback of its own (renderer.info.frame), which runs beside the game's
+       loop. A photo is asked for between two animation frames, so a frame
+       drawn at once carries the number of the game's last frame, drawn with
+       this same camera: the still came out with the shadows of the view the
+       page had before it, which reads as no shadows at all. So the draw
+       waits for an animation frame in which the count has moved. The loop is
+       held, so nothing else is drawn in between. That is one callback where
+       the engine's comes first and two where the game's does; after a third
+       it is drawn whatever the count says, so an engine that has stopped
+       counting cannot leave the promise open. */
+    var info = this.renderer.info, counted = info.frame, waited = 0;
+    return new Promise(function (resolve, reject) {
+      function draw() {
+        if (info.frame === counted && ++waited < 3) { requestAnimationFrame(draw); return; }
+        try {
+          self.drawFrame(1);
+          resolve();
+        } catch (e) {
+          self.photoUndo();
+          reject(e);
+        }
+      }
+      requestAnimationFrame(draw);
+    });
   } catch (e) {
     /* Only when this call took the hold: a refusal before that leaves the page
-       exactly as it was. resetRace(true) is the title, as bench leaves it, and
-       it clears pendingResult and every car's finished flag, so nothing the
-       demo driver did can be posted by the frame loop or by a later sign in. */
-    if (held) {
-      this.photoHold = false;
-      this.hudCanvas.style.visibility = '';
-      var hidden = this.host.querySelectorAll('.scanlines, .glow');
-      for (var hi = 0; hi < hidden.length; hi++) hidden[hi].style.visibility = '';
-      try { this.resetRace(true); } catch (ignore) { /* report the first error, not this one */ }
-    }
+       exactly as it was. */
+    if (held) this.photoUndo();
     return Promise.reject(e);
   }
 };
 
-/* MCL64.bench({ circuit, quality, seconds, timeOfDay }) -> Promise<{ frames, avgMs, p95Ms }>
+/* A photo that failed after it took the hold. resetRace(true) is the title,
+   as bench leaves it, and it clears pendingResult and every car's finished
+   flag, so nothing the demo driver did can be posted by the frame loop or by
+   a later sign in. */
+Game.prototype.photoUndo = function () {
+  this.photoHold = false;
+  this.hudCanvas.style.visibility = '';
+  var hidden = this.host.querySelectorAll('.scanlines, .glow');
+  for (var hi = 0; hi < hidden.length; hi++) hidden[hi].style.visibility = '';
+  try { this.resetRace(true); } catch (ignore) { /* report the first error, not this one */ }
+};
+
+/* MCL64.bench({ circuit, quality, seconds, timeOfDay, weather }) -> Promise<{ frames, avgMs, p95Ms }>
  *
  * Runs the attract demo and times the gaps between animation frames, which
  * is the frame time a player actually gets. The first second is a warm up
@@ -11797,14 +12865,19 @@ Game.prototype.bench = function (opts) {
   try {
     var seconds = o.seconds > 0 ? o.seconds : 20;
     if (o.timeOfDay != null && TIME_OF_DAY_NAMES.indexOf(o.timeOfDay) < 0) throw new Error('unknown time of day ' + o.timeOfDay);
+    if (o.weather != null && WEATHER_NAMES.indexOf(o.weather) < 0) throw new Error('unknown weather ' + o.weather);
     if (!this.hookSelect(o.circuit, o.quality)) {
       return Promise.reject(new Error('MCL64.bench: reloading to load ' + o.circuit + '; call again once the page has loaded'));
     }
     if (o.timeOfDay != null) this.setTimeOfDay(o.timeOfDay);
+    if (o.weather != null) this.setWeather(o.weather);
     this.paceDone = true;
     this.photoHold = false;
     this.hudCanvas.style.visibility = '';
     this.resetRace(true);
+    /* a bench times the demo's own cameras in every tier, as it always has,
+       and never the opening shot (TITLE_OPENING) */
+    if (this.demoOpen) { this.demoPlain(); this.updateCamera(0, true); }
   } catch (e) {
     return Promise.reject(e);
   }
@@ -11925,17 +12998,20 @@ Game.prototype.bench = function (opts) {
   renderer.init().then(start, cannotStart);
 
   function start() {
+    /* EVERYTHING IS BUILT BEFORE THE TITLE APPEARS. The first frame is drawn
+       here, under the loading panel, and it is the frame that builds the
+       whole tier (see drawFrame), so that nothing is left to be built when
+       the title cuts to its next camera. A frame that will not draw ends at
+       the panel like a game that will not build. */
     var game;
     try {
       game = new Game(host, renderer);
+      game.render(0);
     } catch (err) {
       fail(err && err.message ? err.message : String(err));
       if (window.console) console.error(err);
       return;
     }
-
-    var loading = document.getElementById('loading');
-    if (loading) loading.style.display = 'none';
 
     /* THE GPU CAN BE TAKEN AWAY MID RACE: the driver restarts, the laptop
        changes graphics card, the browser reclaims a context it thinks is
@@ -11985,7 +13061,9 @@ Game.prototype.bench = function (opts) {
     /* A PAGE LEFT EARLY IS NOT A TIER THAT FAILED (see leaveTier). The two
        listeners for errors are what lets a page say nothing went wrong on
        it: an exception nobody caught, and a promise that was rejected with
-       nobody waiting on it. */
+       nobody waiting on it. pagehide is the page being closed, reloaded or
+       sent elsewhere; pageshow with `persisted` is the browser bringing
+       back a page it kept. */
     window.addEventListener('error', function () { game.tierBroke = true; });
     window.addEventListener('unhandledrejection', function () { game.tierBroke = true; });
     window.addEventListener('pagehide', function () { game.leaveTier(); });
@@ -12022,7 +13100,33 @@ Game.prototype.bench = function (opts) {
         window.updateMonacoLiveStreetView(game.playerCar, game.track);
       }
     }
-    requestAnimationFrame(frame);
+
+    /* The loading panel comes down, and the frame loop starts, once the
+       frame drawn above is finished. On the WebGL 2 backend that is when
+       render returned: its shaders are compiled inside the call. On WebGPU
+       the pipelines are compiled away from this thread, so the device is
+       asked to say when the work it was sent is done; a panel hidden sooner
+       would only uncover a canvas that is still waiting for them. The timer
+       is there so that no device can keep the panel up for good. */
+    var loading = document.getElementById('loading');
+    var shown = false;
+    function show() {
+      if (shown) return;
+      shown = true;
+      if (loading) loading.style.display = 'none';
+      /* The game is handed to the page here and not before: MCL64 is what
+         the tools wait for, and a photo taken while the panel was still up
+         was a picture of the panel. */
+      window.MCL64 = game;
+      last = performance.now();
+      requestAnimationFrame(frame);
+    }
+    if (device && device.queue && device.queue.onSubmittedWorkDone) {
+      device.queue.onSubmittedWorkDone().then(show, show);
+      setTimeout(show, 10000);
+    } else {
+      requestAnimationFrame(show);
+    }
 
     var resizeTimer = null;
     function scheduleResize(delay) {
@@ -12041,11 +13145,14 @@ Game.prototype.bench = function (opts) {
       if (document.hidden && (game.state === STATE.RACING || game.state === STATE.COUNTDOWN)) {
         game.paused = true;
       }
+      /* a hidden page is not trying its tier, and one that is thrown away
+         while hidden must leave nothing behind (see hideTier) */
+      if (document.hidden) game.hideTier();
+      else game.returnTier();
       last = performance.now();
       acc = 0;
     });
 
-    window.MCL64 = game;
     /* The circuit registry, for the selector UI and for poking at in a console. */
     game.tracks = TRACKS;
     game.trackById = trackById;
