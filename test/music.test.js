@@ -122,11 +122,10 @@ const PINNED = {
   papaya:   'fc2518391cc19b03',
   speedway: 'fd7463be1e4eefe4',
   downland: '0449ae3997ff342d',
-  /* Las Vegas, Nov 2026: Neon Chant, which replaced Neon Mile, and the two
-     runners up kept for auditioning. Pinned after the checks further down
+  /* Las Vegas, Nov 2026: Neon Chant, which replaced Neon Mile, and the
+     runner up kept for auditioning. Pinned after the checks further down
      showed vegas has the shape it was written to have. */
   vegas:    '212812fef900df32',
-  vegas2:   '13fc968921ff8282',
   vegas3:   '1ff66feb03b8ad1e'
 };
 
@@ -242,10 +241,9 @@ const ve = render('vegas');
 const vBar = ve.n / ve.th.chords.length;
 const vL = ve.th.lead;
 is('eight bars of eight eighth notes', ve.n + '/' + vBar, '64/8');
-/* vegas2 and vegas3 are the runners up for the same circuit, kept only for
-   auditioning, so sharing a tempo with them is not sharing one with another
-   circuit. */
-const AUDITION = ['vegas2', 'vegas3'];
+/* vegas3 is the runner up for the same circuit, kept only for auditioning,
+   so sharing a tempo with it is not sharing one with another circuit. */
+const AUDITION = ['vegas3'];
 is('its tempo is no other circuit\'s theme\'s',
   Object.keys(MUSIC_THEMES).filter((t) => t !== 'vegas' && !AUDITION.includes(t) && MUSIC_THEMES[t].bpm === ve.th.bpm).length, 0);
 is('no other theme shares its lead',

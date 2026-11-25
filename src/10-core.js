@@ -805,57 +805,11 @@ var VEGAS_SNARE = [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0,
                    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0,
                    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.4, 1, 0.6];
 
-/* The two themes below are the runners up for Las Vegas, kept so the owner
-   can hear them in the game with ?music=vegas2 or ?music=vegas3 (see
-   Game.buildWorld). No circuit names them. They can go once a theme is
-   chosen. */
-
-/* JACKPOT LIGHTS: Las Vegas, synth pop. A major, 128 bpm, eight bars.
-
-     A - F#m - D - E | D - E - F - G
-
-   The hook is a two bar unit heard four times: a call that lands high on the
-   downbeat and falls (three notes after it, on a clap rhythm of 1, and of 2,
-   3, 4), then an answer that sinks to a note of the chord on beat three,
-   steps down and back, and on the last off beat springs up a sixth into the
-   next call. The springs climb C# to A, C# to A, D to B, E to C, so the
-   second half lifts a step each time to the top note, C6, over the F.
-
-   Octave bass on every eighth, kick on every beat, and a short chord stab on
-   the off beats of one, two and three only. The off beat of four is left
-   empty, because that is where the leap goes. Every lead note that falls on a
-   stab is a note of that bar's chord. */
-var VEGAS2_BASS = [
-  33, 45, 33, 45, 33, 45, 33, 45,
-  30, 42, 30, 42, 30, 42, 30, 42,
-  38, 50, 38, 50, 38, 50, 38, 50,
-  40, 52, 40, 52, 40, 52, 40, 52,
-  38, 50, 38, 50, 38, 50, 38, 50,
-  40, 52, 40, 52, 40, 52, 40, 52,
-  41, 53, 41, 53, 41, 53, 41, 53,
-  43, 55, 43, 55, 43, 55, 43, 44
-];
-var VEGAS2_LEAD = [
-  81, null, null, 76, 78, null, 76, null,
-  null, null, 76, null, 73, null, 71, 73,
-  81, null, null, 78, 76, null, 78, null,
-  null, null, 76, null, 80, null, 76, 74,
-  83, null, null, 78, 81, null, 78, null,
-  null, null, 80, null, 76, null, 74, 76,
-  84, null, null, 81, 79, null, 81, null,
-  null, null, 79, null, 74, null, 71, 73
-];
-/* A, F#m, D, E, D, E, F, G, voiced low so the stabs sit under the tune. */
-var VEGAS2_CHORDS = [[52, 57, 61], [54, 57, 61], [54, 57, 62], [52, 56, 59],
-                     [54, 57, 62], [52, 56, 59], [53, 57, 60], [55, 59, 62]];
-var VEGAS2_KICK = [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
-                   1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
-                   1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
-                   1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0];
-var VEGAS2_SNARE = [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0,
-                    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.4, 1, 0.6,
-                    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0,
-                    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.5, 1, 0.7];
+/* The theme below is the runner up for Las Vegas, kept so the owner can
+   hear it in the game with ?music=vegas3 (see Game.buildWorld). No circuit
+   names it. It can go once a theme is chosen. A third candidate (it was to
+   be vegas2) was left out: a judge found the second half of its riff too
+   close to a well known song. */
 
 /* LOW NEON: Las Vegas, the Strip at night. The bass is the tune.
 
@@ -937,9 +891,7 @@ var MUSIC_THEMES = {
               comp: [2, 4], compDur: 0.16, detune: 1.007, leadWave: 'sawtooth' },
   vegas:    { bpm: 128, bass: VEGAS_BASS,    lead: VEGAS_LEAD,    chords: VEGAS_CHORDS,    kick: VEGAS_KICK,    snare: VEGAS_SNARE,
               comp: [2, 6], compDur: 0.2, detune: 1.006 },
-  /* Runners up, for auditioning only: no circuit names them. */
-  vegas2:   { bpm: 128, bass: VEGAS2_BASS,   lead: VEGAS2_LEAD,   chords: VEGAS2_CHORDS,   kick: VEGAS2_KICK,   snare: VEGAS2_SNARE,
-              comp: [1, 3, 5], compDur: 0.12 },
+  /* The runner up, for auditioning only: no circuit names it. */
   vegas3:   { bpm: 128, bass: VEGAS3_BASS,   lead: VEGAS3_LEAD,   chords: VEGAS3_CHORDS,   kick: VEGAS3_KICK,   snare: VEGAS3_SNARE,
               comp: [2, 6], compDur: 0.12 }
 };
