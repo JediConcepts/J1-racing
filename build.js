@@ -90,6 +90,9 @@ const SRC = [
   /* Must precede 40-game.js: boot() runs at the end of that file, and
      prototype assignments do not hoist the way declarations do. */
   'src/36-cloud.js',
+  /* The picture tiers and who is given which: plain functions with no page
+     in them, which test/tiers.test.js loads by itself. */
+  'src/38-tiers.js',
   'src/40-game.js'
 ];
 

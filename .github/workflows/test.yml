@@ -1,6 +1,6 @@
 name: tests
 
-# Five suites, each verifying a claim this repository makes in prose.
+# Six suites, each verifying a claim this repository makes in prose.
 #
 #   maths      the README says the deterministic transcendentals are bit-identical
 #              across V8 and JavaScriptCore. This runs both engines and checks it,
@@ -27,6 +27,9 @@ name: tests
 #              themes it shares a scheduler with. Their whole scheduled event
 #              stream is pinned to a digest, because a background loop whose
 #              backbeat quietly moved is not something anyone would notice.
+#   tiers      which picture tier a device is given, and when the heavy one is
+#              taken away: the rules at the top of src/38-tiers.js, each
+#              run against a fake storage with no browser.
 #
 # Not covered, deliberately: anything that renders. 40-game.js has 98 references
 # to `document`, and a browser harness would cost more than it verifies here.
@@ -89,6 +92,16 @@ jobs:
         with:
           node-version: '22'
       - run: node test/music.test.js
+
+  tiers:
+    name: 'tiers: who is given which picture'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node test/tiers.test.js
 
   migrations:
     name: migrations — schema and security model
