@@ -308,6 +308,7 @@ function Game(host, renderer) {
   this.bindInput();
   this.resize();
   this.resetRace(true);
+  this.restorePending();
   if (this.tierFell) this.notify(TIER_FELL[this.tierFell] || TIER_FELL.failed);
 }
 
@@ -944,6 +945,7 @@ Game.prototype.resetRace = function (toTitle) {
   this.time = 0;
 
   this.pendingResult = null;       /* cleared only once it has actually posted */
+  this.pendingCarried = false;
   this.boardResult = null;
   this.settling = false;
   this.raceTime = 0;
@@ -1606,6 +1608,7 @@ Game.prototype.releaseKeys = function () {
 };
 
 Game.prototype.beginRace = function () {
+  if (this.loadingTrack) return;     /* the page is leaving for another circuit */
   this.audio.wake();
   /* A race begun from the title or the results starts with no key held: a
      release the page never saw (the results panel, a field that had the
@@ -2254,6 +2257,7 @@ Game.prototype.submitRace = function () {
   }
   /* Held until it actually lands, so a race driven while signed out can still
      be posted the moment you sign in — without having to drive it again. */
+  this.pendingCarried = false;
   this.pendingResult = {
     trackVersion: this.trackVersion(),
     simVersion: SIM_VERSION,
@@ -2277,14 +2281,22 @@ Game.prototype.postPending = function (force) {
   if (!force && this.boardResult && this.boardResult.state === 'failed') return;
 
   this.boardResult = { state: 'sending' };
-  this.cloud.submitScore(r).then(function (res) {
+  /* kept while it is in flight, so a reload can wait for it (leaveFor) */
+  var carried = this.pendingCarried;
+  var post = this.posting = Promise.resolve(this.cloud.submitScore(r)).then(function (res) {
     if (!res.ok && window.console) console.warn('[MCL-64] score post failed:', res.reason);
     if (res.ok) {
-      self.pendingResult = null;
+      if (self.pendingResult === r) { self.pendingResult = null; self.pendingCarried = false; }
       self.boardResult = { state: 'posted', improved: res.improved, rank: res.rank };
+      /* a time carried from the last load has no results screen to say so */
+      if (carried) self.notify('LAST TIME POSTED - WORLD RANK ' + (res.rank || '?'));
     } else {
       self.boardResult = { state: 'failed', reason: res.reason };
     }
+  }).then(function () {
+    if (self.posting === post) self.posting = null;
+  }, function () {
+    if (self.posting === post) self.posting = null;
   });
 };
 
@@ -3447,6 +3459,7 @@ Game.prototype.selectTrack = function (id, now) {
   var def = null;
   for (var i = 0; i < TRACKS.length; i++) if (TRACKS[i].id === id) def = TRACKS[i];
   if (!def && id !== RANDOM) return;
+  if (this.loadingTrack) return;                     /* already leaving */
   if (id === this.settings.trackId && !now) return;  /* already on it */
 
   this.settings.trackId = id;
@@ -3463,11 +3476,70 @@ Game.prototype.selectTrack = function (id, now) {
     if (now) this.resetRace(true);
     return;
   }
-  this.flash('LOADING ' + def.name);
   this.loadingTrack = def.name;
-  /* let the flash paint before the navigation stalls the frame */
+  this.leaveFor(def.name);
+};
+
+/* LEAVING FOR ANOTHER CIRCUIT is a reload, and a reload cuts off a post
+   still on its way to the leaderboard. So while one is in flight
+   (this.posting, see postPending) the reload waits for it to settle, for at
+   most POST_HOLD_MS, and the player is told why. Then the flash, and the
+   reload once it has painted. A time held for a player who is signed out
+   goes with the page to the next load (carryPending). Until the page goes,
+   nothing starts a race or picks another circuit (loadingTrack). */
+var POST_HOLD_MS = 4000;
+Game.prototype.leaveFor = function (name) {
+  var self = this, gone = false;
+  function go() {
+    if (gone) return;
+    gone = true;
+    self.carryPending();
+    self.flash('LOADING ' + name);
+    /* let the flash paint before the navigation stalls the frame */
+    setTimeout(function () { self.carryTier(); location.reload(); }, 220);
+  }
+  if (this.posting) {
+    this.flash('POSTING YOUR TIME');
+    this.posting.then(go, go);
+    setTimeout(go, POST_HOLD_MS);
+  } else {
+    go();
+  }
+};
+
+/* A TIME WAITING FOR A SIGN-IN, carried over a reload. Only one whose post
+   was never tried, because the player was signed out: one that is posting
+   or has failed may already be on the board, and must not go twice. The
+   record goes exactly as submitRace made it, so it still names the circuit,
+   the simulation and the race that were run, and postPending sends nothing
+   else. It is offered once, on the title of the next load, and lives as a
+   held result always has: until it posts or the next race begins. */
+var PENDING_KEY = 'mcl64.pendingResult';
+Game.prototype.carryPending = function () {
+  var b = this.boardResult;
+  if (!this.pendingResult || !b || b.state !== 'signed-out') return;
+  SESSION.set(PENDING_KEY, JSON.stringify(this.pendingResult));
+};
+Game.prototype.restorePending = function () {
+  var raw = SESSION.get(PENDING_KEY);
+  if (!raw) return;
+  SESSION.set(PENDING_KEY, null);
+  var r = null;
+  try { r = JSON.parse(raw); } catch (e) { return; }
+  if (!r || typeof r.trackVersion !== 'string' || r.simVersion !== SIM_VERSION ||
+      !(r.raceMs > 0) || !(r.bestLapMs > 0) || !(r.position >= 1)) return;
+  this.pendingResult = r;
+  this.pendingCarried = true;
+  this.postPending();
+  /* a session the page restores is adopted a moment after load, and posts
+     this at once (the sign-in watcher); only a player still signed out by
+     then is asked */
   var self = this;
-  setTimeout(function () { self.carryTier(); location.reload(); }, 220);
+  setTimeout(function () {
+    if (self.pendingResult === r && self.cloud && self.cloud.enabled && !self.cloud.user && self.state === STATE.TITLE) {
+      self.notify('SIGN IN TO POST YOUR LAST TIME');
+    }
+  }, 1500);
 };
 
 /* Puts the tier in settings.quality on the screen. Everything a tier decides

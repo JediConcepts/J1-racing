@@ -1463,6 +1463,89 @@ function tamper(o) {
       'a circuit chosen at the end of a race is its title, saved as a choice; RANDOM is another circuit, saved as RANDOM; twenty draws never repeat one running',
       'chose ' + JSON.stringify(chose) + ', random ' + JSON.stringify(drew) + ', console errors ' + JSON.stringify(consoleErrors));
 
+    /* A TIME ON ITS WAY TO THE LEADERBOARD is not cut off by a circuit
+       chosen at the end of the race (Game.leaveFor). The cloud is a stub:
+       nothing here reaches a real board. What it was sent, when its answer
+       came and when the page went are kept in sessionStorage, which the
+       reload does not clear. Three cases: a post that answers after 1.5 s
+       (the page waits for it), one that never answers (the page goes at
+       the cap of about 4 s, and carries nothing, since it may have landed),
+       and a player who is signed out (nothing is sent; the time goes with
+       the page, and is posted on the next load once they sign in, under the
+       circuit that was raced). */
+    const finishWith = (how) => page.evaluate((how) => {
+      const g = window.MCL64;
+      ['test.sent', 'test.landed', 'test.left'].forEach((k) => sessionStorage.removeItem(k));
+      window.addEventListener('pagehide', () => sessionStorage.setItem('test.left', String(Date.now())));
+      g.cloud = {
+        enabled: true, user: how === 'signed-out' ? null : { id: 'picture-test' },
+        submitScore(r) {
+          sessionStorage.setItem('test.sent', JSON.stringify({ at: Date.now(), r }));
+          if (how === 'never') return new Promise(() => {});
+          return new Promise((res) => setTimeout(() => {
+            sessionStorage.setItem('test.landed', String(Date.now()));
+            res({ ok: true, improved: true, rank: 7 });
+          }, 1500));
+        }
+      };
+      g.resetRace(false);
+      const p = g.player;
+      p.finished = true; p.finishTime = 91234; p.bestLap = 30123; p.position = 2;
+      g.state = 3;                                    /* Game's STATE.FINISHED */
+      g.submitRace();
+      return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r({
+        raced: g.track.id, board: g.boardResult && g.boardResult.state, panel: !document.getElementById('next-race').hidden
+      }))));
+    }, how);
+    const chooseAndLand = async (id) => {
+      const at = await page.evaluate(() => Date.now());
+      await Promise.all([
+        page.waitForEvent('load', { timeout: LOAD_MS }),
+        page.click('#next-race button[data-track-id="' + id + '"]')
+      ]);
+      await settled(id);
+      await page.evaluate(() => { window.MCL64.paceDone = true; });
+      return page.evaluate((at) => {
+        const g = window.MCL64, num = (k) => sessionStorage.getItem(k) ? +sessionStorage.getItem(k) - at : null;
+        const sent = JSON.parse(sessionStorage.getItem('test.sent') || 'null');
+        return { sent: sent && sent.r, landed: num('test.landed'), left: num('test.left'), carried: sessionStorage.getItem('mcl64.pendingResult'),
+          pending: g.pendingResult, track: g.track.id };
+      }, at);
+    };
+    const theRace = (r, raced) => !!r && r.trackVersion === raced && r.raceMs === 91234 && r.bestLapMs === 30123 && r.position === 2;
+    await bootWithSettings({ quality: 'modern' });
+    const slowEnd = await finishWith('slow');
+    const slow = await chooseAndLand('brands-hatch-v1');
+    await page.evaluate(() => { const g = window.MCL64; g.settings.trackId = 'silverstone-v1'; g.saveSettings(); });
+    await page.reload({ waitUntil: 'load', timeout: LOAD_MS });
+    await settled('silverstone-v1');
+    await page.evaluate(() => { window.MCL64.paceDone = true; });
+    const neverEnd = await finishWith('never');
+    const never = await chooseAndLand('las-vegas-v1');
+    check(slowEnd.board === 'sending' && slowEnd.panel && theRace(slow.sent, slowEnd.raced) && slow.landed > 1000 && slow.left >= slow.landed &&
+      slow.track === 'brands-hatch-v1' && !slow.carried && !slow.pending &&
+      neverEnd.board === 'sending' && theRace(never.sent, neverEnd.raced) && never.landed === null && never.left >= 3800 && never.left < 8000 &&
+      !never.carried && !never.pending && consoleErrors.length === 0 && uncaught.length === 0,
+      'a circuit chosen while the time is posting: the page waits for the post to land, or goes after about 4 s if it never answers, and carries neither',
+      'slow ' + JSON.stringify({ slowEnd, slow }) + ', never ' + JSON.stringify({ neverEnd, never }) + ', console errors ' + JSON.stringify(consoleErrors));
+    await page.evaluate(() => { const g = window.MCL64; g.settings.trackId = 'silverstone-v1'; g.saveSettings(); });
+    await page.reload({ waitUntil: 'load', timeout: LOAD_MS });
+    await settled('silverstone-v1');
+    await page.evaluate(() => { window.MCL64.paceDone = true; });
+    const outEnd = await finishWith('signed-out');
+    const out = await chooseAndLand('indianapolis-v1');
+    const signedIn = await page.evaluate(() => {
+      const g = window.MCL64, posts = [];
+      g.cloud = { enabled: true, user: { id: 'picture-test' }, submitScore(r) { posts.push(JSON.parse(JSON.stringify(r))); return Promise.resolve({ ok: true, improved: true, rank: 9 }); } };
+      g.postPending(true);
+      return new Promise((r) => setTimeout(() => r({ posts, pending: g.pendingResult, board: g.boardResult && g.boardResult.state, notice: g.notice }), 50));
+    });
+    check(outEnd.board === 'signed-out' && !out.sent && out.track === 'indianapolis-v1' && !out.carried && theRace(out.pending, outEnd.raced) &&
+      signedIn.posts.length === 1 && theRace(signedIn.posts[0], outEnd.raced) && signedIn.pending === null && signedIn.board === 'posted' &&
+      /LAST TIME POSTED/.test(signedIn.notice || '') && consoleErrors.length === 0 && uncaught.length === 0,
+      'a time waiting for a sign-in goes with the page to the next circuit and posts there once signed in, under the circuit that was raced',
+      JSON.stringify({ outEnd, out, signedIn }) + ', console errors ' + JSON.stringify(consoleErrors));
+
     /* THE TOOLS' PAGE draws nothing at random: what startFrom saves names
        all three, so what the page runs is what it saved. */
     await bootWith({}, QUERY, TOOL_START);
