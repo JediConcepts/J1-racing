@@ -1641,8 +1641,10 @@ Game.prototype.beginRace = function () {
 
    WHO. A touch screen, held in landscape, with a motion sensor that really
    sends readings, on which no key has been pressed, whose player has not
-   picked a steering mode (`steerChosen`). A laptop with a touch screen has
-   no sensor that speaks (whenReading), or has a keyboard that has been used.
+   picked a steering mode (`steerChosen`), on a device held in the hand
+   (isHandHeld: a finger for its main pointer and no fine pointer). A laptop
+   with a touch screen has a trackpad or a mouse, and some of them have a
+   sensor that speaks, so the pointer is what leaves it on the joystick.
 
    WHEN. At the first tap on START, which is also where a phone that asks
    for permission (an iPhone) asks: never before. Or, on a phone that does
@@ -1670,7 +1672,7 @@ Game.prototype.tiltAsks = function () {
 Game.prototype.autoTiltWanted = function () {
   var s = this.settings;
   return !s.steerChosen && !s.steerTilt && !this.keyboardUsed && !this.autoTiltDone &&
-    this.tilt.supported && this.isTouch() && isLandscape() && SESSION.get(TILT_NO_KEY) !== '1';
+    this.tilt.supported && this.isTouch() && isHandHeld() && isLandscape() && SESSION.get(TILT_NO_KEY) !== '1';
 };
 
 /* `inTap`: called from inside the player's tap, where a phone may ask. */

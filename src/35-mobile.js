@@ -266,6 +266,18 @@ function isLandscape() {
   } catch (e) { return false; }
 }
 
+/* Whether this is a device held in the hand: its main pointer is a finger
+   and it has no fine pointer at all. A laptop with a touch screen has a
+   trackpad or a mouse, so it answers no, even where its motion sensor
+   sends readings (Chrome on a Surface does). Only ever used to give tilt,
+   never to show the touch controls (see .pads in the template for why). */
+function isHandHeld() {
+  try {
+    return !!window.matchMedia && window.matchMedia('(pointer: coarse)').matches &&
+      !window.matchMedia('(any-pointer: fine)').matches;
+  } catch (e) { return false; }
+}
+
 TiltSensor.prototype.value = function () {
   if (this.mode === 0 || this.neutral === null) return 0;
   /* NOTE THE SUBTRACTION ORDER. (raw - neutral) is the intuitive form and it

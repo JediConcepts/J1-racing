@@ -195,6 +195,19 @@ function tamper(o) {
         : undefined
     });
   }
+  if (o.pointer === 'fine') {
+    /* A LAPTOP WITH A TOUCH SCREEN: a touch screen as well, but its main
+       pointer is a trackpad or a mouse. Chromium with touch emulated
+       answers as a phone does (a coarse pointer and no fine one), so the
+       laptop's answers are given here. */
+    const matchMedia = window.matchMedia;
+    window.matchMedia = function (q) {
+      const m = /^\((any-)?pointer:\s*(fine|coarse|none)\)$/.exec(String(q).trim());
+      if (!m) return matchMedia.apply(this, arguments);
+      const matches = m[2] === 'fine' || (!!m[1] && m[2] === 'coarse');
+      return { matches, media: q, onchange: null, addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent() { return false; } };
+    };
+  }
   if (o.failInit) {
     /* The bundle is `var THREE = ...` in a classic script, so it lands on a
        property of window that is already there, through this setter. That
@@ -238,7 +251,7 @@ function tamper(o) {
       userAgent: more && (more.sensor === 'granted' || more.sensor === 'denied') ? IPHONE_UA : undefined
     });
     await context.addInitScript(tamper, Object.assign({}, opts, more && more.holdAfter ? { holdAfter: more.holdAfter } : null,
-      more && more.sensor ? { sensor: more.sensor } : null));
+      more && more.sensor ? { sensor: more.sensor } : null, more && more.pointer ? { pointer: more.pointer } : null));
     /* `saved` is what a player's browser would hold from an earlier visit:
        it is in storage before the page's first script reads it. It is put
        there once, on the first load of the context, so that a reload later
@@ -1280,7 +1293,9 @@ function tamper(o) {
       const g = window.MCL64;
       return {
         tilt: g.settings.steerTilt, mode: g.tilt.mode, auto: g.settings.autoThrottle, chosen: g.settings.steerChosen,
-        locked: !!(g.stick && g.stick.lockX), asked: window.__asked, paused: g.paused, state: g.state, message: g.message
+        locked: !!(g.stick && g.stick.lockX), asked: window.__asked, paused: g.paused, state: g.state, message: g.message,
+        /* a phone in the hand: a finger for its main pointer, and no fine one */
+        hand: matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches
       };
     });
     const tapStart = async (wait) => {
@@ -1291,7 +1306,7 @@ function tamper(o) {
     const beforeTap = await steering();
     await tapStart();
     const granted = await steering();
-    check(beforeTap.asked === 0 && beforeTap.tilt === false && granted.asked === 1 && granted.tilt === true && granted.mode === 1 &&
+    check(beforeTap.hand === true && beforeTap.asked === 0 && beforeTap.tilt === false && granted.asked === 1 && granted.tilt === true && granted.mode === 1 &&
       granted.auto === true && granted.locked === true && granted.chosen === false && granted.paused === false &&
       consoleErrors.length === 0 && uncaught.length === 0,
       'a phone held sideways with nothing chosen: asked at the first tap on START and not before, then tilt with auto throttle',
@@ -1303,7 +1318,7 @@ function tamper(o) {
     await page.tap('.pad-start');
     await page.waitForTimeout(400);
     const deniedAgain = await steering();
-    check(denied.asked === 1 && denied.tilt === false && denied.mode === 0 && denied.locked === false && denied.paused === false &&
+    check(denied.hand === true && denied.asked === 1 && denied.tilt === false && denied.mode === 0 && denied.locked === false && denied.paused === false &&
       !denied.message && deniedAgain.asked === 1 && deniedAgain.state === 1 && consoleErrors.length === 0 && uncaught.length === 0,
       'refused: the finger joystick, no error, nothing said, and not asked again at the next START',
       JSON.stringify(denied) + ', next race ' + JSON.stringify(deniedAgain) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
@@ -1317,9 +1332,19 @@ function tamper(o) {
     await tapStart();
     const android = await steering();
     check(noSensor.tilt === false && noSensor.mode === 0 && noSensor.locked === false && laptop.tilt === false && laptop.asked === 0 &&
-      laptop.locked === false && android.tilt === true && android.auto === true && android.asked === 0 && consoleErrors.length === 0 && uncaught.length === 0,
+      laptop.locked === false && android.hand === true && android.tilt === true && android.auto === true && android.asked === 0 && consoleErrors.length === 0 && uncaught.length === 0,
       'a touch screen whose sensor never speaks (a laptop) stays on the joystick and is never asked; a phone that does not ask is on tilt without a question',
       'no sensor ' + JSON.stringify(noSensor) + ', a laptop in a Chromium that could ask ' + JSON.stringify(laptop) + ', a phone that does not ask ' + JSON.stringify(android));
+    /* A LAPTOP WITH A TOUCH SCREEN AND A SENSOR THAT SPEAKS (a Surface in
+       Chrome): the same readings as that phone, but a trackpad as well. It
+       stays on the joystick, which its finger can steer. */
+    await bootWithSettings({ quality: 'modern' }, 1, { touch: true, viewport: PHONE, sensor: 'android', pointer: 'fine' });
+    await tapStart();
+    const surface = await steering();
+    check(surface.hand === false && surface.tilt === false && surface.mode === 0 && surface.locked === false && surface.asked === 0 &&
+      surface.state === 1 && consoleErrors.length === 0 && uncaught.length === 0,
+      'a touch laptop whose motion sensor sends readings is not given tilt: it has a fine pointer, so it is no phone in the hand',
+      JSON.stringify(surface) + ', console errors ' + JSON.stringify(consoleErrors));
     await bootWithSettings({ quality: 'modern', steerChosen: true, steerTilt: false }, 1, { touch: true, viewport: PHONE, sensor: 'granted' });
     await tapStart();
     const picked = await steering();
