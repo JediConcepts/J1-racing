@@ -995,9 +995,12 @@ Game.prototype.bindInput = function () {
     var code = e.code || '';
     /* THE END OF A RACE: the arrow keys walk the next race buttons, and
        Enter on one of them is that button's (the browser clicks it). Enter
-       anywhere else still races again, as R does. */
-    if (self.nextRaceShown() && /^Arrow/.test(code)) {
-      if (down) self.nextRaceStep(code);
+       anywhere else still races again, as R does. Only the press is the
+       panel's: a release goes on to its slot below, so an arrow held over
+       the line and let go while the panel is up is not held into the next
+       race. */
+    if (down && self.nextRaceShown() && /^Arrow/.test(code)) {
+      self.nextRaceStep(code);
       e.preventDefault();
       return;
     }
@@ -1042,9 +1045,7 @@ Game.prototype.bindInput = function () {
   /* keyup is NOT guarded: it only ever clears a key, and skipping it would
      leave the throttle stuck on if focus moved into a field mid-press. */
   window.addEventListener('keyup', function (e) { onKey(e, false); }, { passive: false });
-  window.addEventListener('blur', function () {
-    self.input.keyL = self.input.keyR = self.input.keyU = self.input.keyD = self.input.keyB = self.input.keyDrs = false;
-  });
+  window.addEventListener('blur', function () { self.releaseKeys(); });
 
   /* touch pads */
   var pads = document.querySelectorAll('[data-key]');
@@ -1598,8 +1599,20 @@ Game.prototype.drawNotice = function () {
   g.globalAlpha = 1;
 };
 
+/* Every key slot let go, as if each key had come up. */
+Game.prototype.releaseKeys = function () {
+  var inp = this.input;
+  inp.keyL = inp.keyR = inp.keyU = inp.keyD = inp.keyB = inp.keyDrs = false;
+};
+
 Game.prototype.beginRace = function () {
   this.audio.wake();
+  /* A race begun from the title or the results starts with no key held: a
+     release the page never saw (the results panel, a field that had the
+     focus) must not drive the car from the lights. A restart in the middle
+     of a race keeps what is held, which is a key the player really is
+     pressing, since every release reached its slot while racing. */
+  if (this.state !== STATE.RACING && this.state !== STATE.COUNTDOWN) this.releaseKeys();
   this.maybeEnterFullscreen();
   /* the first race of a load runs under the load's draw, which the title
      has been showing; every race after it draws the hour and the weather

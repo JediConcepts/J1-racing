@@ -1402,6 +1402,35 @@ function tamper(o) {
       'the keyboard: the arrows walk the buttons, Enter on RACE AGAIN races again, and Enter alone still does',
       JSON.stringify([k1, k2, k3, k4, k5]));
 
+    /* A KEY HELD OVER THE LINE is not held into the next race. Up is held
+       while racing and over the finish, and let go while the next race
+       panel is up: its slot is clear at once. Then the second net: slots
+       left set as if their release had never reached the page are all
+       clear once the next race begins. */
+    const keySlots = () => page.evaluate(() => {
+      const g = window.MCL64, i = g.input;
+      return { state: g.state, panel: !document.getElementById('next-race').hidden,
+        held: ['keyL', 'keyR', 'keyU', 'keyD', 'keyB', 'keyDrs'].filter((k) => i[k]) };
+    });
+    await page.evaluate(() => { const g = window.MCL64; g.resetRace(false); g.state = 2; document.getElementById('screen').focus(); });
+    await page.keyboard.down('ArrowUp');
+    const heldRacing = await keySlots();
+    await toResults();
+    const heldOver = await keySlots();
+    await page.keyboard.up('ArrowUp');
+    const letGo = await keySlots();
+    await page.evaluate(() => {
+      const i = window.MCL64.input;
+      i.keyL = i.keyR = i.keyD = i.keyB = i.keyDrs = true;
+      document.getElementById('screen').focus();
+    });
+    await page.keyboard.press('Enter');
+    const raceAfter = await keySlots();
+    check(heldRacing.held.join() === 'keyU' && heldOver.panel && heldOver.held.join() === 'keyU' && letGo.held.length === 0 &&
+      raceAfter.state === 1 && raceAfter.held.length === 0 && uncaught.length === 0,
+      'an arrow held over the finish and let go while the results are up is let go, and the next race begins with no key held',
+      JSON.stringify({ heldRacing, heldOver, letGo, raceAfter }));
+
     /* A circuit chosen there: its title, ready to start, saved as a choice.
        RANDOM: another circuit than the one just raced, and the setting back
        to RANDOM. And twenty draws of it one after another never give the
