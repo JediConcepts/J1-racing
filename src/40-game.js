@@ -3974,7 +3974,6 @@ Game.prototype.showNextRace = function (on) {
   var host = document.getElementById('next-race');
   if (!host) return;
   if (on) {
-    this.layoutNextRace();
     var bs = this.nextRaceButtons(), here = this.track.def.id;
     for (var i = 0; i < bs.length; i++) {
       bs[i].setAttribute('aria-current', bs[i].dataset.trackId === here ? 'true' : 'false');
@@ -3984,19 +3983,40 @@ Game.prototype.showNextRace = function (on) {
     this.host.focus();
   }
   host.hidden = !on;
+  /* laid out once shown, where it has a height to measure; nothing is
+     painted in between */
+  if (on) this.layoutNextRace();
 };
 
-/* Lays the panel out against the results: it stops short of their left
-   edge, or goes under them where that leaves too little room for two
-   columns of names. */
+/* Lays the panel out against the results, by numbers, so that it is on the
+   stage and clear of the results and of every touch pad at any size:
+
+   - BESIDE them, to their left, where no pad ever is (START is under the
+     middle of the results, DRS and CAM are on the right): two columns of
+     names, as wide as the room there allows, up to 320 px.
+   - NARROWER BESIDE them (.is-narrow) where that room is under 200 px, as
+     on a phone of 568 x 320 held sideways: the same two columns, set
+     tighter so the longest name still fits.
+   - UNDER them (.is-below) only where even that will not fit, which is a
+     stage narrower than any phone held sideways (under about 544 px). It
+     is then at least kept on the stage, whatever the length of the results
+     (33 cars at Indianapolis run off the bottom), though it may meet a pad.
+
+   test/picture.js measures it at 568 x 320, 667 x 375, 844 x 390 and 932 x
+   430 with touch, and at 1280 x 720, on every circuit. */
+var NEXT_RACE_NARROW = 150;
 Game.prototype.layoutNextRace = function () {
   var host = document.getElementById('next-race');
   if (!host || !this.vw) return;
   var b = this.resultsBox(), u = this.uiCss || 1;
-  var left = b.x * u;
+  var left = b.x * u, room = left - 24;
   host.style.setProperty('--results-left', left + 'px');
-  host.style.setProperty('--results-bottom', Math.round((b.y + b.h) * u + 8) + 'px');
-  host.classList.toggle('is-below', left - 24 < 200);
+  host.classList.toggle('is-narrow', room < 200 && room >= NEXT_RACE_NARROW);
+  host.classList.toggle('is-below', room < NEXT_RACE_NARROW);
+  var top = Math.round((b.y + b.h) * u + 8);
+  var stage = host.parentNode, h = host.offsetHeight;
+  if (stage && stage.clientHeight && h) top = Math.max(12, Math.min(top, stage.clientHeight - h - 12));
+  host.style.setProperty('--results-bottom', top + 'px');
 };
 
 /* An arrow key at the end of a race. The buttons are RACE AGAIN across the

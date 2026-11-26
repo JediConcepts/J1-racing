@@ -778,6 +778,10 @@
     gap: 6px;
   }
   .nextrace[hidden] { display: none; }
+  /* little room beside the results: set tighter, so the longest name
+     (INDIANAPOLIS) still fits in a column */
+  .nextrace.is-narrow { gap: 4px; }
+  .nextrace.is-narrow .sval { padding: 2px 3px; font-size: 9px; letter-spacing: 0.02em; }
   .nextrace.is-below {
     top: var(--results-bottom, 50%);
     transform: none;

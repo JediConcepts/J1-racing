@@ -1358,9 +1358,12 @@ function tamper(o) {
       'picked ' + JSON.stringify(picked) + ', a key first ' + JSON.stringify(keyed));
 
     /* THE NEXT RACE, chosen at the end of one. Laid out by numbers, not
-       pictures: on a phone held sideways and at 1280 x 720, every button is
-       on the stage, at least 44 points high, and overlaps no other button,
-       no touch pad and none of the results. */
+       pictures (Game.layoutNextRace): at four phones held sideways, with
+       touch, and at 1280 x 720, on every circuit (Indianapolis has 33 cars,
+       so its results run off the bottom of the stage), every button is on
+       the stage, at least 44 points high, holds its name, and overlaps no
+       other button, no touch pad and none of the results. Retro, since the
+       layout does not depend on the tier and it loads quickest. */
     const toResults = () => page.evaluate(() => {
       const g = window.MCL64;
       g.resetRace(false);
@@ -1373,9 +1376,9 @@ function tamper(o) {
       const stage = box(document.getElementById('screen')), hud = box(g.hudCanvas);
       const rb = g.resultsBox(), u = g.uiCss;
       const results = { x: hud.x + rb.x * u, y: hud.y + rb.y * u, w: rb.w * u, h: rb.h * u };
-      const buttons = Array.from(document.querySelectorAll('#next-race button')).map((b) => Object.assign(box(b), { t: b.textContent }));
+      const buttons = Array.from(document.querySelectorAll('#next-race button')).map((b) => Object.assign(box(b), { t: b.textContent, fits: b.scrollWidth <= b.clientWidth }));
       const pads = Array.from(document.querySelectorAll('.pad')).filter(shown).map((p) => Object.assign(box(p), { t: p.textContent }));
-      return { shown: !document.getElementById('next-race').hidden, stage, results, buttons, pads };
+      return { shown: !document.getElementById('next-race').hidden, stage, results, buttons, pads, circuit: g.track.def.id };
     });
     const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
     const layoutFaults = (L, minH) => {
@@ -1385,25 +1388,42 @@ function tamper(o) {
       L.buttons.forEach((b, i) => {
         if (b.x < L.stage.x || b.y < L.stage.y || b.x + b.w > L.stage.x + L.stage.w || b.y + b.h > L.stage.y + L.stage.h) f.push(b.t + ' off the stage');
         if (b.h < minH) f.push(b.t + ' is ' + b.h + ' high');
+        if (!b.fits) f.push(b.t + ' does not fit its button');
         if (overlap(b, L.results)) f.push(b.t + ' over the results');
         L.pads.forEach((p) => { if (overlap(b, p)) f.push(b.t + ' over the ' + p.t + ' pad'); });
         L.buttons.forEach((c, j) => { if (j > i && overlap(b, c)) f.push(b.t + ' over ' + c.t); });
       });
       return f;
     };
-    await bootWithSettings({ quality: 'modern' }, 1, { touch: true, viewport: PHONE });
-    const beforeEnd = await page.evaluate(() => document.getElementById('next-race').hidden);
-    await toResults();
-    const phoneLayout = await nextLayout(), phoneFaults = layoutFaults(phoneLayout, 44);
-    check(beforeEnd === true && phoneFaults.length === 0 && phoneLayout.pads.length >= 3 && consoleErrors.length === 0 && uncaught.length === 0,
-      'the next race buttons at 844 x 390 with touch: hidden until the race ends, then RACE AGAIN, five circuits and RANDOM, 44 high, on the stage, clear of each other, the pads and the results',
-      phoneFaults.join('; ') + ' | ' + JSON.stringify(phoneLayout));
+    const LAYOUT_SIZES = [[568, 320, true], [667, 375, true], [844, 390, true], [932, 430, true], [1280, 720, false]];
+    const layoutCircuits = ['monaco-gp-v1', 'las-vegas-v1', 'indianapolis-v1', 'brands-hatch-v1', 'silverstone-v1'];
+    const layoutSeen = [], layoutBad = [];
+    let hiddenBeforeEnd = true, padsOnPhones = true;
+    for (const [width, height, touch] of LAYOUT_SIZES) {
+      await bootWithSettings({ quality: 'retro' }, 1, { touch, viewport: { width, height } });
+      for (const circuit of layoutCircuits) {
+        /* each circuit a real load, as the settings panel loads one */
+        await page.evaluate((id) => { const g = window.MCL64; g.settings.trackId = id; g.saveSettings(); }, circuit);
+        await page.reload({ waitUntil: 'load', timeout: LOAD_MS });
+        await settled(circuit);
+        await page.evaluate(() => { window.MCL64.paceDone = true; });
+        if (!(await page.evaluate(() => document.getElementById('next-race').hidden))) hiddenBeforeEnd = false;
+        await toResults();
+        const L = await nextLayout(), f = layoutFaults(L, 44);
+        if (L.circuit !== circuit) f.push('on ' + L.circuit);
+        if (touch && L.pads.length < 3) padsOnPhones = false;
+        layoutSeen.push(width + ' x ' + height + ' ' + circuit);
+        if (f.length) layoutBad.push(width + ' x ' + height + ' ' + circuit + ': ' + f.join('; ') + ' | ' + JSON.stringify(L));
+      }
+    }
+    check(layoutSeen.length === 25 && layoutBad.length === 0 && hiddenBeforeEnd && padsOnPhones && consoleErrors.length === 0 && uncaught.length === 0,
+      'the next race buttons at 568 x 320, 667 x 375, 844 x 390 and 932 x 430 with touch, and 1280 x 720, on all five circuits: hidden until the race ends, then RACE AGAIN, five circuits and RANDOM, 44 high, each name in its button, on the stage, clear of each other, the pads and the results',
+      layoutBad.join('\n        ') + (hiddenBeforeEnd ? '' : ' | shown before the end') + (padsOnPhones ? '' : ' | a phone without its pads') +
+      ', console errors ' + JSON.stringify(consoleErrors));
+    /* the keyboard checks below start at 1280 x 720 at Silverstone, on the
+       results, in Modern as before */
     await bootWithSettings({ quality: 'modern' });
     await toResults();
-    const deskLayout = await nextLayout(), deskFaults = layoutFaults(deskLayout, 44);
-    check(deskFaults.length === 0 && consoleErrors.length === 0 && uncaught.length === 0,
-      'and at 1280 x 720 the same',
-      deskFaults.join('; ') + ' | ' + JSON.stringify(deskLayout));
 
     /* the keyboard: an arrow puts the focus on RACE AGAIN, the arrows walk
        the buttons, Enter on RACE AGAIN races again on the same circuit, and
