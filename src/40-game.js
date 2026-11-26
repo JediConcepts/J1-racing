@@ -1620,7 +1620,7 @@ Game.prototype.beginRace = function () {
   /* the first race of a load runs under the load's draw, which the title
      has been showing; every race after it draws the hour and the weather
      again where they are RANDOM, here, before its countdown */
-  if (this.racesBegun++ > 0) this.drawForRace();
+  if (this.racesBegun++ > 0) this.redrawForRace();
   this.resetRace(false);
   this.startTrace();
   this.state = STATE.COUNTDOWN;
@@ -3798,6 +3798,27 @@ Game.prototype.drawForRace = function () {
   if (d.timeOfDay !== this.drawn.timeOfDay) {
     this.drawn.timeOfDay = d.timeOfDay;
     if (physical) this.applyTimeOfDay();
+  }
+};
+
+/* The draw, as beginRace makes it: a look that fails to build must never
+   stop a race. On a throw the hour and the weather go back to what they
+   were and that look is put back, and the race starts in it. Said on the
+   console as a warning, since the player loses nothing but the draw. */
+Game.prototype.redrawForRace = function () {
+  var was = { weather: this.drawn.weather, timeOfDay: this.drawn.timeOfDay };
+  try {
+    this.drawForRace();
+  } catch (e) {
+    if (window.console) console.warn('[MCL-64] the draw for this race failed; racing in the look it had:', e);
+    var changed = was.weather !== this.drawn.weather || was.timeOfDay !== this.drawn.timeOfDay;
+    this.drawn.weather = was.weather;
+    this.drawn.timeOfDay = was.timeOfDay;
+    if (changed && this.skyRig && this.skyRig.mode === 'physical') {
+      try { this.applyWeather(); } catch (e2) {
+        if (window.console) console.warn('[MCL-64] and the look it had did not go back:', e2);
+      }
+    }
   }
 };
 

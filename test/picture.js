@@ -1431,6 +1431,27 @@ function tamper(o) {
       'an arrow held over the finish and let go while the results are up is let go, and the next race begins with no key held',
       JSON.stringify({ heldRacing, heldOver, letGo, raceAfter }));
 
+    /* A DRAW THAT THROWS does not stop the race (Game.redrawForRace): the
+       race starts, in the look it had, with a warning and no error. */
+    const warned = [];
+    const onWarn = (m) => { if (m.type() === 'warning') warned.push(m.text()); };
+    page.on('console', onWarn);
+    const errorsBefore = consoleErrors.length;
+    const drawThrew = await page.evaluate(() => {
+      const g = window.MCL64;
+      g.state = 3;
+      g.racesBegun = 1;
+      g.drawForRace = function () { this.drawn.weather = 'rain'; throw new Error('test/picture.js made the draw throw'); };
+      try { g.beginRace(); } catch (e) { return { threw: String(e) }; } finally { delete g.drawForRace; }
+      return { state: g.state, weather: g.drawn.weather };
+    });
+    await page.waitForTimeout(100);
+    page.off('console', onWarn);
+    check(!drawThrew.threw && drawThrew.state === 1 && drawThrew.weather === 'clear' && warned.some((w) => /made the draw throw/.test(w)) &&
+      consoleErrors.length === errorsBefore && uncaught.length === 0,
+      'a draw of the hour and weather that throws: the race starts all the same, in the look it had, with a warning and no error',
+      JSON.stringify(drawThrew) + ', warnings ' + JSON.stringify(warned) + ', console errors ' + JSON.stringify(consoleErrors.slice(errorsBefore)));
+
     /* A circuit chosen there: its title, ready to start, saved as a choice.
        RANDOM: another circuit than the one just raced, and the setting back
        to RANDOM. And twenty draws of it one after another never give the
