@@ -122,11 +122,10 @@ const PINNED = {
   papaya:   'fc2518391cc19b03',
   speedway: 'fd7463be1e4eefe4',
   downland: '0449ae3997ff342d',
-  /* Las Vegas, Nov 2026: Neon Chant, which replaced Neon Mile, and the
-     runner up kept for auditioning. Pinned after the checks further down
-     showed vegas has the shape it was written to have. */
-  vegas:    '212812fef900df32',
-  vegas3:   '1ff66feb03b8ad1e'
+  /* Las Vegas, Nov 2026: Neon Chant, which replaced Neon Mile. Pinned after
+     the checks further down showed vegas has the shape it was written to
+     have. */
+  vegas:    '212812fef900df32'
 };
 
 if (process.argv.includes('--emit')) {
@@ -241,9 +240,10 @@ const ve = render('vegas');
 const vBar = ve.n / ve.th.chords.length;
 const vL = ve.th.lead;
 is('eight bars of eight eighth notes', ve.n + '/' + vBar, '64/8');
-/* vegas3 is the runner up for the same circuit, kept only for auditioning,
-   so sharing a tempo with it is not sharing one with another circuit. */
-const AUDITION = ['vegas3'];
+/* No theme is kept for auditioning now. While two candidates for Las Vegas
+   were being heard, the spare one was listed here so that sharing a tempo
+   with it did not count, and so no circuit could name it. */
+const AUDITION = [];
 is('its tempo is no other circuit\'s theme\'s',
   Object.keys(MUSIC_THEMES).filter((t) => t !== 'vegas' && !AUDITION.includes(t) && MUSIC_THEMES[t].bpm === ve.th.bpm).length, 0);
 is('no other theme shares its lead',
@@ -304,8 +304,9 @@ is('the high point is the home note, A', top % 12, 9);
 is('the lead plays fewer than half the steps',
   vL.filter((v) => v != null).length < ve.n / 2, true);
 
-/* Nothing outside this file names the runners up, and the circuit plays the
-   chosen theme: they are reachable only through the audition switch. */
+/* Every circuit plays a theme of its own choosing. With AUDITION empty this
+   holds trivially; it is kept for the next time a spare theme is being
+   heard. */
 is('no circuit names an audition theme', named.some((m) => AUDITION.includes(m)), false);
 
 /* --------------------------------------------------------------------------- */

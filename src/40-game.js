@@ -789,14 +789,7 @@ Game.prototype.buildWorld = function () {
   this.track = new Track(trackById(this.drawn.trackId));
   /* Each circuit brings its own score; absent or unknown falls back to the
      original theme, so a new circuit needs no music work to ship. */
-  /* AUDITION ONLY: ?music=<theme> plays that theme instead, so the owner can
-     hear the Las Vegas runner up (vegas3) from a link without a new
-     build. Only a key of MUSIC_THEMES is taken; anything else is ignored.
-     This can go once a theme is chosen. */
-  var musicId = this.track.def.music;
-  var heard = /[?&]music=([^&#]*)/.exec(location.search || '');
-  if (heard && Object.prototype.hasOwnProperty.call(MUSIC_THEMES, heard[1])) musicId = heard[1];
-  this.audio.setMusicTheme(musicId);
+  this.audio.setMusicTheme(this.track.def.music);
   /* kept for the wet road (WetLook in 34-weather.js) */
   this.trackGroup = buildTrackMeshes(this.track, scene);
   this.gantry = buildStartGantry(this.track, scene);

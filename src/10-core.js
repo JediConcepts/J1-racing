@@ -805,78 +805,6 @@ var VEGAS_SNARE = [0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0,
                    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0,
                    0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.4, 1, 0.6];
 
-/* The theme below is the runner up for Las Vegas, kept so the owner can
-   hear it in the game with ?music=vegas3 (see Game.buildWorld). No circuit
-   names it. It can go once a theme is chosen. A third candidate (it was to
-   be vegas2) was left out: a judge found the second half of its riff too
-   close to a well known song. */
-
-/* LOW NEON: Las Vegas, the Strip at night. The bass is the tune.
-
-   C# minor, 128 bpm, eight bars:  C#m, A, C#m, B, C#m, A, C#m, G#
-
-   Two bar call and answer, four times round. In the odd bars the bass plays
-   the riff and the lead is silent; in the even bars the bass drops to three
-   notes and the lead answers in the gaps it leaves. Bass and lead share
-   only one step, the C# that opens the loop, so each is heard whole on a
-   phone speaker.
-
-   The riff, one bar:  C#3 . C#3 G#3 . F#3 G#3 .   (1 . 1 5 . 4 5 .)
-   Its one leap is the fifth up on the and of two; the rest is a step down
-   and back. It is stated four times, each repeat changing one thing: an
-   F# echo on the last eighth (bar 3), a third C# on the and of one
-   (bar 5), and a fall to E instead of the return to G# (bar 7), which
-   closes the phrase before the G# bar. It sits at C#3 to G#3, the top of
-   the bass range, so a small speaker carries it.
-
-   The answer, one rhythm all four times:  . x x x . x x .
-   An x y x turn (the bass riff's G# F# G#, a step lower and two octaves
-   up), then two notes that settle on beat four: up to A, up again to B
-   (the high point of the loop, bar 4), down to C#, and in bar 8 down to
-   B#, which resolves to the C# at the top of the loop.
-
-   The chord is a short stab on beats two and four with the snare, doubling
-   the riff where it lands. Every lead and bass note under a stab is a note
-   of that chord. Voiced from B#3 to B4, below every lead note.
-
-   Original. Nothing is quoted, transposed or paraphrased; a minor vamp, four
-   on the floor and a backbeat stab are common stock and belong to nobody. */
-var VEGAS3_BASS = [
-  49, null, 49, 56, null, 54, 56, null,
-  45, null, null, null, 52, null, null, 47,
-  49, null, 49, 56, null, 54, 56, 54,
-  47, null, null, null, 54, null, null, 48,
-  49, 49, 49, 56, null, 54, 56, null,
-  45, null, null, null, 52, null, null, 47,
-  49, null, 49, 56, null, 54, 52, null,
-  44, null, null, null, 51, null, null, 48
-];
-var VEGAS3_LEAD = [
-  73, null, null, null, null, null, null, null,
-  null, 78, 76, 78, null, 80, 81, null,
-  null, null, null, null, null, null, null, null,
-  null, 80, 78, 80, null, 81, 83, null,
-  null, null, null, null, null, null, null, null,
-  null, 78, 76, 78, null, 76, 73, null,
-  null, null, null, null, null, null, null, null,
-  null, 76, 75, 76, null, 75, 72, null
-];
-/* C#m, A, C#m, B, C#m, A, C#m, G# (B# D# G#, the raised seventh for the
-   pull home). */
-var VEGAS3_CHORDS = [[49, 52, 56], [49, 52, 57], [49, 52, 56], [51, 54, 59],
-                     [49, 52, 56], [49, 52, 57], [49, 52, 56], [48, 51, 56]];
-/* Four on the floor all the way through. */
-var VEGAS3_KICK = [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
-                   1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
-                   1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
-                   1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0];
-/* Backbeat on two and four, a ghost on the last eighth of each riff bar,
-   and a short fill into the top of the loop. */
-var VEGAS3_SNARE = [0, 0, 1, 0, 0, 0, 1, 0.3, 0, 0, 1, 0, 0, 0, 1, 0,
-                    0, 0, 1, 0, 0, 0, 1, 0.3, 0, 0, 1, 0, 0, 0, 1, 0,
-                    0, 0, 1, 0, 0, 0, 1, 0.3, 0, 0, 1, 0, 0, 0, 1, 0,
-                    0, 0, 1, 0, 0, 0, 1, 0.3, 0, 0, 1, 0, 0, 0.5, 1, 0.7];
-
 /* Chord on the downbeat: what every 4/4 theme here does, and the default. */
 var COMP_DOWNBEAT = [0];
 
@@ -890,10 +818,7 @@ var MUSIC_THEMES = {
   monaco:   { bpm: 168, bass: MONACO_BASS,   lead: MONACO_LEAD,   chords: MONACO_CHORDS,   kick: MONACO_KICK,   snare: MONACO_SNARE,
               comp: [2, 4], compDur: 0.16, detune: 1.007, leadWave: 'sawtooth' },
   vegas:    { bpm: 128, bass: VEGAS_BASS,    lead: VEGAS_LEAD,    chords: VEGAS_CHORDS,    kick: VEGAS_KICK,    snare: VEGAS_SNARE,
-              comp: [2, 6], compDur: 0.2, detune: 1.006 },
-  /* The runner up, for auditioning only: no circuit names it. */
-  vegas3:   { bpm: 128, bass: VEGAS3_BASS,   lead: VEGAS3_LEAD,   chords: VEGAS3_CHORDS,   kick: VEGAS3_KICK,   snare: VEGAS3_SNARE,
-              comp: [2, 6], compDur: 0.12 }
+              comp: [2, 6], compDur: 0.2, detune: 1.006 }
 };
 
 function midiFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
