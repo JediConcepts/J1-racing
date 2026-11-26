@@ -1015,6 +1015,9 @@ Game.prototype.bindInput = function () {
       return;
     }
     if (!down) return;
+    /* Enter and R belong to the settings or the leaderboard while either is
+       open (Enter presses the panel's button): no race starts behind it */
+    if ((code === 'Enter' || code === 'NumpadEnter' || code === 'KeyR') && self.panelOpen()) return;
     if (code === 'Enter' || code === 'NumpadEnter') {
       self.audio.wake();
       if (self.state === STATE.TITLE) self.beginRace();
@@ -2332,6 +2335,7 @@ Game.prototype.openBoard = function () {
   /* Always open on the circuit you are actually driving. */
   this.boardTrackId = this.trackVersion();
   el.hidden = false;
+  this.syncUiState();
   /* AFTER unhiding — the rail measures 0 wide while the panel is display:none,
      so scrolling the current card into view has nothing to compute against. */
   this.syncTrackRail('board-track-list', this.boardTrackId);
@@ -2343,6 +2347,7 @@ Game.prototype.closeBoard = function () {
   if (!el || el.hidden) return;
   el.hidden = true;
   if (this.boardResume) { this.paused = false; this.boardResume = false; }
+  this.syncUiState();
 };
 
 Game.prototype.loadBoard = function () {
@@ -2443,6 +2448,7 @@ Game.prototype.openSettings = function () {
   if (this.settingsResume) this.paused = true;
   this.syncSettingsUi();
   el.hidden = false;
+  this.syncUiState();
   /* AFTER unhiding. syncSettingsUi runs while the panel is still display:none,
      where the circuit rail measures 0 wide, so centring the current card there
      computes against nothing and leaves the rail parked at the far left. */
@@ -2457,6 +2463,7 @@ Game.prototype.closeSettings = function () {
   el.hidden = true;
   if (this.settingsResume) { this.paused = false; this.settingsResume = false; }
   this.saveSettings();
+  this.syncUiState();
 };
 
 Game.prototype.inDrsZone = function (v) {
@@ -3902,8 +3909,10 @@ Game.prototype.syncUiState = function () {
     this.uiRacing = racing;
     document.documentElement.classList.toggle('racing', racing);
   }
-  /* the next race buttons, on the results and nowhere else */
-  var ending = this.state === STATE.FINISHED && !this.photoHold;
+  /* the next race buttons, on the results and nowhere else, and not under
+     the settings or the leaderboard: hidden, they cannot take the focus or
+     a press meant for the panel on top */
+  var ending = this.state === STATE.FINISHED && !this.photoHold && !this.panelOpen();
   if (this.uiEnding !== ending) {
     this.uiEnding = ending;
     this.showNextRace(ending);
@@ -3944,6 +3953,11 @@ Game.prototype.buildNextRace = function () {
 Game.prototype.nextRaceButtons = function () {
   var host = document.getElementById('next-race');
   return host ? host.querySelectorAll('button') : [];
+};
+/* The settings or the leaderboard is open over the game. */
+Game.prototype.panelOpen = function () {
+  var s = document.getElementById('settings'), b = document.getElementById('board');
+  return (!!s && !s.hidden) || (!!b && !b.hidden);
 };
 Game.prototype.nextRaceShown = function () {
   var host = document.getElementById('next-race');

@@ -1452,6 +1452,51 @@ function tamper(o) {
       'a draw of the hour and weather that throws: the race starts all the same, in the look it had, with a warning and no error',
       JSON.stringify(drawThrew) + ', warnings ' + JSON.stringify(warned) + ', console errors ' + JSON.stringify(consoleErrors.slice(errorsBefore)));
 
+    /* UNDER THE SETTINGS OR THE LEADERBOARD the next race buttons are gone:
+       no button takes the focus, an arrow does not reach them, and Enter
+       presses the panel's own button and starts no race. Closed, the
+       buttons are back. And outside the results they are never there. The
+       leaderboard is a stub: nothing is fetched. */
+    const underPanel = (open) => page.evaluate((open) => {
+      const g = window.MCL64;
+      g.cloud.leaderboard = () => Promise.resolve([]);
+      g[open]();
+      const host = document.getElementById('next-race');
+      const takes = Array.from(host.querySelectorAll('button')).filter((b) => { b.focus(); return document.activeElement === b; }).length;
+      return { hidden: host.hidden, takes };
+    }, open);
+    const afterKeys = () => page.evaluate(() => ({
+      state: window.MCL64.state, inPanel: document.getElementById('next-race').contains(document.activeElement),
+      shown: !document.getElementById('next-race').hidden, open: window.MCL64.panelOpen()
+    }));
+    await toResults();
+    const setOpen = await underPanel('openSettings');
+    await page.focus('#set-close');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('ArrowDown');
+    const setArrows = await afterKeys();
+    await page.focus('#set-close');
+    await page.keyboard.press('Enter');
+    await page.waitForTimeout(100);
+    const setClosed = await afterKeys();
+    const boardOpen = await underPanel('openBoard');
+    await page.evaluate(() => document.getElementById('screen').focus());
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    const boardKeys = await afterKeys();
+    await page.evaluate(() => window.MCL64.closeBoard());
+    const boardClosed = await afterKeys();
+    await page.evaluate(() => { window.MCL64.state = 2; return new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))); });
+    const racingTakes = await page.evaluate(() => {
+      const host = document.getElementById('next-race');
+      return { hidden: host.hidden, takes: Array.from(host.querySelectorAll('button')).filter((b) => { b.focus(); return document.activeElement === b; }).length };
+    });
+    check(setOpen.hidden && setOpen.takes === 0 && !setArrows.inPanel && setArrows.state === 3 && !setClosed.open && setClosed.shown && setClosed.state === 3 &&
+      boardOpen.hidden && boardOpen.takes === 0 && !boardKeys.inPanel && boardKeys.state === 3 && boardClosed.shown &&
+      racingTakes.hidden && racingTakes.takes === 0 && consoleErrors.length === 0 && uncaught.length === 0,
+      'under the settings or the leaderboard, and outside the results, the next race buttons take no focus and no key, and no race starts behind a panel',
+      JSON.stringify({ setOpen, setArrows, setClosed, boardOpen, boardKeys, boardClosed, racingTakes }));
+
     /* A circuit chosen there: its title, ready to start, saved as a choice.
        RANDOM: another circuit than the one just raced, and the setting back
        to RANDOM. And twenty draws of it one after another never give the
