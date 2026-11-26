@@ -252,6 +252,7 @@ function Game(host, renderer) {
   this.camPitch = 0;       /* low-passed attitude for the onboard mounts */
   this.camRoll = 0;
   this.paused = false;
+  this.tiltHold = false;   /* the countdown held while a phone asks for its sensor */
   this.shake = 0;
   this.finishHold = 0;
   this.splitShow = 0;
@@ -1629,6 +1630,7 @@ Game.prototype.beginRace = function () {
   this.state = STATE.COUNTDOWN;
   this.countdown = 0;
   this.paused = false;
+  this.tiltHold = false;
   /* where the phone asks before it gives the sensor, ask at the end of
      this tap (the touchend listener in bindInput); elsewhere, now */
   if (this.tiltAsks()) this.tiltAskOnUp = this.autoTiltWanted();
@@ -1682,13 +1684,16 @@ Game.prototype.autoTilt = function (inTap) {
   if (asks && !inTap) return;
   this.autoTiltDone = true;
   var self = this, s = this.settings;
-  /* the countdown waits while the phone asks the player */
-  var hold = asks && this.state === STATE.COUNTDOWN && !this.paused;
-  if (hold) this.paused = true;
+  /* The countdown waits while the phone asks the player, and while it
+     listens for the first reading after a yes. That is a hold of its own,
+     not a pause: a pause says PRESS P TO RESUME, and a phone has no P key.
+     The screen says what it waits for instead (drawHud). */
+  var hold = asks && this.state === STATE.COUNTDOWN && !this.tiltHold;
+  if (hold) this.tiltHold = true;
   (asks ? this.tilt.enable() : Promise.resolve(this.tilt.listen())).then(function (ok) {
     return ok ? self.tilt.whenReading(TILT_PROBE_MS) : false;
   }).then(function (ok) {
-    if (hold) self.paused = false;
+    if (hold) self.tiltHold = false;
     /* the player may have picked a mode, or used a key, while it asked */
     if (!ok || s.steerChosen || self.keyboardUsed) {
       if (!s.steerTilt) self.tilt.disable();
@@ -1701,7 +1706,7 @@ Game.prototype.autoTilt = function (inTap) {
     self.applySettings();
     self.flash('TILT STEERING');
   }, function () {
-    if (hold) self.paused = false;
+    if (hold) self.tiltHold = false;
   });
 };
 
@@ -2482,7 +2487,7 @@ Game.prototype.tick = function (dt) {
   this.time += dt;
 
   if (this.state === STATE.TITLE) { this.tickDemo(dt); return; }
-  if (this.paused) return;
+  if (this.paused || this.tiltHold) return;
 
   var live = this.state === STATE.RACING;
 
@@ -3126,6 +3131,9 @@ Game.prototype.drawHUD = function () {
     g.fillRect(0, 0, W, H);
     drawTextCenter(g, 'PAUSED', W / 2, H / 2 - 10, 3, C_PAPAYA, C_SHADOW);
     drawTextCenter(g, 'PRESS P TO RESUME', W / 2, H / 2 + 14, 1, C_WHITE, C_SHADOW);
+  } else if (this.tiltHold) {
+    /* the countdown held while the phone asks for its motion sensor */
+    drawTextCenter(g, 'WAITING FOR MOTION ACCESS', W / 2, H / 2 + 14, 1, C_WHITE, C_SHADOW);
   }
   this.drawNotice();
 };
@@ -3649,7 +3657,7 @@ Game.prototype.countFrame = function () {
    hidden, or with a tier clicked to and not yet built, the count starts
    again. */
 Game.prototype.watchPace = function (gapMs) {
-  this.tierAct(tierPace(this, gapMs, this.paused || document.hidden === true || !!this.tierTimer));
+  this.tierAct(tierPace(this, gapMs, this.paused || this.tiltHold || document.hidden === true || !!this.tierTimer));
 };
 
 /* The graphics device has gone (boot's onDeviceLost). Whether that counts
@@ -4139,7 +4147,7 @@ Game.prototype.updateAudio = function () {
   var alive = demo || this.state === STATE.RACING || this.state === STATE.COUNTDOWN;
   var load = demo ? 0.75 : this.input.throttle;
   var scrub = clamp(p.drift * 0.9 + (p.offTrack && p.vFwd > 10 ? 0.35 : 0), 0, 1);
-  this.audio.update(p.rpm01(), load, clamp(p.vFwd / V_MAX, 0, 1), scrub, alive && !this.paused);
+  this.audio.update(p.rpm01(), load, clamp(p.vFwd / V_MAX, 0, 1), scrub, alive && !this.paused && !this.tiltHold);
 
   /* Music sits up front on the menus and drops back under the engines while
      you are actually driving. */

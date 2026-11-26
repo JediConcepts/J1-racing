@@ -1311,6 +1311,30 @@ function tamper(o) {
       consoleErrors.length === 0 && uncaught.length === 0,
       'a phone held sideways with nothing chosen: asked at the first tap on START and not before, then tilt with auto throttle',
       'before ' + JSON.stringify(beforeTap) + ', after ' + JSON.stringify(granted) + ', console errors ' + JSON.stringify(consoleErrors) + ', uncaught ' + JSON.stringify(uncaught));
+    /* WHILE THE PHONE ASKS the countdown is held, and it is not a pause:
+       nothing says PRESS P TO RESUME, which a phone has no key for. The
+       question is left open here until the check answers it. */
+    await bootWithSettings({ quality: 'modern' }, 1, { touch: true, viewport: PHONE, sensor: 'granted' });
+    await page.evaluate(() => {
+      DeviceOrientationEvent.requestPermission = () => { window.__asked++; return new Promise((r) => { window.__answer = r; }); };
+    });
+    const holdState = () => page.evaluate(() => {
+      const g = window.MCL64;
+      return { state: g.state, paused: g.paused, held: g.tiltHold, countdown: g.countdown, asked: window.__asked, tilt: g.settings.steerTilt };
+    });
+    await tapStart(800);
+    const asking = await holdState();
+    await page.waitForTimeout(600);
+    const stillAsking = await holdState();
+    await page.evaluate(() => window.__answer('granted'));
+    await page.waitForTimeout(2600);
+    const answered = await holdState();
+    check(asking.state === 1 && asking.asked === 1 && asking.held === true && asking.paused === false &&
+      stillAsking.countdown === asking.countdown && stillAsking.held === true &&
+      answered.held === false && answered.paused === false && answered.tilt === true && (answered.state === 2 || answered.countdown > asking.countdown) &&
+      consoleErrors.length === 0 && uncaught.length === 0,
+      'while an iPhone asks for its motion sensor the countdown is held without the pause, and runs on once it is answered',
+      JSON.stringify({ asking, stillAsking, answered }) + ', console errors ' + JSON.stringify(consoleErrors));
     await bootWithSettings({ quality: 'modern' }, 1, { touch: true, viewport: PHONE, sensor: 'denied' });
     await tapStart();
     const denied = await steering();
