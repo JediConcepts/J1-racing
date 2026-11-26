@@ -994,8 +994,18 @@ Game.prototype.bindInput = function () {
     ShiftLeft: 'keyDrs', ShiftRight: 'keyDrs'
   };
 
+  /* Which of the driving keys are really down, by key and not by slot. A
+     slot can be cleared (below, when a race begins) and then put back from
+     this, so a key the player is honestly holding is still held. */
+  var keysDown = {};
+  self.syncKeys = function () {
+    self.releaseKeys();
+    for (var c in KEYS) if (KEYS.hasOwnProperty(c) && keysDown[c]) self.input[KEYS[c]] = true;
+  };
+
   function onKey(e, down) {
     var code = e.code || '';
+    if (KEYS[code]) keysDown[code] = down;
     /* THE END OF A RACE: the arrow keys walk the next race buttons, and
        Enter on one of them is that button's (the browser clicks it). Enter
        anywhere else still races again, as R does. Only the press is the
@@ -1051,7 +1061,7 @@ Game.prototype.bindInput = function () {
   /* keyup is NOT guarded: it only ever clears a key, and skipping it would
      leave the throttle stuck on if focus moved into a field mid-press. */
   window.addEventListener('keyup', function (e) { onKey(e, false); }, { passive: false });
-  window.addEventListener('blur', function () { self.releaseKeys(); });
+  window.addEventListener('blur', function () { keysDown = {}; self.releaseKeys(); });
 
   /* touch pads */
   var pads = document.querySelectorAll('[data-key]');
@@ -1614,12 +1624,17 @@ Game.prototype.releaseKeys = function () {
 Game.prototype.beginRace = function () {
   if (this.loadingTrack) return;     /* the page is leaving for another circuit */
   this.audio.wake();
-  /* A race begun from the title or the results starts with no key held: a
-     release the page never saw (the results panel, a field that had the
-     focus) must not drive the car from the lights. A restart in the middle
-     of a race keeps what is held, which is a key the player really is
-     pressing, since every release reached its slot while racing. */
-  if (this.state !== STATE.RACING && this.state !== STATE.COUNTDOWN) this.releaseKeys();
+  /* A race begun from the title or the results starts with only the keys
+     that are really down: a slot left set by a release the page never saw
+     must not drive the car from the lights, and a key the player is
+     honestly holding as they press Enter must not be dropped (a browser
+     sends no new press for a key that is already down, so a dropped throttle
+     would stay dead until it was let go and pressed again). The slots are
+     set afresh from the keys themselves (syncKeys in bindInput). A restart
+     in the middle of a race keeps what is held as it is. */
+  if (this.state !== STATE.RACING && this.state !== STATE.COUNTDOWN) {
+    if (this.syncKeys) this.syncKeys(); else this.releaseKeys();
+  }
   this.maybeEnterFullscreen();
   /* the first race of a load runs under the load's draw, which the title
      has been showing; every race after it draws the hour and the weather
@@ -3832,7 +3847,8 @@ Game.prototype.redrawForRace = function () {
     this.drawn.weather = was.weather;
     this.drawn.timeOfDay = was.timeOfDay;
     if (changed && this.skyRig && this.skyRig.mode === 'physical') {
-      try { this.applyWeather(); } catch (e2) {
+      /* the hour first, then the weather laid over it, as applyQuality does */
+      try { this.applyTimeOfDay(); this.applyWeather(); } catch (e2) {
         if (window.console) console.warn('[MCL-64] and the look it had did not go back:', e2);
       }
     }

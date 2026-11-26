@@ -1500,6 +1500,24 @@ function tamper(o) {
       'an arrow held over the finish and let go while the results are up is let go, and the next race begins with no key held',
       JSON.stringify({ heldRacing, heldOver, letGo, raceAfter }));
 
+    /* A KEY HONESTLY HELD when the race is started stays held. The slots are
+       set afresh from the keys that are really down, so W held on the
+       results while Enter is pressed is throttle at the lights, and a slot
+       set with no key behind it is still cleared. A browser sends no new
+       press for a key that is already down, so a dropped throttle would stay
+       dead until it was let go and pressed again. */
+    await toResults();
+    await page.evaluate(() => document.getElementById('screen').focus());
+    await page.keyboard.down('KeyW');
+    await page.evaluate(() => { window.MCL64.input.keyL = true; });
+    await page.keyboard.press('Enter');
+    const heldAtStart = await keySlots();
+    await page.keyboard.up('KeyW');
+    const afterRelease = await keySlots();
+    check(heldAtStart.state === 1 && heldAtStart.held.join() === 'keyU' && afterRelease.held.length === 0 && uncaught.length === 0,
+      'a throttle held as Enter starts the race is still held at the lights, and a slot with no key behind it is cleared',
+      JSON.stringify({ heldAtStart, afterRelease }));
+
     /* A DRAW THAT THROWS does not stop the race (Game.redrawForRace): the
        race starts, in the look it had, with a warning and no error. */
     const warned = [];
