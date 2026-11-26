@@ -1,16 +1,55 @@
 # J1-racing — MCL-64
 
-A 3D racing game: an N64-era Formula 1 racer on a stylised Silverstone, built
-with Three.js and rendered at 240p with a 5-bit dither. Accounts, a global
-leaderboard, six-car races, four circuits, three onboard cameras, touch and
-tilt controls on mobile.
+A 3D racing game in the browser: a Formula 1 racer that began as an N64 era
+look and now comes in three. Retro is the original, drawn at 240p with a 5 bit
+dither. Modern is sharp and graded. Ultra adds a physical sky, four times of
+day, long shadows, bloom and weather. Five circuits, a global leaderboard with
+accounts, races of six cars (33 at Indianapolis), three onboard cameras, and
+touch and tilt controls on a phone. Built with three.js.
 
-![MCL-64 at Silverstone](deploy/share.png)
+![MCL-64 at Silverstone, in the Retro look](deploy/share.png)
 
 **Play it: <https://jediconcepts.com/mcl64/>**
 
 Unofficial fan project by Jamie Easterman of Jedi Concepts. Not endorsed or
 sponsored by any racing team or their sponsors.
+
+## New in November 2026: the Ultra series
+
+**Ultra series upgrades are in for GTA 6 launch week: upgraded graphics, a new
+Las Vegas track, and weather.**
+
+- **Ultra graphics.** A third picture setting beside Retro and Modern, and the
+  one a new player starts on. It has a physical sky, four times of day
+  (morning, midday, golden and dusk), long shadows from cascaded shadow maps,
+  bloom, and windows that light up over Monaco at dusk. A device that cannot
+  hold Ultra is moved down to Modern without being asked.
+- **Las Vegas.** A fifth circuit: 6.2 km around the Strip, lit by its own signs
+  at dusk, with its own music and its own leaderboard.
+- **Weather.** Clear, cloudy or rain, in Ultra. Rain is for looks: grip and lap
+  times are unchanged, and the settings panel says so.
+- **A randomiser.** Unless the player has picked them, the hour and the weather
+  are drawn at random for every race, and the circuit for every visit (or
+  from the RANDOM button on the results screen). A first visit always opens
+  on Monaco, at dusk, in the clear.
+- **Kinder to a phone.** A phone held sideways is given tilt steering and auto
+  throttle, the next circuit is chosen from buttons on the results screen,
+  and steering starts at its lowest sensitivity.
+- **A new engine underneath.** three.js 0.187 and its `WebGPURenderer`, which
+  draws with WebGPU where the browser has it and with WebGL 2 where it does
+  not.
+
+Lap time physics did not move. The simulation is still `sim-2`, and
+`test/sim-parity.test.js` holds a headless copy of the race loop, on every
+circuit, to a committed digest.
+
+| Circuit | Laps | Cars | Notes |
+|---|---|---|---|
+| Monaco Grand Prix | 3 | 6 | Monte Carlo streets, 3.4 km |
+| Las Vegas | 3 | 6 | the Strip, 6.2 km |
+| Silverstone | 3 | 6 | fast and open |
+| Indianapolis | 5 | 33 | banked oval |
+| Brands Hatch | 4 | 6 | narrow and hilly, 3.9 km |
 
 ## Provenance
 
@@ -26,7 +65,7 @@ git log --format='%h  %ad  %s' --date=format:'%H:%M:%S' 42080d9 e804a8e
 
 Then **81 more commits** over the week that followed, most of them fixing what
 that hour got wrong. **The hour is not the interesting part. What the week after
-it had to correct is** — and the rest of this README, sixteen migrations, and the
+it had to correct is.** The rest of this README, seventeen migrations, and the
 test suites are that argument, at length.
 
 Exactly what git does and does not prove about the timing is set out in
@@ -67,11 +106,16 @@ the present tense as though it had been built.
 
 ## Build
 
-No bundler, no dependencies, no install step.
+The build needs no bundler and no install step: `build.js` uses only Node's own
+modules.
 
 ```bash
 node build.js
 ```
+
+(`package.json` and its dependencies belong to `server.js`, a local Express
+server that came in with the Monaco work. It is not part of the published
+page.)
 
 That produces two files, and the difference between them matters:
 
@@ -86,29 +130,49 @@ every phone lays the page out ~980px wide and scales it down, which breaks the
 game on mobile before touch input is even reached. `build.js` asserts both
 invariants and refuses to build if they are violated.
 
-The standalone build also carries the Supabase SDK and leaderboard config; the
-artifact build deliberately does not, because that host's CSP blocks every
-external origin, so 51 KB of SDK there would power a feature that cannot work.
+The standalone build carries the Supabase SDK and leaderboard config. The
+artifact build was designed to go without them, because that host's CSP blocks
+every external origin, so 51 KB of SDK there would power a feature that cannot
+work. **That is no longer what the build does.** Since `8a834e0` the fragment is
+rendered with the same SDK and config as the standalone page, and the
+assertions that forbade it were taken out. This paragraph said otherwise until
+a check of this README against the code found it. Whether to put the design
+back is an open question; what the build does today is carry it in both.
 
 `dist/` is committed, which is normally a smell. Here it is the deploy contract:
 `.github/workflows/deploy.yml` asks a Worker to publish files **out of a git
-commit**, and there is no build step in that pipeline, so an untracked
-`dist/index.html` is a deploy that silently ships nothing. Run `node build.js`
-and commit the output alongside the source change, or the published page and the
-source drift apart.
+commit**, so an untracked `dist/index.html` is a deploy that silently ships
+nothing. On every push to `main` or `test` the workflow now rebuilds `dist/`
+itself and commits the result back, so nobody has to remember to build. A
+manual run republishes what is committed and does not rebuild.
+
+The engine is three.js 0.187, vendored as one script, `vendor/three.bundle.js`.
+It is not a file three.js ships: `tools/vendor-three.js` makes it from the npm
+package, by hand, in a folder outside the repository, and `node build.js` never
+touches it. The build refuses a bundle whose header names a different release,
+and refuses a `dist/index.html` over 2,500,000 bytes.
 
 ## Layout
 
 ```
 src/05-fpmath.js       deterministic sin/cos/tan/atan2 (see below)
-src/10-core.js         maths, pixel font, HUD drawing, audio
-src/20-track.js        circuit geometry, racing line, scenery
+src/10-core.js         maths, pixel font, HUD drawing, audio and music
+src/12-trackdata.js    the five circuits, baked to data (generated)
+src/20-track.js        circuit definitions, racing line, scenery
 src/30-cars.js         vehicle physics, AI drivers, collisions
+src/32-sky.js          the physical sky and the times of day
+src/33-shadows.js      the single shadow map and the cascades
+src/34-weather.js      cloud and rain, as a look
 src/35-mobile.js       touch thumbstick, tilt steering, fullscreen
 src/36-cloud.js        Supabase auth and leaderboard
+src/38-tiers.js        Retro, Modern and Ultra; saved settings; the draw
 src/40-game.js         game loop, HUD, race rules, settings
 src/index.template.html  markup and CSS shell
+vendor/three.bundle.js three.js 0.187, one script
+vendor/supabase.js     supabase-js, one script
+tools/                 the track baker, the engine bundler, browser checks
 supabase/migrations/   schema, RLS, and the score write path
+server.js, src/db/     a local Express server and its schema; not in the build
 ```
 
 Files are concatenated in numeric order into one IIFE. **Order matters**:
@@ -158,9 +222,16 @@ The control is not decoration. Without asserting that the two engines *disagree*
 on the built-ins, the test would pass just as happily on two identical engines
 and prove nothing about engine independence.
 
-Known remaining gap: Three.js's `CatmullRomCurve3` is **not** engine-stable, so
-the track must be baked to data before a headless validator can be trusted.
-That work is outstanding.
+One gap named here has since been closed. The `CatmullRomCurve3` of three.js is
+**not** stable across engines, so the track had to be baked to data before a
+headless validator could be trusted. It now is: `tools/bake-tracks.js` samples
+each circuit once and writes `src/12-trackdata.js`, the game reads that file
+and never builds the curve at run time, and `test/track-bake.test.js` fails if
+the file and a fresh sampling disagree. `test/sim-parity.test.js` then holds a
+headless copy of the race loop, on each circuit, to a committed digest.
+
+What is still outstanding: that race digest is checked on V8 only, not yet on a
+second engine, and the validator itself has not been written.
 
 ## Leaderboard
 
@@ -200,8 +271,9 @@ constraint is an allowlist, `^[[:alpha:][:digit:] '._-]+$`, deliberately, so
 widening it for one alphabet cannot quietly admit a script tag.
 
 Migrations are numbered and must be applied in order. **None of the above is
-asserted on trust** — `./test/migrations.sh` applies all sixteen to a throwaway
-PostgreSQL 15+ cluster and checks every claim in this section, 53 assertions,
+asserted on trust.** `./test/migrations.sh` applies all seventeen to a
+throwaway PostgreSQL 15+ cluster and checks the claims in this section about
+the database, 54 assertions,
 including that `anon` is refused on `profiles`, `scores`, `runs` and
 `player_pii`, that a player can rename only themselves, and that the board still
 returns rows once all of that is locked down. It needs 15 or later: the view uses
@@ -212,6 +284,18 @@ It also checks that every circuit in `src/20-track.js` has a row in
 Monaco shipped without one, so `submit_score` rejected every score posted on it
 with `unknown track_version` — and a rejected post is not a crash, so the race
 finished normally and the board simply never gained a row. `0016` seeds it.
+Las Vegas was handled the other way round: it first went out marked
+`board: false`, so the game posted nothing for it and said so, until `0017`
+had seeded its row and the mark came off. The mark is there for the next new
+circuit.
+
+One path in the client sits outside everything above. When Supabase is not
+configured, `src/36-cloud.js` falls back to posting a name and a time, with no
+sign-in at all, to `/api/leaderboard` on the local `server.js`. That server is
+not part of what is published, and the published page has Supabase configured,
+but the path has none of these protections and must never be served in public.
+It came in with `8a834e0` and is listed here because a security section that
+leaves out a write path is not describing the code.
 
 That harness paid for itself on its first run by finding that `0010` had never
 applied. Indianapolis starts 33 cars, its seed ended on P33, and
@@ -223,10 +307,11 @@ nothing reported it, because a migration that was *run* is not a migration that
 **What this does not yet do.** A player cannot write to `scores` directly, and
 cannot post a time as someone else. A player *can* still call `submit_score()`
 with a time they did not drive, because the validator that re-simulates a
-submitted trace does not exist yet — the track has to be baked to engine-stable
-data first (see the maths section above). Every row therefore lands
-`validated = false`, so unvalidated runs can be re-checked and purged once the
-validator lands. **The board is not cheat-resistant, and now says so**: it shows
+submitted trace does not exist yet. The track is baked to data now (see the
+maths section above), which was the first thing it needed; the validator has
+still to be written. Every row therefore lands `validated = false`, so
+unvalidated runs can be re-checked and purged once the validator lands.
+**The board is not cheat-resistant, and now says so**: it shows
 unvalidated runs rather than hiding them — a board that hides everything until a
 validator exists is indistinguishable from a broken one — and prints a line
 stating that no time on it has been replay-verified.
@@ -251,21 +336,28 @@ an upload path is added carelessly.
 
 ## Tests
 
-Five suites, no dependencies to install beyond a PostgreSQL server and — for the
-last one only — Chromium. Each exists because this README makes a claim in prose,
-and a claim nobody can re-run is not evidence.
+Nine suites. The first seven need nothing installed beyond Node, bun (the
+second engine, for two of the three `fpmath` assertions) and a PostgreSQL
+server (for `migrations.sh`); the last two need Chromium, through Playwright.
+Each exists because this README makes a claim in prose, and a claim nobody can
+run again is not evidence.
 
 ```bash
-node test/fpmath.test.js    #  3 — cross-engine determinism, and the control
-node test/physics.test.js   # 37 — sign conventions, geometry, elevation
-node test/music.test.js     # 31 — themes pinned, and Monaco's waltz
-./test/migrations.sh        # 53 — 16 migrations applied, security model asserted
-node test/csp.js            #      the real header set, loaded in Chromium
+node test/fpmath.test.js      #  3: cross-engine determinism, and the control
+node test/physics.test.js     # 45: sign conventions, geometry, elevation
+node test/track-bake.test.js  # 10: the baked circuits match a fresh sampling
+node test/sim-parity.test.js  #  5: the race loop on each circuit, to a digest
+node test/music.test.js       # 70: themes pinned, Monaco's waltz, Las Vegas
+node test/tiers.test.js       # 97: who is given which picture, settings, the draw
+./test/migrations.sh          # 54: 17 migrations applied, security model asserted
+node test/csp.js              #     the real header set, loaded in Chromium
+node test/picture.js          #     the game drawn in headless Chromium
 ```
 
-**124 assertions run in CI** on every push ([`test.yml`](./.github/workflows/test.yml)) —
-the first four. `csp.js` is not wired in: it needs a browser, so it is a local
-check for now, and saying so is better than implying five-suite coverage on every
+**284 assertions run in CI** on every push
+([`test.yml`](./.github/workflows/test.yml)): the first seven. `csp.js` and
+`picture.js` are not wired in. They need a browser, so they are local checks
+for now, and saying so is better than implying that all nine run on every
 push.
 
 `music.test.js` earns its place by pinning the three circuits' themes that were
@@ -278,10 +370,18 @@ would ever catch by ear — you would have to A/B two builds of a background loo
 `security_invoker`, which does not exist before it — and refuses to run on 14
 rather than let the resulting failures be misread as defects.
 
-What they do not cover: anything that renders. `40-game.js` has 98 references to
-`document`, and a browser harness would cost more than it verifies. So the car's
-*mesh* leaning correctly is still unverified; the geometry and the roll term
-underneath it are not.
+What CI does not cover: anything that renders. This paragraph used to say a
+browser harness would cost more than it verifies. The move to a new engine
+changed that sum, because a shader that fails to build still draws a frame and
+only says so in the console. `test/picture.js` now draws the game in headless
+Chromium on the WebGL 2 path and checks that Modern and Ultra draw a real
+frame, that every canvas texture in Retro and Modern is given its shader node,
+that nothing is reported in the console, and that the page fails politely
+where it cannot draw. It is run by hand, and the WebGPU path is checked only by
+`node test/picture.js --webgpu` in a real Chrome. It checks that a picture is
+drawn, not that it is right: the car's *mesh* leaning correctly is still
+something only a person looking can confirm; the geometry and the roll term
+underneath it are tested.
 
 Two of these were written after an audit pointed out that the repository asserted
 things it could not reproduce, and both earned their place immediately.
@@ -365,5 +465,5 @@ nothing:
   before publishing it, and now a build failure rather than a matter of trust.
 
 There is no third-party media to license: every sound is synthesised at runtime
-with Web Audio oscillators rather than sampled, and the only bundled image is a
-screenshot of the game.
+with Web Audio, from oscillators and generated noise, rather than sampled, and
+the only bundled image is a screenshot of the game.

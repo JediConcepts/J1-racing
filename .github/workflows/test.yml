@@ -1,6 +1,7 @@
 name: tests
 
-# Six suites, each verifying a claim this repository makes in prose.
+# Seven suites in six jobs, each verifying a claim this repository makes in
+# prose.
 #
 #   maths      the README says the deterministic transcendentals are bit-identical
 #              across V8 and JavaScriptCore. This runs both engines and checks it,
@@ -18,7 +19,7 @@ name: tests
 #              the proof that a change to the engine moved no lap time. It runs a
 #              transcription of the race loop, not 40-game.js itself, and is
 #              retired when the race rules get a headless entry point.
-#   migrations all sixteen migrations applied to an empty PostgreSQL, then the
+#   migrations all seventeen migrations applied to an empty PostgreSQL, then the
 #              security model asserted: PII unreachable, no client write path,
 #              rename is self-only, the board is data-minimised. Also that every
 #              circuit in src/20-track.js has a row in track_versions — Monaco
@@ -33,8 +34,9 @@ name: tests
 #              are part of it: this build must never write the key it shares
 #              with the live game.
 #
-# Not covered, deliberately: anything that renders. 40-game.js has 98 references
-# to `document`, and a browser harness would cost more than it verifies here.
+# Not covered here: anything that renders. test/picture.js and test/csp.js draw
+# the page in Chromium and are run by hand, because they need a browser and a
+# check that passes on a runner where it could not run is worse than no check.
 
 on:
   push:
